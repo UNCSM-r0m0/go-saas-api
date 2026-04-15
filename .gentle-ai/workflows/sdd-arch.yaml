@@ -1,0 +1,118 @@
+# Spec-Driven Development (SDD) - Phase 2: Architecture
+# Gentle-AI Workflow Configuration
+
+name: sdd-architecture
+version: "1.0.0"
+description: Design system architecture based on specifications
+
+# Model Configuration
+model:
+  primary: kimi-code/kimi-k2.5
+  fallback: opencode-go/kimi-k2.5
+  temperature: 0.4
+  max_tokens: 8192
+
+# Context
+context:
+  use_engram: true
+  session_memory: true
+  load_previous_phases: true
+  required_inputs:
+    - specs/{{feature_name}}-spec.md
+
+# Workflow Steps
+steps:
+  - id: component-design
+    name: Component Design
+    description: Design system components and their interactions
+    prompt_template: |
+      Based on the specification, design the architecture for:
+      Feature: {{feature_name}}
+      
+      Specification:
+      {{spec_content}}
+      
+      Create architecture documentation including:
+      1. Component diagram
+      2. Service boundaries
+      3. Data flow
+      4. Interface definitions
+      5. Error handling strategy
+      
+      Use C4 model or similar for diagrams (Mermaid syntax).
+    
+  - id: api-design
+    name: API Design
+    description: Design REST/gRPC APIs
+    prompt_template: |
+      Design the API for this feature:
+      
+      For each endpoint, specify:
+      - HTTP method and path
+      - Request/Response schemas
+      - Authentication requirements
+      - Rate limiting
+      - Error responses
+      
+      Use OpenAPI 3.0 specification format.
+    
+  - id: database-design
+    name: Database Design
+    description: Design database schema
+    prompt_template: |
+      Design the database schema:
+      
+      1. Tables/collections needed
+      2. Fields and data types
+      3. Indexes for performance
+      4. Relationships
+      5. Migration scripts
+      
+      Use appropriate format (SQL for PostgreSQL, BSON for MongoDB).
+    
+  - id: technology-selection
+    name: Technology Selection
+    description: Choose appropriate technologies
+    prompt_template: |
+      Recommend technologies for this feature:
+      
+      Consider:
+      - Go libraries and frameworks
+      - Database choices
+      - Message queue options
+      - Caching strategies
+      - Monitoring tools
+      
+      Justify each choice based on requirements.
+
+# Output
+output:
+  directory: docs/architecture
+  filename_template: "{{feature_name}}-arch.md"
+  format: markdown
+  sections:
+    - title: "Component Architecture"
+      required: true
+    - title: "Data Flow"
+      required: true
+    - title: "API Design"
+      required: true
+    - title: "Database Schema"
+      required: true
+    - title: "Technology Stack"
+      required: true
+    - title: "Security Considerations"
+      required: true
+
+# Validation
+validation:
+  - type: required_sections
+    sections: ["Component Architecture", "API Design"]
+  
+  - type: mermaid_diagrams
+    min: 1
+
+# Next Phase
+transition:
+  next_phase: sdd-code
+  condition: manual_approval

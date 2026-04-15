@@ -1,0 +1,48 @@
+# Engram Configuration
+# Persistent memory system for AI coding agents
+
+[core]
+# Database configuration
+database_path = "~/.local/share/engram/go-saas-api.db"
+max_database_size = "1GB"
+backup_enabled = true
+backup_interval = "24h"
+
+[memory]
+# Memory management
+auto_save = true
+auto_save_interval = "5m"
+context_window = 50
+max_memories_per_session = 1000
+similarity_threshold = 0.85
+
+[search]
+# Full-text search
+fts5_enabled = true
+vector_search = false
+search_limit = 10
+ranking_algorithm = "bm25"
+
+[context]
+# Context management
+load_recent_sessions = 5
+include_system_messages = false
+summarize_old_sessions = true
+summary_threshold = 100
+
+[mcp]
+# Model Context Protocol
+enabled = true
+transport = "stdio"
+server_name = "engram-go-saas-api"
+
+[logging]
+level = "info"
+format = "json"
+output = "stdout"
+
+[retention]
+# Data retention policies
+session_retention = "90d"
+memory_retention = "1y"
+auto_cleanup = true
