@@ -4,7 +4,7 @@ services:
   # ==========================================
   # INFRAESTRUCTURA
   # ==========================================
-  
+
   postgres:
     image: postgres:16-alpine
     container_name: saas-postgres
@@ -15,7 +15,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-saas_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./migrations:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -51,6 +51,11 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - saas-network
 
@@ -60,47 +65,60 @@ services:
 
   api-gateway:
     build:
-      context: ./api-gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: deployments/docker/Dockerfile.api-gateway
     container_name: saas-api-gateway
     restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
       - PORT=3001
-      - NATS_URL=nats://nats:4222
+      - ENV=${ENV:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?sslmode=disable
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET}
+      - NATS_URL=nats://nats:4222
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-15m}
       - CHAT_SERVICE_URL=http://chat-service:3002
       - AUTH_SERVICE_URL=http://auth-service:3003
       - BILLING_SERVICE_URL=http://billing-service:3004
       - USAGE_SERVICE_URL=http://usage-service:3005
     depends_on:
-      - nats
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
     networks:
       - saas-network
 
   chat-service:
     build:
-      context: ./chat-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: deployments/docker/Dockerfile.chat-service
     container_name: saas-chat-service
     restart: unless-stopped
     ports:
       - "3002:3002"
     environment:
       - PORT=3002
+      - ENV=${ENV:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?sslmode=disable
+      - REDIS_URL=redis://redis:6379
       - NATS_URL=nats://nats:4222
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?schema=public
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
-      - OLLAMA_PROXY_URL=${OLLAMA_PROXY_URL}
-      - OLLAMA_PROXY_API_KEY=${OLLAMA_PROXY_API_KEY}
-      - PUBLIC_MODELS=${PUBLIC_MODELS}
-      - PRO_MODELS=${PRO_MODELS}
+      - OLLAMA_PROXY_URL=${OLLAMA_PROXY_URL:-}
+      - OLLAMA_PROXY_API_KEY=${OLLAMA_PROXY_API_KEY:-}
     depends_on:
-      - postgres
-      - nats
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
     networks:
       - saas-network
     extra_hosts:
@@ -108,73 +126,89 @@ services:
 
   auth-service:
     build:
-      context: ./auth-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: deployments/docker/Dockerfile.auth-service
     container_name: saas-auth-service
     restart: unless-stopped
     ports:
       - "3003:3003"
     environment:
       - PORT=3003
-      - NATS_URL=nats://nats:4222
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?schema=public
+      - ENV=${ENV:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?sslmode=disable
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRATION=${JWT_EXPIRATION:-7d}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - PUBLIC_URL=${PUBLIC_URL}
-      - FRONTEND_URL=${FRONTEND_URL}
+      - NATS_URL=nats://nats:4222
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-15m}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
     depends_on:
-      - postgres
-      - redis
-      - nats
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
     networks:
       - saas-network
 
   billing-service:
     build:
-      context: ./billing-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: deployments/docker/Dockerfile.billing-service
     container_name: saas-billing-service
     restart: unless-stopped
     ports:
       - "3004:3004"
     environment:
       - PORT=3004
+      - ENV=${ENV:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?sslmode=disable
+      - REDIS_URL=redis://redis:6379
       - NATS_URL=nats://nats:4222
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?schema=public
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - STRIPE_PREMIUM_PRICE_ID=${STRIPE_PREMIUM_PRICE_ID}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_PREMIUM_PRICE_ID=${STRIPE_PREMIUM_PRICE_ID:-}
     depends_on:
-      - postgres
-      - nats
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
     networks:
       - saas-network
 
   usage-service:
     build:
-      context: ./usage-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: deployments/docker/Dockerfile.usage-service
     container_name: saas-usage-service
     restart: unless-stopped
     ports:
       - "3005:3005"
     environment:
       - PORT=3005
-      - NATS_URL=nats://nats:4222
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?schema=public
+      - ENV=${ENV:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?sslmode=disable
       - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
       - FREE_USER_MESSAGE_LIMIT=${FREE_USER_MESSAGE_LIMIT:-3}
-      - REGISTERED_USER_MESSAGE_LIMIT=${REGISTERED_USER_MESSAGE_LIMIT:-5}
-      - PREMIUM_USER_MESSAGE_LIMIT=${PREMIUM_USER_MESSAGE_LIMIT:-50}
+      - REGISTERED_USER_MESSAGE_LIMIT=${REGISTERED_USER_MESSAGE_LIMIT:-50}
+      - PREMIUM_USER_MESSAGE_LIMIT=${PREMIUM_USER_MESSAGE_LIMIT:-1000}
     depends_on:
-      - postgres
-      - redis
-      - nats
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
     networks:
       - saas-network
 

@@ -1,0 +1,37 @@
+# Build stage
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Install git and ca-certificates for fetching dependencies
+RUN apk add --no-cache git ca-certificates
+
+# Copy go mod files
+COPY go.mod go.sum ./
+COPY go.work ./
+COPY cmd/api-gateway/go.mod ./cmd/api-gateway/
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /bin/api-gateway ./cmd/api-gateway
+
+# Runtime stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+# Copy the binary from builder
+COPY --from=builder /bin/api-gateway .
+
+# Expose port
+EXPOSE 3001
+
+# Run the binary
+CMD ["./api-gateway"]

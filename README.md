@@ -1,104 +1,136 @@
-# Go SaaS API - Microservicios
+# Go SaaS API
 
-Arquitectura de microservicios en Go inspirada en Kimi (Moonshot AI) y Gentle-AI.
+Backend SaaS multi-tenant para chat AI — Microservicios en Go 1.24.
 
-## 🚀 Estructura del Proyecto
+## 🏗️ Arquitectura
 
 ```
-go-saas-api/
-├── api-gateway/          # API Gateway (Puerto 3001)
-├── chat-service/         # Chat AI con Streaming SSE (Puerto 3002)
-├── auth-service/         # Auth JWT + OAuth (Puerto 3003)
-├── billing-service/      # Stripe Payments (Puerto 3004)
-├── usage-service/        # Tracking de uso (Puerto 3005)
-├── docker-compose.yml    # Orquestación completa
-└── README.md
+┌─────────────────────────────────────────────────────────┐
+│                    API Gateway :3001                     │
+│              (Routing, Auth, Rate Limiting)              │
+└─────────────────────────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+        ▼                   ▼                   ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Chat :3002   │  │ Auth :3003   │  │ Billing :3004│
+│ Streaming    │  │ JWT + OAuth  │  │ Stripe       │
+│ Providers    │  │ Users        │  │ Subscriptions│
+└──────────────┘  └──────────────┘  └──────────────┘
+                            │
+                    ┌───────┴───────┐
+                    │ Usage :3005   │
+                    │ Tracking      │
+                    │ Rate Limits   │
+                    └───────────────┘
 ```
-
-## 📦 Servicios
-
-| Servicio | Puerto | Tecnología | Descripción |
-|----------|--------|------------|-------------|
-| API Gateway | 3001 | Go + Gin | Entry point, routing |
-| Chat Service | 3002 | Go + SSE | Streaming con Ollama |
-| Auth Service | 3003 | Go + JWT | Autenticación |
-| Billing Service | 3004 | Go + Stripe | Pagos |
-| Usage Service | 3005 | Go | Tracking |
-
-## 🛠️ Stack
-
-- **Go 1.24** - Lenguaje principal
-- **Gin** - Framework web
-- **NATS** - Mensajería
-- **PostgreSQL** - Base de datos
-- **Redis** - Cache
-- **Docker Compose** - Orquestación
 
 ## 🚀 Quick Start
 
-### 1. Configurar variables de entorno
-
 ```bash
+# 1. Clonar
+cd ~/Workspace/GO/go-saas-api
+
+# 2. Configurar
 cp .env.example .env
 # Editar .env con tus credenciales
+
+# 3. Levantar infraestructura
+make dev-up          # Postgres + Redis + NATS
+
+# 4. Levantar servicios
+make services-up     # Todos los microservicios
+
+# 5. Verificar
+make health
 ```
 
-### 2. Iniciar con Docker Compose
+## 📦 Stack
+
+| Capa | Tecnología |
+|------|-----------|
+| Lenguaje | Go 1.24 |
+| HTTP Framework | Gin |
+| Base de Datos | PostgreSQL 16 |
+| Cache | Redis 7 |
+| Mensajería | NATS 2.10 |
+| Auth | JWT + OAuth 2.0 |
+| Pagos | Stripe |
+| Container | Docker + Docker Compose |
+
+## 📁 Estructura
+
+```
+cmd/                    # Entry points (main.go por servicio)
+internal/
+  shared/               # Código compartido (logger, config, middleware)
+  api-gateway/          # API Gateway
+  chat/                 # Chat Service
+  auth/                 # Auth Service
+  billing/              # Billing Service
+  usage/                # Usage Service
+pkg/                    # Librerías compartidas
+migrations/             # SQL migrations
+deployments/
+  docker/               # Dockerfiles
+  k8s/                  # Kubernetes manifests (futuro)
+scripts/                # Scripts de utilidad
+```
+
+## 🛠️ Comandos
 
 ```bash
-docker-compose up --build
+make help          # Ver todos los comandos
+make up            # Levantar todo
+make down          # Detener todo
+make build         # Compilar binarios
+make test          # Ejecutar tests
+make lint          # Ejecutar linter
+make migrate       # Aplicar migrations
+make seed          # Insertar datos de ejemplo
+make health        # Verificar salud de servicios
 ```
 
-### 3. Probar endpoints
+## 🔧 Variables de Entorno
 
-```bash
-# Health check
-curl http://localhost:3001/health
+Ver `.env.example` para todas las opciones.
 
-# Chat stream (SSE)
-curl -X POST http://localhost:3001/api/v1/chat/stream \
-  -H "Content-Type: application/json" \
-  -d '{"model":"qwen2.5-coder:7b","messages":[{"role":"user","content":"Hello"}]}'
-```
+| Variable | Descripción | Default |
+|----------|-------------|---------|
+| `PORT` | Puerto del servicio | 3001-3005 |
+| `DATABASE_URL` | PostgreSQL connection string | - |
+| `REDIS_URL` | Redis connection string | - |
+| `NATS_URL` | NATS connection string | - |
+| `JWT_SECRET` | Secret para JWT | - |
+| `STRIPE_SECRET_KEY` | Stripe API key | - |
+| `OLLAMA_URL` | Ollama endpoint | http://localhost:11434 |
 
-## 📚 Endpoints
+## 📚 API Endpoints
 
-### API Gateway (Puerto 3001)
+### API Gateway (3001)
+- `GET /health` — Health check
+- `/api/v1/auth/*` → Auth Service
+- `/api/v1/chat/*` → Chat Service
+- `/api/v1/billing/*` → Billing Service
+- `/api/v1/usage/*` → Usage Service
 
-- `GET /health` - Health check
-- `POST /api/v1/chat/stream` - Chat streaming SSE
-- `POST /api/v1/chat/completions` - Chat normal
-- `GET /api/v1/chat/models` - Listar modelos
+### Chat Service (3002)
+- `GET /chat/models` — Listar modelos
+- `POST /chat/completions` — Chat síncrono
+- `POST /chat/stream` — Streaming SSE
+- `GET /chat/history/:id` — Historial
 
-## 🎯 Características
+### Auth Service (3003)
+- `POST /auth/register` — Registro
+- `POST /auth/login` — Login
+- `POST /auth/refresh` — Refresh token
+- `GET /auth/me` — Perfil
 
-✅ **Streaming SSE** - Respuestas en tiempo real  
-✅ **Microservicios** - Escalables independientemente  
-✅ **Docker Compose** - Fácil deployment  
-✅ **NATS** - Mensajería entre servicios  
-✅ **PostgreSQL + Redis** - Persistencia y cache  
+## 📝 Roadmap
 
-## 🔧 Desarrollo
-
-```bash
-# Iniciar solo infraestructura
-docker-compose up -d postgres redis nats
-
-# Desarrollar un servicio local
-cd chat-service
-go run cmd/main.go
-```
-
-## 📝 TODO
-
-- [ ] Implementar Auth Service completo (JWT + OAuth)
-- [ ] Implementar Billing Service (Stripe)
-- [ ] Implementar Usage Service
-- [ ] Agregar middleware de rate limiting
-- [ ] Agregar autenticación en API Gateway
-- [ ] Tests unitarios
-- [ ] CI/CD pipeline
+Ver [PLAN.md](PLAN.md) para el plan completo de desarrollo.
 
 ## 📄 Licencia
 
-MIT - R0LM0
+MIT — R0LM0
