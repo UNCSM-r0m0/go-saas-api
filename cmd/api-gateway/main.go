@@ -15,7 +15,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/billing"
+	"github.com/r0lm0/go-saas-api/internal/platform/cache"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
+	"github.com/r0lm0/go-saas-api/internal/platform/health"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
 	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
@@ -61,23 +63,34 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 	rateLimiter := ratelimit.NewLimiter(redisClient)
 
-	// Tier resolver for premium rate limits
+	// Tier resolver for premium rate limits (with Redis cache)
 	billingStore := billing.NewPostgresBillingStore(pgPool)
-	tierResolver := &dbTierResolver{store: billingStore}
+	appCache := cache.NewCache(redisClient, "saas")
+	baseResolver := &dbTierResolver{store: billingStore}
+	tierResolver := &cachedTierResolver{
+		cache:    appCache,
+		fallback: baseResolver,
+		ttl:      5 * time.Minute,
+	}
+
+	// Health checker
+	hc := health.NewChecker(pgPool, redisClient, nil)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger(log))
 	r.Use(middleware.CORS())
+	r.Use(middleware.RequestTimeout(30 * time.Second))
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":    "healthy",
-			"service":   "api-gateway",
-			"timestamp": time.Now().UTC(),
-		})
+		report := hc.Check(c.Request.Context())
+		if !report.Healthy {
+			c.JSON(http.StatusServiceUnavailable, report)
+			return
+		}
+		c.JSON(http.StatusOK, report)
 	})
 
 	// API v1 routes
@@ -207,4 +220,27 @@ func (r *dbTierResolver) ResolveTier(ctx context.Context, tenantID, userID strin
 		return "premium", nil
 	}
 	return "registered", nil
+}
+
+// cachedTierResolver wraps a TierResolver with Redis caching.
+type cachedTierResolver struct {
+	cache    *cache.Cache
+	fallback middleware.TierResolver
+	ttl      time.Duration
+}
+
+func (c *cachedTierResolver) ResolveTier(ctx context.Context, tenantID, userID string) (string, error) {
+	cacheKey := fmt.Sprintf("tier:%s:%s", tenantID, userID)
+	var tier string
+	if err := c.cache.Get(ctx, cacheKey, &tier); err == nil {
+		return tier, nil
+	}
+
+	tier, err := c.fallback.ResolveTier(ctx, tenantID, userID)
+	if err != nil {
+		return "", err
+	}
+
+	_ = c.cache.Set(ctx, cacheKey, tier, c.ttl)
+	return tier, nil
 }

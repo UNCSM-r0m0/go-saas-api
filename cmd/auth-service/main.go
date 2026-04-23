@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/r0lm0/go-saas-api/internal/auth"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
+	"github.com/r0lm0/go-saas-api/internal/platform/health"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
 	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
@@ -69,19 +70,24 @@ func main() {
 	)
 	oauthHandler := auth.NewOAuthHandler(oauthService, log)
 
+	// Health checker
+	hc := health.NewChecker(pgPool, redisClient, nil)
+
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger(log))
 	r.Use(middleware.CORS())
+	r.Use(middleware.RequestTimeout(30 * time.Second))
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":    "healthy",
-			"service":   "auth-service",
-			"timestamp": time.Now().UTC(),
-		})
+		report := hc.Check(c.Request.Context())
+		if !report.Healthy {
+			c.JSON(http.StatusServiceUnavailable, report)
+			return
+		}
+		c.JSON(http.StatusOK, report)
 	})
 
 	// Auth endpoints

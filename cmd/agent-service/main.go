@@ -17,6 +17,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/store"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
+	"github.com/r0lm0/go-saas-api/internal/platform/health"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
 	"github.com/r0lm0/go-saas-api/internal/platform/nats"
@@ -31,10 +32,11 @@ type Server struct {
 	artRepo     repository.ArtifactRepo
 	log         logger.Logger
 	llmManager  *llm.MultiClient
+	hc          *health.Checker
 }
 
-func newServer(orch *runtime.Orchestrator, artRepo repository.ArtifactRepo, log logger.Logger, manager *llm.MultiClient) *Server {
-	return &Server{orch: orch, artRepo: artRepo, log: log, llmManager: manager}
+func newServer(orch *runtime.Orchestrator, artRepo repository.ArtifactRepo, log logger.Logger, manager *llm.MultiClient, hc *health.Checker) *Server {
+	return &Server{orch: orch, artRepo: artRepo, log: log, llmManager: manager, hc: hc}
 }
 
 func (s *Server) setupRouter() *gin.Engine {
@@ -44,7 +46,7 @@ func (s *Server) setupRouter() *gin.Engine {
 	r.Use(middleware.Logger(s.log))
 	r.Use(middleware.CORS())
 
-	r.GET("/health", s.handleHealth)
+	r.GET("/health", s.handleHealthDetailed(s.hc))
 	r.GET("/chat/models", s.handleListModels)
 	r.POST("/agent/chat", s.handleAgentChat)
 	r.POST("/artifacts", s.handleCreateArtifact)
@@ -59,6 +61,25 @@ func (s *Server) handleHealth(c *gin.Context) {
 		"service":   "agent-service",
 		"timestamp": time.Now().UTC(),
 	})
+}
+
+func (s *Server) handleHealthDetailed(hc *health.Checker) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if hc == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "healthy",
+				"service":   "agent-service",
+				"timestamp": time.Now().UTC(),
+			})
+			return
+		}
+		report := hc.Check(c.Request.Context())
+		if !report.Healthy {
+			c.JSON(http.StatusServiceUnavailable, report)
+			return
+		}
+		c.JSON(http.StatusOK, report)
+	}
 }
 
 func (s *Server) handleListModels(c *gin.Context) {
@@ -303,8 +324,12 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	srv := newServer(orchestrator, artStore, log, multiClient)
+	// Health checker
+	hc := health.NewChecker(pgPool, redisClient, nc)
+
+	srv := newServer(orchestrator, artStore, log, multiClient, hc)
 	r := srv.setupRouter()
+	r.Use(middleware.RequestTimeout(60 * time.Second))
 
 	httpSrv := &http.Server{
 		Addr:    ":" + cfg.Port,

@@ -1,4 +1,4 @@
-﻿module github.com/r0lm0/go-saas-api
+module github.com/r0lm0/go-saas-api
 
 go 1.25.0
 
