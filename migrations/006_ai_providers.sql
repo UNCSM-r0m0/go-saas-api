@@ -1,10 +1,10 @@
-﻿-- 006_ai_providers.sql â€” AI providers and models (configurable in DB)
+-- 006_ai_providers.sql â€” AI providers and models (configurable in DB)
 
 CREATE TABLE IF NOT EXISTS ai_providers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('ollama', 'openai', 'gemini', 'deepseek', 'anthropic', 'custom')),
+    type TEXT NOT NULL CHECK (type IN ('ollama', 'openai', 'gemini', 'deepseek', 'kimi', 'anthropic', 'custom')),
     base_url TEXT NOT NULL,
     api_key_encrypted TEXT,
     api_key_hash TEXT,

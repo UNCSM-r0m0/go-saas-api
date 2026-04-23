@@ -1,4 +1,4 @@
-﻿package provider
+package provider
 
 import (
 	"time"
@@ -14,6 +14,7 @@ const (
 	ProviderOpenAI    ProviderType = "openai"
 	ProviderGemini    ProviderType = "gemini"
 	ProviderDeepSeek  ProviderType = "deepseek"
+	ProviderKimi      ProviderType = "kimi"
 	ProviderAnthropic ProviderType = "anthropic"
 	ProviderCustom    ProviderType = "custom"
 )

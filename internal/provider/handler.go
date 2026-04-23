@@ -1,4 +1,4 @@
-﻿package provider
+package provider
 
 import (
 	"net/http"
@@ -30,6 +30,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc) 
 		admin.PATCH("/:id", h.UpdateProvider)
 		admin.DELETE("/:id", h.DeleteProvider)
 		admin.POST("/:id/test", h.TestProvider)
+		admin.POST("/:id/sync-models", h.SyncModels)
 		admin.POST("/:id/models", h.CreateModel)
 		admin.GET("/:id/models", h.ListModels)
 	}
@@ -191,6 +192,29 @@ func (h *Handler) DeleteProvider(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "provider deleted"})
+}
+
+// SyncModels handles POST /admin/providers/:id/sync-models.
+func (h *Handler) SyncModels(c *gin.Context) {
+	tenantID, _, ok := getTenantUser(c)
+	if !ok {
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	result, err := h.service.SyncOllamaModels(c.Request.Context(), tenantID, id)
+	if err != nil {
+		h.log.Error("sync ollama models failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 // TestProvider handles POST /admin/providers/:id/test.
