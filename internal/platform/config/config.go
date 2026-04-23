@@ -65,6 +65,13 @@ type Config struct {
 	// File Upload
 	UploadPath     string `mapstructure:"UPLOAD_PATH"`
 	MaxUploadSize  int64  `mapstructure:"MAX_UPLOAD_SIZE"`
+
+	// SMTP / Email
+	SMTPHost     string `mapstructure:"SMTP_HOST"`
+	SMTPPort     string `mapstructure:"SMTP_PORT"`
+	SMTPUser     string `mapstructure:"SMTP_USER"`
+	SMTPPassword string `mapstructure:"SMTP_PASSWORD"`
+	SMTPFrom     string `mapstructure:"SMTP_FROM"`
 }
 
 // Load reads configuration from environment variables
@@ -103,6 +110,11 @@ func Load() (*Config, error) {
 		PremiumMessageLimit:    getInt("PREMIUM_USER_MESSAGE_LIMIT", 1000),
 		UploadPath:            getEnv("UPLOAD_PATH", "./uploads"),
 		MaxUploadSize:         getInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+		SMTPHost:              getEnv("SMTP_HOST", ""),
+		SMTPPort:              getEnv("SMTP_PORT", "587"),
+		SMTPUser:              getEnv("SMTP_USER", ""),
+		SMTPPassword:          getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:              getEnv("SMTP_FROM", "noreply@example.com"),
 	}
 
 	return cfg, nil

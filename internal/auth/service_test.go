@@ -99,16 +99,65 @@ func (m *mockRefreshStore) Delete(ctx context.Context, token string) error {
 	return nil
 }
 
-func newTestService() (*Service, *mockUserStore, *mockRefreshStore) {
+// mockResetTokenStore is an in-memory PasswordResetTokenStore for testing
+type mockResetTokenStore struct {
+	tokens map[string]string // token -> userID
+}
+
+func (m *mockResetTokenStore) Save(ctx context.Context, token, userID string, expiration time.Duration) error {
+	if m.tokens == nil {
+		m.tokens = make(map[string]string)
+	}
+	m.tokens[token] = userID
+	return nil
+}
+
+func (m *mockResetTokenStore) Get(ctx context.Context, token string) (string, error) {
+	if m.tokens == nil {
+		return "", errors.New("not found")
+	}
+	uid, ok := m.tokens[token]
+	if !ok {
+		return "", errors.New("not found")
+	}
+	return uid, nil
+}
+
+func (m *mockResetTokenStore) Delete(ctx context.Context, token string) error {
+	if m.tokens != nil {
+		delete(m.tokens, token)
+	}
+	return nil
+}
+
+// mockEmailSender is an in-memory EmailSender for testing
+type mockEmailSender struct {
+	sent []struct {
+		Email   string
+		ResetURL string
+	}
+}
+
+func (m *mockEmailSender) SendPasswordReset(email, resetURL string) error {
+	m.sent = append(m.sent, struct {
+		Email   string
+		ResetURL string
+	}{Email: email, ResetURL: resetURL})
+	return nil
+}
+
+func newTestService() (*Service, *mockUserStore, *mockRefreshStore, *mockResetTokenStore, *mockEmailSender) {
 	users := &mockUserStore{}
 	refresh := &mockRefreshStore{}
+	reset := &mockResetTokenStore{}
+	email := &mockEmailSender{}
 	jwtMgr := jwt.NewManager("test-secret")
-	svc := NewService(users, refresh, jwtMgr, time.Hour, 24*time.Hour)
-	return svc, users, refresh
+	svc := NewService(users, refresh, reset, email, "http://localhost:5173", jwtMgr, time.Hour, 24*time.Hour, 15*time.Minute)
+	return svc, users, refresh, reset, email
 }
 
 func TestService_Register(t *testing.T) {
-	svc, _, _ := newTestService()
+	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
@@ -125,7 +174,7 @@ func TestService_Register(t *testing.T) {
 }
 
 func TestService_Register_Duplicate(t *testing.T) {
-	svc, _, _ := newTestService()
+	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
@@ -145,7 +194,7 @@ func TestService_Register_Duplicate(t *testing.T) {
 }
 
 func TestService_Login(t *testing.T) {
-	svc, _, _ := newTestService()
+	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
@@ -168,7 +217,7 @@ func TestService_Login(t *testing.T) {
 }
 
 func TestService_Login_InvalidCredentials(t *testing.T) {
-	svc, _, _ := newTestService()
+	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
@@ -187,7 +236,7 @@ func TestService_Login_InvalidCredentials(t *testing.T) {
 }
 
 func TestService_Refresh(t *testing.T) {
-	svc, _, _ := newTestService()
+	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
@@ -212,7 +261,7 @@ func TestService_Refresh(t *testing.T) {
 }
 
 func TestService_Refresh_InvalidToken(t *testing.T) {
-	svc, _, _ := newTestService()
+	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
 
 	_, _, err := svc.Refresh(ctx, "invalid-token")
@@ -220,7 +269,7 @@ func TestService_Refresh_InvalidToken(t *testing.T) {
 }
 
 func TestService_Logout(t *testing.T) {
-	svc, _, refresh := newTestService()
+	svc, _, refresh, _, _ := newTestService()
 	ctx := context.Background()
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
@@ -242,4 +291,86 @@ func TestService_Logout(t *testing.T) {
 
 	_, ok := refresh.tokens[pair.RefreshToken]
 	assert.False(t, ok)
+}
+
+func TestService_RequestPasswordReset(t *testing.T) {
+	svc, _, _, reset, email := newTestService()
+	ctx := context.Background()
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+		Email:    "reset@example.com",
+		Password: "oldpassword123",
+		Name:     "Reset User",
+	})
+	require.NoError(t, err)
+
+	err = svc.RequestPasswordReset(ctx, tenantID, "reset@example.com")
+	require.NoError(t, err)
+
+	assert.Len(t, reset.tokens, 1)
+	assert.Len(t, email.sent, 1)
+	assert.Equal(t, "reset@example.com", email.sent[0].Email)
+	assert.Contains(t, email.sent[0].ResetURL, "http://localhost:5173/reset-password?token=")
+
+	// Request for non-existent email should not error (security)
+	err = svc.RequestPasswordReset(ctx, tenantID, "nonexistent@example.com")
+	require.NoError(t, err)
+	assert.Len(t, reset.tokens, 1) // no new token created
+}
+
+func TestService_ResetPassword(t *testing.T) {
+	svc, _, _, reset, _ := newTestService()
+	ctx := context.Background()
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+		Email:    "reset@example.com",
+		Password: "oldpassword123",
+		Name:     "Reset User",
+	})
+	require.NoError(t, err)
+
+	// Simulate requesting a reset
+	err = svc.RequestPasswordReset(ctx, tenantID, "reset@example.com")
+	require.NoError(t, err)
+
+	// Extract the token
+	var token string
+	for k := range reset.tokens {
+		token = k
+		break
+	}
+	require.NotEmpty(t, token)
+
+	// Reset password
+	err = svc.ResetPassword(ctx, token, "newsecurepassword456")
+	require.NoError(t, err)
+
+	// Token should be deleted
+	assert.Len(t, reset.tokens, 0)
+
+	// Old password should not work
+	_, _, err = svc.Login(ctx, tenantID, &LoginRequest{
+		Email:    "reset@example.com",
+		Password: "oldpassword123",
+	})
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
+
+	// New password should work
+	pair, user, err := svc.Login(ctx, tenantID, &LoginRequest{
+		Email:    "reset@example.com",
+		Password: "newsecurepassword456",
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, user)
+	assert.NotEmpty(t, pair.AccessToken)
+}
+
+func TestService_ResetPassword_InvalidToken(t *testing.T) {
+	svc, _, _, _, _ := newTestService()
+	ctx := context.Background()
+
+	err := svc.ResetPassword(ctx, "invalid-token", "newpassword123")
+	assert.ErrorIs(t, err, ErrInvalidResetToken)
 }

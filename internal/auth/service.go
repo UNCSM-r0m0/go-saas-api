@@ -17,6 +17,7 @@ var (
 	ErrUserExists         = errors.New("user already exists")
 	ErrUserNotFound       = errors.New("user not found")
 	ErrInvalidToken       = errors.New("invalid refresh token")
+	ErrInvalidResetToken  = errors.New("invalid or expired reset token")
 )
 
 // RefreshTokenStore defines the interface for refresh token persistence
@@ -28,21 +29,29 @@ type RefreshTokenStore interface {
 
 // Service handles authentication business logic
 type Service struct {
-	users         UserRepository
-	refreshTokens RefreshTokenStore
-	jwtManager    *jwt.Manager
-	accessTTL     time.Duration
-	refreshTTL    time.Duration
+	users            UserRepository
+	refreshTokens    RefreshTokenStore
+	resetTokens      PasswordResetTokenStore
+	emailSender      EmailSender
+	frontendURL      string
+	jwtManager       *jwt.Manager
+	accessTTL        time.Duration
+	refreshTTL       time.Duration
+	resetTokenTTL    time.Duration
 }
 
 // NewService creates a new auth service
-func NewService(users UserRepository, refresh RefreshTokenStore, jwtMgr *jwt.Manager, accessTTL, refreshTTL time.Duration) *Service {
+func NewService(users UserRepository, refresh RefreshTokenStore, reset PasswordResetTokenStore, email EmailSender, frontendURL string, jwtMgr *jwt.Manager, accessTTL, refreshTTL, resetTokenTTL time.Duration) *Service {
 	return &Service{
 		users:         users,
 		refreshTokens: refresh,
+		resetTokens:   reset,
+		emailSender:   email,
+		frontendURL:   frontendURL,
 		jwtManager:    jwtMgr,
 		accessTTL:     accessTTL,
 		refreshTTL:    refreshTTL,
+		resetTokenTTL: resetTokenTTL,
 	}
 }
 
@@ -133,6 +142,64 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 // GetUserByID retrieves a user by their ID
 func (s *Service) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	return s.users.GetByID(ctx, id)
+}
+
+// RequestPasswordReset generates a reset token and sends an email to the user
+func (s *Service) RequestPasswordReset(ctx context.Context, tenantID uuid.UUID, email string) error {
+	user, err := s.users.GetByEmail(ctx, tenantID, email)
+	if err != nil {
+		// Do not reveal whether the email exists for security
+		return nil
+	}
+
+	token, err := GeneratePasswordResetToken()
+	if err != nil {
+		return fmt.Errorf("generate reset token: %w", err)
+	}
+
+	if err := s.resetTokens.Save(ctx, token, user.ID.String(), s.resetTokenTTL); err != nil {
+		return fmt.Errorf("save reset token: %w", err)
+	}
+
+	resetURL := fmt.Sprintf("%s/reset-password?token=%s", s.frontendURL, token)
+	if err := s.emailSender.SendPasswordReset(user.Email, resetURL); err != nil {
+		return fmt.Errorf("send password reset email: %w", err)
+	}
+
+	return nil
+}
+
+// ResetPassword validates a reset token and updates the user's password
+func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) error {
+	userIDStr, err := s.resetTokens.Get(ctx, token)
+	if err != nil {
+		return ErrInvalidResetToken
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return ErrInvalidResetToken
+	}
+
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return ErrInvalidResetToken
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	user.PasswordHash = string(hash)
+	user.UpdatedAt = time.Now().UTC()
+
+	if err := s.users.Update(ctx, user); err != nil {
+		return fmt.Errorf("update user password: %w", err)
+	}
+
+	_ = s.resetTokens.Delete(ctx, token)
+	return nil
 }
 
 func (s *Service) generateTokenPair(ctx context.Context, user *User) (*TokenPair, error) {

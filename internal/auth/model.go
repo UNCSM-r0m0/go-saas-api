@@ -45,6 +45,17 @@ type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
+// ForgotPasswordRequest represents a password reset request payload
+type ForgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+// ResetPasswordRequest represents a password reset confirmation payload
+type ResetPasswordRequest struct {
+	Token       string `json:"token" validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=8"`
+}
+
 // MeResponse represents the current user response
 type MeResponse struct {
 	User  *User  `json:"user"`

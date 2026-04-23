@@ -58,7 +58,22 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 	userStore := auth.NewPostgresUserStore(pgPool)
 	refreshStore := auth.NewRedisRefreshTokenStore(redisClient)
-	authService := auth.NewService(userStore, refreshStore, jwtMgr, cfg.JWTExpiration, 7*24*time.Hour)
+	resetStore := auth.NewRedisPasswordResetTokenStore(redisClient)
+
+	var emailSender auth.EmailSender
+	if cfg.SMTPHost != "" {
+		emailSender = auth.NewSMTPEmailSender(auth.SMTPConfig{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			Username: cfg.SMTPUser,
+			Password: cfg.SMTPPassword,
+			From:     cfg.SMTPFrom,
+		})
+	} else {
+		emailSender = auth.NewNoopEmailSender()
+	}
+
+	authService := auth.NewService(userStore, refreshStore, resetStore, emailSender, cfg.FrontendURL, jwtMgr, cfg.JWTExpiration, 7*24*time.Hour, 15*time.Minute)
 	authHandler := auth.NewHandler(authService, log)
 
 	// OAuth layer
