@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/r0lm0/go-saas-api/internal/billing"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
 )
 
 func main() {
@@ -30,9 +32,20 @@ func main() {
 		logger.String("env", cfg.Env),
 	)
 
+	ctx := context.Background()
+	pgPool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal("failed to connect to postgres", logger.Error(err))
+	}
+	defer pgPool.Close()
+
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	// Usage wiring
+	store := billing.NewPostgresBillingStore(pgPool)
+	usageHandler := billing.NewUsageHandler(store, store)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -49,10 +62,8 @@ func main() {
 		})
 	})
 
-	// Usage endpoints
-	r.GET("/usage/stats", handleGetStats)
-	r.GET("/usage/limits", handleGetLimits)
-	r.POST("/usage/track", handleTrackUsage)
+	// Usage routes
+	usageHandler.RegisterRoutes(r.Group("/usage"))
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
@@ -73,30 +84,12 @@ func main() {
 	<-quit
 	log.Info("shutting down usage-service")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("server forced to shutdown", logger.Error(err))
 	}
 
 	log.Info("usage-service exited")
-}
-
-func handleGetStats(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleGetLimits(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"limits": gin.H{
-			"free":       gin.H{"messages_per_day": 3, "streaming": false},
-			"registered": gin.H{"messages_per_day": 50, "streaming": true},
-			"premium":    gin.H{"messages_per_day": 1000, "streaming": true, "images": true},
-		},
-	})
-}
-
-func handleTrackUsage(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
 }

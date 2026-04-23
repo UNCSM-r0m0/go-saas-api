@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -13,9 +13,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/billing"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
 	"github.com/r0lm0/go-saas-api/internal/platform/ratelimit"
 	"github.com/r0lm0/go-saas-api/internal/platform/redis"
 	"github.com/r0lm0/go-saas-api/pkg/jwt"
@@ -41,14 +44,26 @@ func main() {
 	}
 
 	// Infrastructure
+	ctx := context.Background()
+
 	redisClient, err := redis.NewClient(cfg.RedisURL)
 	if err != nil {
 		log.Fatal("failed to connect to redis", logger.Error(err))
 	}
 	defer redisClient.Close()
 
+	pgPool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal("failed to connect to postgres", logger.Error(err))
+	}
+	defer pgPool.Close()
+
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 	rateLimiter := ratelimit.NewLimiter(redisClient)
+
+	// Tier resolver for premium rate limits
+	billingStore := billing.NewPostgresBillingStore(pgPool)
+	tierResolver := &dbTierResolver{store: billingStore}
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -82,10 +97,10 @@ func main() {
 		v1.GET("/auth/me", middleware.JWTAuth(jwtMgr), proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
 		// Agent routes: optional auth + rate limit
-		// Anonymous users get free tier (IP-based); authenticated get registered tier
+		// Anonymous users get free tier (IP-based); authenticated get tier from DB
 		agent := v1.Group("")
 		agent.Use(middleware.JWTAuthOptional(jwtMgr))
-		agent.Use(middleware.RateLimit(rateLimiter, cfg, log))
+		agent.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
 			agent.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
@@ -95,7 +110,7 @@ func main() {
 		// Protected service routes (JWT required + rate limit)
 		protected := v1.Group("")
 		protected.Use(middleware.JWTAuth(jwtMgr))
-		protected.Use(middleware.RateLimit(rateLimiter, cfg, log))
+		protected.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			protected.Any("/usage/*path", proxyTo(cfg.UsageServiceURL, "/api/v1"))
@@ -159,4 +174,37 @@ func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		proxy.ServeHTTP(c.Writer, c.Request)
 	}
+}
+
+// dbTierResolver resolves user tiers from the billing database.
+type dbTierResolver struct {
+	store billing.SubscriptionRepository
+}
+
+func (r *dbTierResolver) ResolveTier(ctx context.Context, tenantID, userID string) (string, error) {
+	tid, err := uuid.Parse(tenantID)
+	if err != nil {
+		return "", err
+	}
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return "", err
+	}
+
+	sub, err := r.store.GetSubscriptionByUser(ctx, tid, uid)
+	if err != nil {
+		return "", err
+	}
+	if sub == nil || sub.Status != "active" {
+		return "registered", nil
+	}
+
+	// Map plan IDs to tiers. For simplicity we look at the plan slug via a separate query,
+	// but here we infer from amount or just return premium for any active paid sub.
+	// A more robust solution would cache plan slugs.
+	// For now: if there's an active subscription with a stripe sub ID, treat as premium.
+	if sub.StripeSubscriptionID != "" {
+		return "premium", nil
+	}
+	return "registered", nil
 }

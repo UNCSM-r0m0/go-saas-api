@@ -1,4 +1,4 @@
-package middleware
+﻿package middleware
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func TestRateLimit_Anonymous(t *testing.T) {
 	limiter := ratelimit.NewLimiter(client)
 
 	r := gin.New()
-	r.Use(RateLimit(limiter, cfg, log))
+	r.Use(RateLimit(limiter, cfg, log, nil))
 	r.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
@@ -83,7 +83,7 @@ func TestRateLimit_SkipsAuthAndHealth(t *testing.T) {
 	limiter := ratelimit.NewLimiter(client)
 
 	r := gin.New()
-	r.Use(RateLimit(limiter, cfg, log))
+	r.Use(RateLimit(limiter, cfg, log, nil))
 	r.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
 	r.POST("/api/v1/auth/login", func(c *gin.Context) { c.Status(http.StatusOK) })
 

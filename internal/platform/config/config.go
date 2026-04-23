@@ -48,6 +48,9 @@ type Config struct {
 	DeepSeekAPIKey string `mapstructure:"DEEPSEEK_API_KEY"`
 	SandboxServiceURL string `mapstructure:"SANDBOX_SERVICE_URL"`
 
+	// Frontend
+	FrontendURL string `mapstructure:"FRONTEND_URL"`
+
 	// Service URLs (for internal communication)
 	AgentServiceURL    string `mapstructure:"AGENT_SERVICE_URL"`
 	AuthServiceURL    string `mapstructure:"AUTH_SERVICE_URL"`
@@ -86,6 +89,7 @@ func Load() (*Config, error) {
 		GeminiAPIKey:      getEnv("GEMINI_API_KEY", ""),
 		DeepSeekAPIKey:    getEnv("DEEPSEEK_API_KEY", ""),
 		SandboxServiceURL: getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
+		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:5173"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://localhost:3002"),
 		AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://localhost:3003"),
 		BillingServiceURL: getEnv("BILLING_SERVICE_URL", "http://localhost:3004"),

@@ -1,6 +1,7 @@
-package middleware
+﻿package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,8 +13,13 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/ratelimit"
 )
 
-// RateLimit creates a middleware that enforces rate limits per tier
-func RateLimit(limiter *ratelimit.Limiter, cfg *config.Config, log logger.Logger) gin.HandlerFunc {
+// TierResolver resolves the rate-limit tier for an authenticated user.
+type TierResolver interface {
+	ResolveTier(ctx context.Context, tenantID, userID string) (tier string, err error)
+}
+
+// RateLimit creates a middleware that enforces rate limits per tier.
+func RateLimit(limiter *ratelimit.Limiter, cfg *config.Config, log logger.Logger, resolver TierResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Skip rate limiting for health checks and auth endpoints
 		path := c.Request.URL.Path
@@ -22,7 +28,7 @@ func RateLimit(limiter *ratelimit.Limiter, cfg *config.Config, log logger.Logger
 			return
 		}
 
-		key, limit := resolveLimit(c, cfg)
+		key, limit := resolveLimit(c, cfg, resolver)
 
 		result, err := limiter.Allow(c.Request.Context(), key, limit, 24*time.Hour)
 		if err != nil {
@@ -37,9 +43,9 @@ func RateLimit(limiter *ratelimit.Limiter, cfg *config.Config, log logger.Logger
 
 		if !result.Allowed {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error":     "rate limit exceeded",
-				"limit":     result.Limit,
-				"reset_at":  result.ResetAt.Unix(),
+				"error":       "rate limit exceeded",
+				"limit":       result.Limit,
+				"reset_at":    result.ResetAt.Unix(),
 				"retry_after": fmt.Sprintf("%d", int(time.Until(result.ResetAt).Seconds())),
 			})
 			return
@@ -49,12 +55,25 @@ func RateLimit(limiter *ratelimit.Limiter, cfg *config.Config, log logger.Logger
 	}
 }
 
-func resolveLimit(c *gin.Context, cfg *config.Config) (string, int) {
+func resolveLimit(c *gin.Context, cfg *config.Config, resolver TierResolver) (string, int) {
 	// Authenticated users: use user_id as key
 	if uid, exists := c.Get("user_id"); exists && uid != "" {
-		// TODO: when subscription/billing is implemented, check tier from DB
-		// For now all authenticated users are treated as "registered"
-		return fmt.Sprintf("user:%s", uid), cfg.RegisteredMessageLimit
+		tenantID, _ := c.Get("tenant_id")
+		tier := "registered" // default
+		if resolver != nil {
+			resolvedTier, err := resolver.ResolveTier(c.Request.Context(), fmt.Sprintf("%v", tenantID), fmt.Sprintf("%v", uid))
+			if err == nil && resolvedTier != "" {
+				tier = resolvedTier
+			}
+		}
+		switch tier {
+		case "premium":
+			return fmt.Sprintf("user:%s", uid), cfg.PremiumMessageLimit
+		case "free":
+			return fmt.Sprintf("user:%s", uid), cfg.FreeMessageLimit
+		default:
+			return fmt.Sprintf("user:%s", uid), cfg.RegisteredMessageLimit
+		}
 	}
 
 	// Anonymous users: use client IP as key

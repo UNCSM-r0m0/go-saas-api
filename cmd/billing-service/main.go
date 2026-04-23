@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/r0lm0/go-saas-api/internal/billing"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
 )
 
 func main() {
@@ -30,9 +32,21 @@ func main() {
 		logger.String("env", cfg.Env),
 	)
 
+	ctx := context.Background()
+	pgPool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal("failed to connect to postgres", logger.Error(err))
+	}
+	defer pgPool.Close()
+
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	// Billing wiring
+	store := billing.NewPostgresBillingStore(pgPool)
+	billingService := billing.NewBillingService(store, store, cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.FrontendURL)
+	billingHandler := billing.NewHandler(billingService)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -49,12 +63,8 @@ func main() {
 		})
 	})
 
-	// Billing endpoints
-	r.GET("/billing/plans", handleListPlans)
-	r.POST("/billing/subscribe", handleSubscribe)
-	r.GET("/billing/subscription", handleGetSubscription)
-	r.POST("/billing/cancel", handleCancel)
-	r.POST("/billing/webhook", handleWebhook)
+	// Billing routes
+	billingHandler.RegisterRoutes(r.Group("/billing"))
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
@@ -75,38 +85,12 @@ func main() {
 	<-quit
 	log.Info("shutting down billing-service")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("server forced to shutdown", logger.Error(err))
 	}
 
 	log.Info("billing-service exited")
-}
-
-func handleListPlans(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"plans": []gin.H{
-			{"id": "free", "name": "Free", "messages_per_day": 3, "price": 0},
-			{"id": "registered", "name": "Registered", "messages_per_day": 50, "price": 0},
-			{"id": "premium", "name": "Premium", "messages_per_day": 1000, "price": 9.99},
-		},
-	})
-}
-
-func handleSubscribe(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleGetSubscription(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleCancel(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleWebhook(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
 }
