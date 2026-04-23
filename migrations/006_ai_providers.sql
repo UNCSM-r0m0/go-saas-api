@@ -1,10 +1,10 @@
--- 006_ai_providers.sql â€” AI providers and models (configurable in DB)
+-- 006_ai_providers.sql Ã¢â‚¬â€ AI providers and models (configurable in DB)
 
 CREATE TABLE IF NOT EXISTS ai_providers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('ollama', 'openai', 'gemini', 'deepseek', 'kimi', 'anthropic', 'custom')),
+    type TEXT NOT NULL CHECK (type IN ('ollama', 'openai', 'gemini', 'deepseek', 'kimi', 'lmstudio', 'anthropic', 'custom')),
     base_url TEXT NOT NULL,
     api_key_encrypted TEXT,
     api_key_hash TEXT,
@@ -60,6 +60,32 @@ SELECT ap.id, 'deepseek-r1:7b', 'DeepSeek R1 7B', 4096, 8192, true, true, true
 FROM ai_providers ap
 WHERE ap.type = 'ollama'
   AND NOT EXISTS (SELECT 1 FROM ai_models am WHERE am.provider_id = ap.id AND am.name = 'deepseek-r1:7b');
+
+-- Seed Kimi provider (insert only if not exists)
+INSERT INTO ai_providers (tenant_id, name, type, base_url, is_active, is_public, priority, config)
+SELECT t.id, 'Kimi Code', 'kimi', 'https://api.kimi.com/coding/v1', true, true, 100, '{}'
+FROM tenants t
+WHERE NOT EXISTS (SELECT 1 FROM ai_providers ap WHERE ap.tenant_id = t.id AND ap.type = 'kimi')
+LIMIT 1;
+
+INSERT INTO ai_models (provider_id, name, display_name, max_tokens, context_window, supports_streaming, is_active, is_public)
+SELECT ap.id, 'kimi-for-coding', 'Kimi for Coding', 262144, 262144, true, true, true
+FROM ai_providers ap
+WHERE ap.type = 'kimi'
+  AND NOT EXISTS (SELECT 1 FROM ai_models am WHERE am.provider_id = ap.id AND am.name = 'kimi-for-coding');
+
+INSERT INTO ai_models (provider_id, name, display_name, max_tokens, context_window, supports_streaming, is_active, is_public)
+SELECT ap.id, 'kimi-k2.6', 'Kimi K2.6', 262144, 262144, true, true, true
+FROM ai_providers ap
+WHERE ap.type = 'kimi'
+  AND NOT EXISTS (SELECT 1 FROM ai_models am WHERE am.provider_id = ap.id AND am.name = 'kimi-k2.6');
+
+-- Seed LM Studio provider (insert only if not exists)
+INSERT INTO ai_providers (tenant_id, name, type, base_url, is_active, is_public, priority, config)
+SELECT t.id, 'LM Studio', 'lmstudio', 'http://192.168.1.13:1234', true, true, 40, '{}'
+FROM tenants t
+WHERE NOT EXISTS (SELECT 1 FROM ai_providers ap WHERE ap.tenant_id = t.id AND ap.type = 'lmstudio')
+LIMIT 1;
 
 -- RLS
 ALTER TABLE ai_providers ENABLE ROW LEVEL SECURITY;

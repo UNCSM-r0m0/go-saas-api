@@ -15,6 +15,7 @@ const (
 	ProviderGemini    ProviderType = "gemini"
 	ProviderDeepSeek  ProviderType = "deepseek"
 	ProviderKimi      ProviderType = "kimi"
+	ProviderLMStudio  ProviderType = "lmstudio"
 	ProviderAnthropic ProviderType = "anthropic"
 	ProviderCustom    ProviderType = "custom"
 )

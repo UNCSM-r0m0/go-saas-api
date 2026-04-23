@@ -207,7 +207,7 @@ func (h *Handler) SyncModels(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.SyncOllamaModels(c.Request.Context(), tenantID, id)
+	result, err := h.service.SyncModels(c.Request.Context(), tenantID, id)
 	if err != nil {
 		h.log.Error("sync ollama models failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

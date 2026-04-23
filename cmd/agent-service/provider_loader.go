@@ -77,6 +77,9 @@ func (pl *ProviderLoader) createClient(p provider.AIProvider) (llm.Client, error
 	case provider.ProviderKimi:
 		apiKey := p.APIKeyEncrypted // TODO: decrypt if encrypted
 		return llm.NewKimiClient(apiKey), nil
+	case provider.ProviderLMStudio:
+		apiKey := p.APIKeyEncrypted // TODO: decrypt if encrypted
+		return llm.NewLMStudioClient(p.BaseURL, apiKey), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider type: %s", p.Type)
 	}

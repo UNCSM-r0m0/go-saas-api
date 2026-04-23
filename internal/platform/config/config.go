@@ -46,6 +46,8 @@ type Config struct {
 	OpenAIBaseURL  string `mapstructure:"OPENAI_BASE_URL"`
 	GeminiAPIKey   string `mapstructure:"GEMINI_API_KEY"`
 	DeepSeekAPIKey string `mapstructure:"DEEPSEEK_API_KEY"`
+	LMStudioURL    string `mapstructure:"LM_STUDIO_URL"`
+	LMStudioAPIKey string `mapstructure:"LM_STUDIO_API_KEY"`
 	SandboxServiceURL string `mapstructure:"SANDBOX_SERVICE_URL"`
 
 	// Frontend
@@ -99,6 +101,8 @@ func Load() (*Config, error) {
 		OpenAIBaseURL:     getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		GeminiAPIKey:      getEnv("GEMINI_API_KEY", ""),
 		DeepSeekAPIKey:    getEnv("DEEPSEEK_API_KEY", ""),
+		LMStudioURL:       getEnv("LM_STUDIO_URL", ""),
+		LMStudioAPIKey:    getEnv("LM_STUDIO_API_KEY", ""),
 		SandboxServiceURL: getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
 		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:5173"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://localhost:3002"),
