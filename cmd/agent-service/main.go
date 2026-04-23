@@ -16,6 +16,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/store"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/agent/websocket"
 	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/health"
@@ -40,10 +41,11 @@ type Server struct {
 	llmManager      *llm.MultiClient
 	hc              *health.Checker
 	providerHandler *provider.Handler
+	wsManager       *websocket.Manager
 }
 
-func newServer(orch *runtime.Orchestrator, convRepo repository.ConversationRepo, msgRepo repository.MessageRepo, artRepo repository.ArtifactRepo, fileHandler *fileupload.Handler, log logger.Logger, manager *llm.MultiClient, hc *health.Checker, providerHandler *provider.Handler) *Server {
-	return &Server{orch: orch, convRepo: convRepo, msgRepo: msgRepo, artRepo: artRepo, fileHandler: fileHandler, log: log, llmManager: manager, hc: hc, providerHandler: providerHandler}
+func newServer(orch *runtime.Orchestrator, convRepo repository.ConversationRepo, msgRepo repository.MessageRepo, artRepo repository.ArtifactRepo, fileHandler *fileupload.Handler, log logger.Logger, manager *llm.MultiClient, hc *health.Checker, providerHandler *provider.Handler, wsManager *websocket.Manager) *Server {
+	return &Server{orch: orch, convRepo: convRepo, msgRepo: msgRepo, artRepo: artRepo, fileHandler: fileHandler, log: log, llmManager: manager, hc: hc, providerHandler: providerHandler, wsManager: wsManager}
 }
 
 func (s *Server) setupRouter(jwtMgr *jwt.Manager) *gin.Engine {
@@ -56,6 +58,7 @@ func (s *Server) setupRouter(jwtMgr *jwt.Manager) *gin.Engine {
 	r.GET("/health", s.handleHealthDetailed(s.hc))
 	r.GET("/chat/models", s.handleListModels)
 	r.POST("/agent/chat", s.handleAgentChat)
+	r.GET("/agent/ws", s.wsManager.HandleUpgrade)
 	r.POST("/artifacts", s.handleCreateArtifact)
 	r.GET("/artifacts/:id/preview", s.handlePreviewArtifact)
 
@@ -545,6 +548,9 @@ func main() {
 
 	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, fileService)
 
+	// WebSocket manager
+	wsManager := websocket.NewManager(orchestrator, log)
+
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -553,7 +559,7 @@ func main() {
 	hc := health.NewChecker(pgPool, redisClient, nc)
 
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
-	srv := newServer(orchestrator, convStore, msgStore, artStore, fileHandler, log, multiClient, hc, providerHandler)
+	srv := newServer(orchestrator, convStore, msgStore, artStore, fileHandler, log, multiClient, hc, providerHandler, wsManager)
 	r := srv.setupRouter(jwtMgr)
 	r.Use(middleware.RequestTimeout(60 * time.Second))
 

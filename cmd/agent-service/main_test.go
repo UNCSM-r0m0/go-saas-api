@@ -14,6 +14,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/agent/websocket"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/pkg/jwt"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
@@ -130,7 +131,8 @@ func setupTestServer() *Server {
 	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, nil)
 
 	multiClient := llm.NewMultiClient()
-	return newServer(orch, convRepo, msgRepo, artRepo, nil, log, multiClient, nil, nil)
+	wsManager := websocket.NewManager(orch, log)
+	return newServer(orch, convRepo, msgRepo, artRepo, nil, log, multiClient, nil, nil, wsManager)
 }
 
 // ---- tests ----
