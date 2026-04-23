@@ -88,12 +88,12 @@ func TestOrchestrator_Chat(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo)
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil)
 	ctx := context.Background()
 	tenantID := uuid.New()
 	userID := uuid.New()
 
-	ch, err := orch.Chat(ctx, tenantID, userID, nil, "hi there")
+	ch, err := orch.Chat(ctx, tenantID, userID, nil, "hi there", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestOrchestrator_Chat(t *testing.T) {
 func TestParseToolCall(t *testing.T) {
 	registry := tools.NewRegistry()
 	_ = registry.Register(&mockTool{name: "echo", desc: "echo"})
-	orch := NewOrchestrator(nil, registry, nil, nil)
+	orch := NewOrchestrator(nil, registry, nil, nil, nil)
 
 	content := `I will echo that. TOOL_CALL:{"tool":"echo","args":{"msg":"ping"}}:END_TOOL_CALL`
 	tc, ok := orch.parseToolCall(content)
@@ -149,10 +149,10 @@ func TestOrchestrator_ChatWithTool(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo)
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil)
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), uuid.New(), nil, "ping")
+	ch, err := orch.Chat(ctx, uuid.New(), uuid.New(), nil, "ping", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

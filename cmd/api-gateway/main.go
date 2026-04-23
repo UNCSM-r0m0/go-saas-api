@@ -142,6 +142,8 @@ func main() {
 		{
 			protected.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/files", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/files/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			protected.Any("/usage/*path", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 		}

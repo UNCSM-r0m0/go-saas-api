@@ -12,6 +12,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/prompts"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
@@ -21,20 +22,22 @@ type Orchestrator struct {
 	registry  *tools.Registry
 	sessions  *SessionManager
 	agentRepo repository.AgentRepo
+	fileSvc   *fileupload.Service
 }
 
 // NewOrchestrator creates a new chat orchestrator.
-func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo) *Orchestrator {
+func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, fileSvc *fileupload.Service) *Orchestrator {
 	return &Orchestrator{
 		llmClient: client,
 		registry:  registry,
 		sessions:  sessions,
 		agentRepo: agentRepo,
+		fileSvc:   fileSvc,
 	}
 }
 
 // Chat handles a single user turn and returns a stream of chunks.
-func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, convID *uuid.UUID, content string) (<-chan llm.Chunk, error) {
+func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID) (<-chan llm.Chunk, error) {
 	// 1. Ensure conversation exists
 	var conversationID uuid.UUID
 	if convID != nil {
@@ -75,7 +78,15 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 		return nil, fmt.Errorf("resolve agent: %w", err)
 	}
 
-	// 6. Build request with tools
+	// 6. Attach file contents if provided
+	if len(fileIDs) > 0 && o.fileSvc != nil {
+		fileContext, err := o.buildFileContext(ctx, tenantID, fileIDs)
+		if err == nil && fileContext != "" {
+			content = fileContext + "\n\n" + content
+		}
+	}
+
+	// 7. Build request with tools
 	toolList := o.registry.List()
 	var toolInstances []tools.Tool
 	for _, name := range toolList {
@@ -201,6 +212,28 @@ func (o *Orchestrator) parseToolCall(content string) (*inlineToolCall, bool) {
 	}
 	_, ok := o.registry.Get(tc.Name)
 	return &tc, ok
+}
+
+func (o *Orchestrator) buildFileContext(ctx context.Context, tenantID uuid.UUID, fileIDs []uuid.UUID) (string, error) {
+	var parts []string
+	for _, id := range fileIDs {
+		upload, err := o.fileSvc.Get(ctx, tenantID, id)
+		if err != nil {
+			continue
+		}
+		text, err := o.fileSvc.ReadText(upload)
+		if err != nil {
+			continue
+		}
+		if len(text) > 10000 {
+			text = text[:10000] + "\n...[truncated]"
+		}
+		parts = append(parts, fmt.Sprintf("--- File: %s ---\n%s", upload.OriginalName, text))
+	}
+	if len(parts) == 0 {
+		return "", nil
+	}
+	return "Attached files:\n" + strings.Join(parts, "\n\n"), nil
 }
 
 func min(a, b int) int {

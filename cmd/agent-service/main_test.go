@@ -126,10 +126,10 @@ func setupTestServer() *Server {
 
 	registry := tools.NewRegistry()
 	sessions := runtime.NewSessionManager(convRepo, msgRepo)
-	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo)
+	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, nil)
 
 	multiClient := llm.NewMultiClient()
-	return newServer(orch, convRepo, msgRepo, artRepo, log, multiClient, nil)
+	return newServer(orch, convRepo, msgRepo, artRepo, nil, log, multiClient, nil)
 }
 
 // ---- tests ----

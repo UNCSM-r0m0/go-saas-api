@@ -1,4 +1,4 @@
-﻿package config
+package config
 
 import (
 	"os"
@@ -61,6 +61,10 @@ type Config struct {
 	FreeMessageLimit      int `mapstructure:"FREE_USER_MESSAGE_LIMIT"`
 	RegisteredMessageLimit int `mapstructure:"REGISTERED_USER_MESSAGE_LIMIT"`
 	PremiumMessageLimit    int `mapstructure:"PREMIUM_USER_MESSAGE_LIMIT"`
+
+	// File Upload
+	UploadPath     string `mapstructure:"UPLOAD_PATH"`
+	MaxUploadSize  int64  `mapstructure:"MAX_UPLOAD_SIZE"`
 }
 
 // Load reads configuration from environment variables
@@ -97,6 +101,8 @@ func Load() (*Config, error) {
 		FreeMessageLimit:      getInt("FREE_USER_MESSAGE_LIMIT", 3),
 		RegisteredMessageLimit: getInt("REGISTERED_USER_MESSAGE_LIMIT", 50),
 		PremiumMessageLimit:    getInt("PREMIUM_USER_MESSAGE_LIMIT", 1000),
+		UploadPath:            getEnv("UPLOAD_PATH", "./uploads"),
+		MaxUploadSize:         getInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
 	}
 
 	return cfg, nil
@@ -112,6 +118,15 @@ func getEnv(key, defaultValue string) string {
 func getInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+func getInt64(key string, defaultValue int64) int64 {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.ParseInt(value, 10, 64); err == nil {
 			return intValue
 		}
 	}

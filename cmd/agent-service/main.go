@@ -16,6 +16,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/store"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/health"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
@@ -32,13 +33,14 @@ type Server struct {
 	convRepo    repository.ConversationRepo
 	msgRepo     repository.MessageRepo
 	artRepo     repository.ArtifactRepo
+	fileHandler *fileupload.Handler
 	log         logger.Logger
 	llmManager  *llm.MultiClient
 	hc          *health.Checker
 }
 
-func newServer(orch *runtime.Orchestrator, convRepo repository.ConversationRepo, msgRepo repository.MessageRepo, artRepo repository.ArtifactRepo, log logger.Logger, manager *llm.MultiClient, hc *health.Checker) *Server {
-	return &Server{orch: orch, convRepo: convRepo, msgRepo: msgRepo, artRepo: artRepo, log: log, llmManager: manager, hc: hc}
+func newServer(orch *runtime.Orchestrator, convRepo repository.ConversationRepo, msgRepo repository.MessageRepo, artRepo repository.ArtifactRepo, fileHandler *fileupload.Handler, log logger.Logger, manager *llm.MultiClient, hc *health.Checker) *Server {
+	return &Server{orch: orch, convRepo: convRepo, msgRepo: msgRepo, artRepo: artRepo, fileHandler: fileHandler, log: log, llmManager: manager, hc: hc}
 }
 
 func (s *Server) setupRouter() *gin.Engine {
@@ -62,6 +64,9 @@ func (s *Server) setupRouter() *gin.Engine {
 
 	// Messages REST API
 	r.GET("/conversations/:id/messages", s.handleListMessages)
+
+	// File Upload API
+	s.fileHandler.RegisterRoutes(r)
 
 	return r
 }
@@ -129,8 +134,9 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 	}
 
 	var req struct {
-		ConversationID *uuid.UUID `json:"conversation_id"`
-		Message        string     `json:"message" binding:"required"`
+		ConversationID *uuid.UUID   `json:"conversation_id"`
+		Message        string       `json:"message" binding:"required"`
+		FileIDs        []uuid.UUID  `json:"file_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -138,7 +144,7 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Message)
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Message, req.FileIDs)
 	if err != nil {
 		s.log.Error("chat failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "chat failed"})
@@ -511,7 +517,12 @@ func main() {
 	_ = toolRegistry.Register(tools.NewCodeExecuteTool(tools.NewHTTPSandboxClient(cfg.SandboxServiceURL)))
 
 	sessions := runtime.NewSessionManager(convStore, msgStore)
-	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore)
+
+	fileStore := fileupload.NewPostgresStore(pgPool)
+	fileService := fileupload.NewService(fileStore, cfg.UploadPath, cfg.MaxUploadSize)
+	fileHandler := fileupload.NewHandler(fileService, log)
+
+	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, fileService)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -520,7 +531,7 @@ func main() {
 	// Health checker
 	hc := health.NewChecker(pgPool, redisClient, nc)
 
-	srv := newServer(orchestrator, convStore, msgStore, artStore, log, multiClient, hc)
+	srv := newServer(orchestrator, convStore, msgStore, artStore, fileHandler, log, multiClient, hc)
 	r := srv.setupRouter()
 	r.Use(middleware.RequestTimeout(60 * time.Second))
 
