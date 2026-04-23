@@ -10,9 +10,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/r0lm0/go-saas-api/internal/auth"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
+	"github.com/r0lm0/go-saas-api/internal/platform/redis"
+	"github.com/r0lm0/go-saas-api/pkg/jwt"
 )
 
 func main() {
@@ -34,6 +38,27 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Infrastructure
+	ctx := context.Background()
+	pgPool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal("failed to connect to postgres", logger.Error(err))
+	}
+	defer pgPool.Close()
+
+	redisClient, err := redis.NewClient(cfg.RedisURL)
+	if err != nil {
+		log.Fatal("failed to connect to redis", logger.Error(err))
+	}
+	defer redisClient.Close()
+
+	// Auth layer
+	jwtMgr := jwt.NewManager(cfg.JWTSecret)
+	userStore := auth.NewPostgresUserStore(pgPool)
+	refreshStore := auth.NewRedisRefreshTokenStore(redisClient)
+	authService := auth.NewService(userStore, refreshStore, jwtMgr, cfg.JWTExpiration, 7*24*time.Hour)
+	authHandler := auth.NewHandler(authService, log)
+
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID())
@@ -50,15 +75,12 @@ func main() {
 	})
 
 	// Auth endpoints
-	r.POST("/auth/register", handleRegister)
-	r.POST("/auth/login", handleLogin)
-	r.POST("/auth/refresh", handleRefresh)
-	r.POST("/auth/logout", handleLogout)
-	r.GET("/auth/me", handleMe)
-	r.GET("/auth/google", handleGoogleOAuth)
-	r.GET("/auth/google/callback", handleGoogleCallback)
-	r.GET("/auth/github", handleGitHubOAuth)
-	r.GET("/auth/github/callback", handleGitHubCallback)
+	authHandler.RegisterRoutes(r)
+
+	// Protected me endpoint (validates its own JWT if called directly)
+	me := r.Group("/auth")
+	me.Use(middleware.JWTAuth(jwtMgr))
+	me.GET("/me", authHandler.Me)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
@@ -79,48 +101,12 @@ func main() {
 	<-quit
 	log.Info("shutting down auth-service")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("server forced to shutdown", logger.Error(err))
 	}
 
 	log.Info("auth-service exited")
-}
-
-func handleRegister(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleLogin(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleRefresh(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleLogout(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleMe(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleGoogleOAuth(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleGoogleCallback(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleGitHubOAuth(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
-}
-
-func handleGitHubCallback(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented"})
 }

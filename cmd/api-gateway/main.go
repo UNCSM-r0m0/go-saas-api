@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,17 +16,16 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/pkg/jwt"
 )
 
 func main() {
-	// Cargar configuración
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Inicializar logger
 	log := logger.New(cfg.LogLevel)
 	defer log.Sync()
 
@@ -32,10 +34,11 @@ func main() {
 		logger.String("env", cfg.Env),
 	)
 
-	// Configurar Gin
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -52,29 +55,35 @@ func main() {
 		})
 	})
 
-	// API v1 routes — proxy a servicios
+	// API v1 routes
 	v1 := r.Group("/api/v1")
 	{
-		// Agent service proxy
-		v1.Any("/chat/*path", proxyToService(cfg.AgentServiceURL, log))
-		
-		// Auth service proxy
-		v1.Any("/auth/*path", proxyToService(cfg.AuthServiceURL, log))
-		
-		// Billing service proxy
-		v1.Any("/billing/*path", proxyToService(cfg.BillingServiceURL, log))
-		
-		// Usage service proxy
-		v1.Any("/usage/*path", proxyToService(cfg.UsageServiceURL, log))
+		// Public auth routes (no JWT required)
+		v1.POST("/auth/register", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.POST("/auth/login", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.POST("/auth/refresh", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.POST("/auth/logout", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+
+		// Protected auth route (gateway validates JWT)
+		v1.GET("/auth/me", middleware.JWTAuth(jwtMgr), proxyTo(cfg.AuthServiceURL, "/api/v1"))
+
+		// Protected service routes
+		protected := v1.Group("")
+		protected.Use(middleware.JWTAuth(jwtMgr))
+		{
+			protected.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
+			protected.Any("/usage/*path", proxyTo(cfg.UsageServiceURL, "/api/v1"))
+		}
 	}
 
-	// Crear servidor HTTP
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: r,
 	}
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -99,14 +108,32 @@ func main() {
 	log.Info("api-gateway exited")
 }
 
-// proxyToService crea un reverse proxy hacia un microservicio
-func proxyToService(targetURL string, log logger.Logger) gin.HandlerFunc {
+// proxyTo creates a reverse proxy to a target service, optionally stripping a path prefix
+func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
+	target, err := url.Parse(targetURL)
+	if err != nil {
+		panic(fmt.Sprintf("invalid target URL %s: %v", targetURL, err))
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		if stripPrefix != "" {
+			req.URL.Path = strings.TrimPrefix(req.URL.Path, stripPrefix)
+			if req.URL.Path == "" {
+				req.URL.Path = "/"
+			}
+		}
+	}
+
+	// Error handler for proxy failures
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		w.WriteHeader(http.StatusBadGateway)
+		fmt.Fprintf(w, `{"error":"service unavailable","details":"%s"}`, err.Error())
+	}
+
 	return func(c *gin.Context) {
-		// TODO: Implementar reverse proxy real con http.ReverseProxy
-		// Por ahora, forward básico
-		c.JSON(http.StatusOK, gin.H{
-			"message":    "proxy to " + targetURL + c.Param("path"),
-			"request_id": c.GetString("request_id"),
-		})
+		proxy.ServeHTTP(c.Writer, c.Request)
 	}
 }
