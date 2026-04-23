@@ -17,18 +17,18 @@ Backend SaaS multi-tenant para chat AI con:
 
 ## 📊 Estado Actual (Análisis Abril 2026)
 
-| Servicio | Estado | Código Real | Docker Compose |
-|----------|--------|-------------|----------------|
-| api-gateway | 🟡 Parcial | ~20% | ✅ Sí (puerto 3001) |
-| chat-service | 🟡 Parcial | ~30% | ❌ NO (existe dir, falta en compose) |
-| auth-service | 🔴 Vacío | 0% | ✅ Sí (puerto 3003) |
-| billing-service | 🔴 Vacío | 0% | ❌ NO (existe dir, sin Dockerfile) |
-| usage-service | 🔴 Vacío | 0% | ✅ Sí (puerto 3005) |
-| shared | 🔴 Vacío | 0% | — |
+| Servicio | Estado | Notas |
+|----------|--------|-------|
+| api-gateway | 🟡 Parcial | reverse proxy stub |
+| agent-service | 🟡 Implementado | SSE streaming, tool calls, artifacts |
+| sandbox-service | 🟡 Implementado | code execution |
+| auth-service | 🔴 Vacío | stub only |
+| billing-service | 🔴 Vacío | stub only |
+| usage-service | 🔴 Vacío | stub only |
 
 **Problemas críticos detectados:**
 1. API Gateway: proxy es stub (retorna JSON placeholder)
-2. Chat Service: streaming SSE funciona pero con **datos mock** (no conecta a Ollama)
+2. Agent Service: SSE streaming, tool calls y artifacts implementados (conecta vía LLM client)
 3. Docker Compose: URLs malformadas (`redis://redis:***@postgres:5432`)
 4. 5 de 8 servicios son **solo carpetas vacías**
 5. `engram/`, `engram-memory/`, `enram-memory/` — código experimental sin usar
@@ -52,16 +52,24 @@ Backend SaaS multi-tenant para chat AI con:
         ┌─────────────────────┼─────────────────────┐
         │                     │                     │
         ▼                     ▼                     ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│ Chat Service │    │ Auth Service │    │ Billing Svc  │
-│   :3002      │    │   :3003      │    │   :3004      │
-│              │    │              │    │              │
-│ • Streaming  │    │ • JWT/OAuth  │    │ • Stripe     │
-│ • Providers  │    │ • Users      │    │ • Webhooks   │
-│ • WS/SSE     │    │ • Sessions   │    │ • Plans      │
-└──────────────┘    └──────────────┘    └──────────────┘
-        │                     │                     │
-        └─────────────────────┼─────────────────────┘
+┌───────────────┐   ┌──────────────┐   ┌──────────────┐
+│ Agent Service │   │ Auth Service │   │ Billing Svc  │
+│    :3002      │   │   :3003      │   │   :3004      │
+│               │   │              │   │              │
+│ • Streaming   │   │ • JWT/OAuth  │   │ • Stripe     │
+│ • Tool calls  │   │ • Users      │   │ • Webhooks   │
+│ • Artifacts   │   │ • Sessions   │   │ • Plans      │
+└───────┬───────┘   └──────────────┘   └──────────────┘
+        │
+        ▼
+┌───────────────┐
+│Sandbox Service│
+│    :3006      │
+│               │
+│ • Code exec   │
+└───────┬───────┘
+        │
+        └─────────────────────┬─────────────────────┘
                               │
                     ┌─────────┴─────────┐
                     │  Usage Service    │
@@ -277,7 +285,7 @@ CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
 ### 1. Streaming con WebSocket + SSE
 
 ```go
-// Chat Service — WebSocket para streaming bidireccional
+// Agent Service — WebSocket para streaming bidireccional
 // SSE para clientes que prefieren HTTP puro
 
 type StreamManager struct {
@@ -343,7 +351,7 @@ func NewProviderClient(baseURL, apiKey string) *ProviderClient {
 ```go
 // Pipeline: Provider -> ChunkProcessor -> SSE/WS Emitter
 
-func (s *ChatService) StreamMessage(ctx context.Context, req ChatRequest, stream chan<- StreamChunk) error {
+func (s *AgentService) StreamMessage(ctx context.Context, req ChatRequest, stream chan<- StreamChunk) error {
     // 1. Obtener provider de BD (no .env)
     provider, err := s.providerRepo.GetByModel(ctx, req.Model)
     if err != nil {
@@ -429,7 +437,9 @@ Workspace/GO/go-saas-api/
 ├── cmd/
 │   ├── api-gateway/
 │   │   └── main.go
-│   ├── chat-service/
+│   ├── agent-service/
+│   │   └── main.go
+│   ├── sandbox-service/
 │   │   └── main.go
 │   ├── auth-service/
 │   │   └── main.go
@@ -453,7 +463,7 @@ Workspace/GO/go-saas-api/
 │   │   ├── router/
 │   │   └── service/
 │   │
-│   ├── chat/
+│   ├── agent/
 │   │   ├── domain/           # Entidades de negocio
 │   │   ├── repository/       # Interfaces de BD
 │   │   ├── usecase/          # Lógica de negocio
@@ -519,7 +529,7 @@ Workspace/GO/go-saas-api/
 | Prisma Schema | ✅ Completo | Migrar a SQL + migrations |
 | Auth (JWT + OAuth) | ✅ Funcional | Reimplementar en Go |
 | Stripe (subscriptions) | ✅ Funcional | **Reutilizar lógica**, adaptar a Go |
-| Chat service (providers) | ✅ Funcional | Reimplementar con Go routines |
+| Agent service (providers) | ✅ Funcional | Reimplementar con Go routines |
 | Rate limiting | ✅ Funcional | Reimplementar con Redis |
 | Usage tracking | ✅ Funcional | Reimplementar |
 | Ollama provider | ✅ Funcional | Reimplementar con streaming |
@@ -537,15 +547,15 @@ Workspace/GO/go-saas-api/
 ## 📋 Issues a Crear (GitHub)
 
 ### Milestone 1: Fundamentos (Sprint 1-2)
-- [ ] **#1** Setup workspace + Go modules + Docker Compose fixes
-- [ ] **#2** Implementar schema SQL completo + migrations
-- [ ] **#3** Crear `internal/shared` con logger, config, errors
+- [x] **#1** Setup workspace + Go modules + Docker Compose fixes
+- [x] **#2** Implementar schema SQL completo + migrations
+- [x] **#3** Crear `internal/platform` (antes `shared`) con logger, config, errors
 - [ ] **#4** Implementar API Gateway real (reverse proxy)
 
 ### Milestone 2: Core Services (Sprint 3-4)
 - [ ] **#5** Implementar Auth Service (JWT + OAuth Google/GitHub)
-- [ ] **#6** Implementar Chat Service con SSE streaming real
-- [ ] **#7** Implementar provider Ollama con Go routines + chunks
+- [x] **#6** Implementar Agent Service con SSE streaming real
+- [x] **#7** Implementar provider Ollama con Go routines + chunks (parcial, vía LLM client)
 - [ ] **#8** Implementar provider OpenAI con streaming
 
 ### Milestone 3: Providers Escalables (Sprint 5)
@@ -600,8 +610,8 @@ make services-up     # Todos los microservicios
 
 # 7. Test
 curl http://localhost:3001/health
-curl http://localhost:3001/api/v1/chat/models
-curl -N http://localhost:3001/api/v1/chat/stream \
+curl http://localhost:3001/api/v1/agent/models
+curl -N http://localhost:3001/api/v1/agent/stream \
   -H "Content-Type: application/json" \
   -d '{"model":"qwen2.5-coder:7b","messages":[{"role":"user","content":"Hola"}]}'
 ```

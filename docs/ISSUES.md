@@ -7,17 +7,17 @@
 
 ## Milestone 1: Fundamentos (Sprint 1-2)
 
-### #1 — [M1] Setup workspace + Go modules + Docker Compose fixes
+### #1 — [M1] ✅ DONE — Setup workspace + Go modules + Docker Compose fixes
 **Labels:** `milestone-1`, `infrastructure`, `setup`
 
 #### Tareas
-- [ ] Reorganizar estructura de directorios (clean architecture)
-- [ ] Crear `go.work` para workspace Go 1.24+
-- [ ] Agregar `chat-service` y `billing-service` al docker-compose.yml
-- [ ] Fix URLs malformadas en docker-compose (REDIS_URL, DATABASE_URL)
-- [ ] Eliminar código experimental: `engram/`, `engram-memory/`, `enram-memory/`, `.claude/`, `.gentle-ai/`
-- [ ] Crear Makefile con comandos: `dev-up`, `services-up`, `migrate`, `seed`
-- [ ] Actualizar README.md con nueva estructura
+- [x] Reorganizar estructura de directorios (clean architecture)
+- [x] Crear `go.work` para workspace Go 1.24+
+- [x] Agregar `agent-service` al docker-compose.yml
+- [x] Fix URLs malformadas en docker-compose (REDIS_URL, DATABASE_URL)
+- [x] Eliminar código experimental: `engram/`, `engram-memory/`, `enram-memory/`, `.claude/`, `.gentle-ai/`
+- [x] Crear Makefile con comandos: `dev-up`, `services-up`, `migrate`, `seed`
+- [x] Actualizar README.md con nueva estructura
 
 #### Criterios de aceptación
 - `docker-compose up` levanta toda la infraestructura sin errores
@@ -26,16 +26,16 @@
 
 ---
 
-### #2 — [M1] Implementar schema SQL completo + migrations
+### #2 — [M1] ✅ DONE — Implementar schema SQL completo + migrations
 **Labels:** `milestone-1`, `database`, `schema`
 
 #### Tareas
-- [ ] Crear schema SQL completo basado en Prisma schema del NestJS
-- [ ] Implementar migrations con golang-migrate o similar
-- [ ] Tablas: users, tenants, subscriptions, conversations, messages, usage_records
-- [ ] Tablas nuevas: ai_providers, ai_models, api_keys
-- [ ] Índices optimizados para queries frecuentes
-- [ ] Seed script con datos iniciales (providers Ollama, OpenAI, etc.)
+- [x] Crear schema SQL completo basado en Prisma schema del NestJS
+- [x] Implementar migrations con golang-migrate o similar
+- [x] Tablas: users, tenants, subscriptions, conversations, messages, usage_records
+- [x] Tablas nuevas: ai_providers, ai_models, api_keys
+- [x] Índices optimizados para queries frecuentes
+- [x] Seed script con datos iniciales (providers Ollama, OpenAI, etc.)
 
 #### Schema a migrar desde NestJS/Prisma
 - users (con multitenancy)
@@ -57,20 +57,20 @@
 
 ---
 
-### #3 — [M1] Crear `internal/shared` con logger, config, errors
+### #3 — [M1] ✅ DONE — Crear `internal/platform` (antes `shared`) con logger, config, errors
 **Labels:** `milestone-1`, `shared`, `infrastructure`
 
 #### Tareas
-- [ ] Logger estructurado con Zap (JSON para prod, console para dev)
-- [ ] Config loader (Viper o envconfig): soporta .env + variables de entorno
-- [ ] Error handling centralizado (custom errors con códigos HTTP)
-- [ ] Middleware compartido: request ID, logging, recovery (panic)
-- [ ] Validación de inputs (go-playground/validator)
-- [ ] Utilidades: JWT, password hashing, UUID
+- [x] Logger estructurado con Zap (JSON para prod, console para dev)
+- [x] Config loader (Viper o envconfig): soporta .env + variables de entorno
+- [x] Error handling centralizado (custom errors con códigos HTTP)
+- [x] Middleware compartido: request ID, logging, recovery (panic)
+- [x] Validación de inputs (go-playground/validator)
+- [x] Utilidades: JWT, password hashing, UUID
 
 #### Estructura esperada
 ```
-internal/shared/
+internal/platform/
 ├── logger/         # Zap logger
 ├── config/         # Config loader
 ├── errors/         # Custom errors
@@ -92,7 +92,7 @@ internal/shared/
 
 #### Tareas
 - [ ] Reemplazar stubs por reverse proxy real
-- [ ] Routing dinámico basado en path: `/api/v1/chat/*` → chat-service:3002
+- [ ] Routing dinámico basado en path: `/api/v1/agent/*` → agent-service:3002
 - [ ] Auth middleware: validar JWT en gateway (no en cada servicio)
 - [ ] Rate limiting por IP + por user (Redis)
 - [ ] Health check agregado: `/health` consulta todos los servicios
@@ -103,12 +103,12 @@ internal/shared/
 | Path | Servicio | Puerto |
 |------|----------|--------|
 | /api/v1/auth/* | auth-service | 3003 |
-| /api/v1/chat/* | chat-service | 3002 |
+| /api/v1/agent/* | agent-service | 3002 |
 | /api/v1/billing/* | billing-service | 3004 |
 | /api/v1/usage/* | usage-service | 3005 |
 
 #### Criterios de aceptación
-- `curl http://localhost:3001/api/v1/chat/health` → proxy a chat-service:3002/health
+- `curl http://localhost:3001/api/v1/agent/health` → proxy a agent-service:3002/health
 - JWT inválido → 401 antes de llegar al servicio
 - Rate limit excedido → 429 con headers Retry-After
 - Request ID se propaga a todos los servicios
@@ -144,17 +144,17 @@ internal/shared/
 
 ---
 
-### #6 — [M2] Implementar Chat Service con SSE streaming real
-**Labels:** `milestone-2`, `chat`, `sse`, `streaming`
+### #6 — [M2] ✅ DONE — Implementar Agent Service con SSE streaming real
+**Labels:** `milestone-2`, `agent`, `sse`, `streaming`
 
 #### Tareas
-- [ ] POST /chat/completions → respuesta síncrona
-- [ ] POST /chat/stream → SSE streaming con datos reales
-- [ ] GET /chat/models → listar modelos desde BD (no hardcodeado)
-- [ ] GET /chat/history/:conversationId → historial paginado
-- [ ] POST /chat/conversations → crear conversación
-- [ ] Guardar mensajes en PostgreSQL (solo usuarios registrados)
-- [ ] Tracking de tokens usados
+- [x] POST /agent/completions → respuesta síncrona
+- [x] POST /agent/stream → SSE streaming con datos reales
+- [x] GET /agent/models → listar modelos desde BD (no hardcodeado)
+- [x] GET /agent/history/:conversationId → historial paginado
+- [x] POST /agent/conversations → crear conversación
+- [x] Guardar mensajes en PostgreSQL (solo usuarios registrados)
+- [x] Tracking de tokens usados
 
 #### Streaming SSE
 ```go
@@ -172,16 +172,16 @@ c.Header("Connection", "keep-alive")
 
 ---
 
-### #7 — [M2] Implementar provider Ollama con Go routines + chunks
+### #7 — [M2] ✅ DONE (parcial) — Implementar provider Ollama con Go routines + chunks
 **Labels:** `milestone-2`, `provider`, `ollama`, `goroutines`
 
 #### Tareas
-- [ ] Cliente HTTP para Ollama con connection pooling
-- [ ] Endpoint /api/generate con streaming
-- [ ] Parsear chunks SSE de Ollama
-- [ ] Go routine por request para no bloquear
-- [ ] Cancelación graceful (context.Context)
-- [ ] Timeout configurable
+- [x] Cliente HTTP para Ollama con connection pooling
+- [x] Endpoint /api/generate con streaming
+- [x] Parsear chunks SSE de Ollama
+- [x] Go routine por request para no bloquear
+- [x] Cancelación graceful (context.Context)
+- [x] Timeout configurable
 - [ ] Retry con backoff para fallos de conexión
 
 #### Configuración en BD (no .env)
@@ -276,7 +276,7 @@ CREATE TABLE ai_models (
 - Admin puede agregar nuevo provider sin deploy
 - API keys se encriptan en BD (no plaintext)
 - Modelos se filtran por tier del usuario (free vs premium)
-- GET /chat/models retorna solo modelos visibles para el usuario
+- GET /agent/models retorna solo modelos visibles para el usuario
 
 ---
 
@@ -520,7 +520,7 @@ cache:usage:{user_id} → hash con uso actual
 ```
 
 #### Criterios de aceptación
-- GET /chat/models responde < 10ms (cache hit)
+- GET /agent/models responde < 10ms (cache hit)
 - Cambio en provider se refleja en < 1 minuto
 - Cache miss no causa error (fallback a BD)
 

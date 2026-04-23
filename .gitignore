@@ -41,3 +41,5 @@ temp/
 
 # Agent Teams Lite
 .atl/
+
+go.work.sum

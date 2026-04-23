@@ -112,7 +112,7 @@ actor "Administrador" as Admin
 
 rectangle "Sistema go-saas-api" {
     
-    package "Chat" {
+    package "Agent" {
         usecase "UC-01: Enviar mensaje" as UC01
         usecase "UC-02: Ver modelos" as UC02
         usecase "UC-05: Ver historial" as UC05
@@ -187,13 +187,13 @@ UC09 ..> UC01 : <<extend>>
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
 │  │  Delivery   │  │  Delivery   │  │  Delivery   │  │  Delivery   │        │
 │  │  (HTTP/WS)  │  │  (HTTP)     │  │  (HTTP)     │  │  (HTTP)     │        │
-│  │  chat       │  │  auth       │  │  billing    │  │  usage      │        │
+│  │  agent      │  │  auth       │  │  billing    │  │  usage      │        │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
 ├─────────┼────────────────┼────────────────┼────────────────┼────────────────┤
 │         │                │                │                │                 │
 │  ┌──────┴──────┐  ┌──────┴──────┐  ┌──────┴──────┐  ┌──────┴──────┐       │
 │  │   UseCase   │  │   UseCase   │  │   UseCase   │  │   UseCase   │       │
-│  │   chat      │  │   auth      │  │   billing   │  │   usage     │       │
+│  │   agent     │  │   auth      │  │   billing   │  │   usage     │       │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘       │
 ├─────────┼────────────────┼────────────────┼────────────────┼────────────────┤
 │         │                │                │                │                 │
@@ -220,7 +220,7 @@ UC09 ..> UC01 : <<extend>>
 
 ### 3.2 Clases del Dominio (Domain Layer)
 
-#### Chat Domain
+#### Agent Domain
 ```go
 // Message representa un mensaje en una conversación
 type Message struct {
@@ -421,60 +421,60 @@ type ProviderClient interface {
 actor Usuario
 participant "Frontend\n(Vercel)" as FE
 participant "API Gateway\n:3001" as GW
-participant "Chat Service\n:3002" as Chat
+participant "Agent Service\n:3002" as Agent
 participant "Usage Service\n:3005" as Usage
 participant "Provider\n(Ollama/OpenAI)" as Provider
 participant "PostgreSQL" as DB
 participant "Redis" as Redis
 
 Usuario -> FE: Escribe mensaje
-FE -> GW: POST /api/v1/chat/stream
+FE -> GW: POST /api/v1/agent/stream
 activate GW
 
 GW -> GW: Validar JWT
 GW -> GW: Rate limiting (Redis)
 
-GW -> Chat: Proxy request
-activate Chat
+GW -> Agent: Proxy request
+activate Agent
 
-Chat -> Usage: Verificar límite
+Agent -> Usage: Verificar límite
 activate Usage
 Usage -> Redis: GET usage:daily:{user_id}
-Usage --> Chat: OK (tiene mensajes disponibles)
+Usage --> Agent: OK (tiene mensajes disponibles)
 deactivate Usage
 
-Chat -> DB: Guardar mensaje usuario
+Agent -> DB: Guardar mensaje usuario
 activate DB
-DB --> Chat: OK
+DB --> Agent: OK
 deactivate DB
 
-Chat -> Chat: Obtener provider de BD
-Chat -> Provider: POST /api/generate (streaming)
+Agent -> Agent: Obtener provider de BD
+Agent -> Provider: POST /api/generate (streaming)
 activate Provider
 
 loop Por cada chunk
-    Provider --> Chat: chunk SSE
-    Chat --> GW: chunk SSE
+    Provider --> Agent: chunk SSE
+    Agent --> GW: chunk SSE
     GW --> FE: chunk SSE
     FE -> FE: Renderizar chunk
 end
 
-Provider --> Chat: [done]
+Provider --> Agent: [done]
 deactivate Provider
 
-Chat -> DB: Guardar respuesta completa
+Agent -> DB: Guardar respuesta completa
 activate DB
-DB --> Chat: OK
+DB --> Agent: OK
 deactivate DB
 
-Chat -> Usage: Incrementar contador
+Agent -> Usage: Incrementar contador
 activate Usage
 Usage -> Redis: INCR usage:daily:{user_id}
-Usage --> Chat: OK
+Usage --> Agent: OK
 deactivate Usage
 
-Chat --> GW: [stream closed]
-deactivate Chat
+Agent --> GW: [stream closed]
+deactivate Agent
 
 GW --> FE: [connection closed]
 deactivate GW
@@ -707,7 +707,7 @@ skinparam componentStyle rectangle
 package "go-saas-api" {
     
     [API Gateway] as Gateway
-    [Chat Service] as Chat
+    [Agent Service] as Agent
     [Auth Service] as Auth
     [Billing Service] as Billing
     [Usage Service] as Usage
@@ -745,16 +745,16 @@ package "External" {
 }
 
 ' Conexiones internas
-Gateway --> Chat : HTTP/REST
+Gateway --> Agent : HTTP/REST
 Gateway --> Auth : HTTP/REST
 Gateway --> Billing : HTTP/REST
 Gateway --> Usage : HTTP/REST
 
-Chat --> PGRepo : sqlx/pgx
-Chat --> Redis : go-redis
-Chat --> NATS : nats.go
-Chat --> Ollama : HTTP
-Chat --> OpenAI : HTTP
+Agent --> PGRepo : sqlx/pgx
+Agent --> Redis : go-redis
+Agent --> NATS : nats.go
+Agent --> Ollama : HTTP
+Agent --> OpenAI : HTTP
 
 Auth --> PGRepo
 Auth --> Redis
@@ -769,9 +769,9 @@ Usage --> PGRepo
 Usage --> NATS
 
 ' Shared usado por todos
-Chat ..> Config
-Chat ..> Logger
-Chat ..> JWT
+Agent ..> Config
+Agent ..> Logger
+Agent ..> JWT
 Auth ..> Config
 Auth ..> Logger
 Auth ..> JWT
@@ -810,7 +810,7 @@ node "Docker Host" {
         [nats:2.10-alpine\n:4222] as NATS
         
         [api-gateway\n:3001] as Gateway
-        [chat-service\n:3002] as Chat
+        [agent-service\n:3002] as Agent
         [auth-service\n:3003] as Auth
         [billing-service\n:3004] as Billing
         [usage-service\n:3005] as Usage
@@ -837,10 +837,10 @@ Gateway --> Postgres
 Gateway --> Redis
 Gateway --> NATS
 
-Chat --> Postgres
-Chat --> Redis
-Chat --> NATS
-Chat --> Ollama
+Agent --> Postgres
+Agent --> Redis
+Agent --> NATS
+Agent --> Ollama
 
 Auth --> Postgres
 Auth --> Redis
@@ -872,7 +872,7 @@ node "Kubernetes Cluster" {
         [Ingress\nnginx-controller] as Ingress
         
         [API Gateway\nDeployment (3 replicas)] as GWPod
-        [Chat Service\nDeployment (3 replicas)] as ChatPod
+        [Agent Service\nDeployment (3 replicas)] as AgentPod
         [Auth Service\nDeployment (2 replicas)] as AuthPod
         [Billing Service\nDeployment (2 replicas)] as BillPod
         [Usage Service\nDeployment (2 replicas)] as UsagePod
@@ -896,19 +896,19 @@ cloud "Cloud Provider" {
 
 LB --> Ingress
 Ingress --> GWPod
-GWPod --> ChatPod
+GWPod --> AgentPod
 GWPod --> AuthPod
 GWPod --> BillPod
 GWPod --> UsagePod
 
-ChatPod --> PGState
+AgentPod --> PGState
 ChatPod --> RedisState
 ChatPod --> NATSState
 
 GWPod --> CM
 GWPod --> Secret
 HPA --> GWPod
-HPA --> ChatPod
+HPA --> AgentPod
 
 PGState --> PVPG
 RedisState --> PVRedis
@@ -1157,7 +1157,7 @@ messages .> files : attachments
 
 | Aspecto | Microservicios | Monolito (NestJS actual) |
 |---------|---------------|-------------------------|
-| **Escalabilidad** | Escalar solo Chat Service si hay pico | Escalar todo o nada |
+| **Escalabilidad** | Escalar solo Agent Service si hay pico | Escalar todo o nada |
 | **Deploy** | Deploy de billing sin afectar chat | Deploy completo |
 | **Equipo** | Equipos independientes | Coordinación total |
 | **Complejidad** | Más complejo (network, observability) | Más simple |
