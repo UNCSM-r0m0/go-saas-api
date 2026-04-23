@@ -34,7 +34,7 @@ func (m *memConversationRepo) GetByID(_ context.Context, _, id uuid.UUID) (*mode
 func (m *memConversationRepo) ListByUser(_ context.Context, _, userID uuid.UUID, _, _ int) ([]model.Conversation, error) {
 	var list []model.Conversation
 	for _, conv := range m.convs {
-		if conv.UserID == userID {
+		if conv.UserID == userID && conv.Status != model.ConversationDeleted {
 			list = append(list, *conv)
 		}
 	}

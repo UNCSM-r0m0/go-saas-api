@@ -59,7 +59,7 @@ func (s *ConversationStore) ListByUser(ctx context.Context, tenantID, userID uui
 	}
 	rows, err := s.pool.Query(ctx,
 		`SELECT id, tenant_id, user_id, title, agent_id, status, metadata, created_at, updated_at
-		 FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2 OFFSET $3`,
+		 FROM conversations WHERE user_id = $1 AND status != 'deleted' ORDER BY updated_at DESC LIMIT $2 OFFSET $3`,
 		userID, limit, offset)
 	if err != nil {
 		return nil, err

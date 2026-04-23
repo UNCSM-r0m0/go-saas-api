@@ -124,8 +124,6 @@ func main() {
 			agent.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 		}
 
 		// API key management routes (JWT required)
@@ -142,6 +140,8 @@ func main() {
 		protected.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
 		protected.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
+			protected.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			protected.Any("/usage/*path", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 		}
