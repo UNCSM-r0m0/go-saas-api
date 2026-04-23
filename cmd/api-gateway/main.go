@@ -16,6 +16,8 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/ratelimit"
+	"github.com/r0lm0/go-saas-api/internal/platform/redis"
 	"github.com/r0lm0/go-saas-api/pkg/jwt"
 )
 
@@ -38,7 +40,15 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Infrastructure
+	redisClient, err := redis.NewClient(cfg.RedisURL)
+	if err != nil {
+		log.Fatal("failed to connect to redis", logger.Error(err))
+	}
+	defer redisClient.Close()
+
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
+	rateLimiter := ratelimit.NewLimiter(redisClient)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -58,22 +68,35 @@ func main() {
 	// API v1 routes
 	v1 := r.Group("/api/v1")
 	{
-		// Public auth routes (no JWT required)
+		// Public auth routes (no JWT, no rate limit)
 		v1.POST("/auth/register", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.POST("/auth/login", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.POST("/auth/refresh", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.POST("/auth/logout", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.GET("/auth/google", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.GET("/auth/google/callback", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.GET("/auth/github", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.GET("/auth/github/callback", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
 		// Protected auth route (gateway validates JWT)
 		v1.GET("/auth/me", middleware.JWTAuth(jwtMgr), proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
-		// Protected service routes
+		// Agent routes: optional auth + rate limit
+		// Anonymous users get free tier (IP-based); authenticated get registered tier
+		agent := v1.Group("")
+		agent.Use(middleware.JWTAuthOptional(jwtMgr))
+		agent.Use(middleware.RateLimit(rateLimiter, cfg, log))
+		{
+			agent.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		}
+
+		// Protected service routes (JWT required + rate limit)
 		protected := v1.Group("")
 		protected.Use(middleware.JWTAuth(jwtMgr))
+		protected.Use(middleware.RateLimit(rateLimiter, cfg, log))
 		{
-			protected.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			protected.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			protected.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			protected.Any("/usage/*path", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 		}

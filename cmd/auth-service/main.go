@@ -59,6 +59,16 @@ func main() {
 	authService := auth.NewService(userStore, refreshStore, jwtMgr, cfg.JWTExpiration, 7*24*time.Hour)
 	authHandler := auth.NewHandler(authService, log)
 
+	// OAuth layer
+	oauthStateStore := auth.NewRedisOAuthStateStore(redisClient)
+	oauthService := auth.NewOAuthService(
+		userStore, refreshStore, jwtMgr, oauthStateStore,
+		cfg.GoogleClientID, cfg.GoogleClientSecret, fmt.Sprintf("http://localhost:%s/auth/google/callback", cfg.Port),
+		cfg.GitHubClientID, cfg.GitHubClientSecret, fmt.Sprintf("http://localhost:%s/auth/github/callback", cfg.Port),
+		cfg.JWTExpiration, 7*24*time.Hour,
+	)
+	oauthHandler := auth.NewOAuthHandler(oauthService, log)
+
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID())
@@ -76,6 +86,7 @@ func main() {
 
 	// Auth endpoints
 	authHandler.RegisterRoutes(r)
+	oauthHandler.RegisterRoutes(r)
 
 	// Protected me endpoint (validates its own JWT if called directly)
 	me := r.Group("/auth")
