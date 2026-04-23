@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/r0lm0/go-saas-api/internal/shared/config"
-	"github.com/r0lm0/go-saas-api/internal/shared/logger"
-	"github.com/r0lm0/go-saas-api/internal/shared/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/config"
+	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
 )
 
 func main() {
@@ -55,8 +55,8 @@ func main() {
 	// API v1 routes — proxy a servicios
 	v1 := r.Group("/api/v1")
 	{
-		// Chat service proxy
-		v1.Any("/chat/*path", proxyToService(cfg.ChatServiceURL, log))
+		// Agent service proxy
+		v1.Any("/chat/*path", proxyToService(cfg.AgentServiceURL, log))
 		
 		// Auth service proxy
 		v1.Any("/auth/*path", proxyToService(cfg.AuthServiceURL, log))

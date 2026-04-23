@@ -1,0 +1,283 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/agent/model"
+	"github.com/r0lm0/go-saas-api/internal/agent/repository"
+	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
+	"github.com/r0lm0/go-saas-api/internal/agent/store"
+	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/platform/config"
+	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/nats"
+	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
+	"github.com/r0lm0/go-saas-api/internal/platform/redis"
+	"github.com/r0lm0/go-saas-api/pkg/llm"
+)
+
+// Server holds all HTTP handlers and dependencies.
+type Server struct {
+	orch     *runtime.Orchestrator
+	artRepo  repository.ArtifactRepo
+	log      logger.Logger
+}
+
+func newServer(orch *runtime.Orchestrator, artRepo repository.ArtifactRepo, log logger.Logger) *Server {
+	return &Server{orch: orch, artRepo: artRepo, log: log}
+}
+
+func (s *Server) setupRouter() *gin.Engine {
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(middleware.RequestID())
+	r.Use(middleware.Logger(s.log))
+	r.Use(middleware.CORS())
+
+	r.GET("/health", s.handleHealth)
+	r.GET("/chat/models", s.handleListModels)
+	r.POST("/agent/chat", s.handleAgentChat)
+	r.POST("/artifacts", s.handleCreateArtifact)
+	r.GET("/artifacts/:id/preview", s.handlePreviewArtifact)
+
+	return r
+}
+
+func (s *Server) handleHealth(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "healthy",
+		"service":   "agent-service",
+		"timestamp": time.Now().UTC(),
+	})
+}
+
+func (s *Server) handleListModels(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"models": []gin.H{
+			{"id": "qwen2.5-coder:7b", "name": "Qwen 2.5 Coder 7B", "provider": "ollama"},
+			{"id": "deepseek-r1:7b", "name": "DeepSeek R1 7B", "provider": "ollama"},
+		},
+	})
+}
+
+func (s *Server) handleAgentChat(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	userIDStr := c.GetHeader("X-User-ID")
+	if tenantIDStr == "" || userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID or X-User-ID"})
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+		return
+	}
+
+	var req struct {
+		ConversationID *uuid.UUID `json:"conversation_id"`
+		Message        string     `json:"message" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Message)
+	if err != nil {
+		s.log.Error("chat failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "chat failed"})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Writer.WriteHeader(http.StatusOK)
+
+	for chunk := range streamCh {
+		data := fmt.Sprintf("data: {\"content\":%q,\"done\":%v}\n\n", chunk.Content, chunk.Done)
+		_, _ = c.Writer.Write([]byte(data))
+		if flusher, ok := c.Writer.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		if chunk.Done {
+			break
+		}
+	}
+}
+
+func (s *Server) handleCreateArtifact(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	if tenantIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+		return
+	}
+
+	var req struct {
+		ConversationID uuid.UUID `json:"conversation_id" binding:"required"`
+		Name           string    `json:"name" binding:"required"`
+		Type           string    `json:"type" binding:"required"`
+		Language       string    `json:"language"`
+		Content        string    `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	art := &model.Artifact{
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		ConversationID: req.ConversationID,
+		Name:           req.Name,
+		Type:           req.Type,
+		Language:       req.Language,
+		Content:        req.Content,
+		Version:        1,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+
+	if err := s.artRepo.Create(c.Request.Context(), art); err != nil {
+		s.log.Error("create artifact failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create artifact"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, art)
+}
+
+func (s *Server) handlePreviewArtifact(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	if tenantIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	art, err := s.artRepo.GetByID(c.Request.Context(), tenantID, id)
+	if err != nil {
+		s.log.Error("get artifact failed", logger.Error(err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "artifact not found"})
+		return
+	}
+
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.String(http.StatusOK, art.Content)
+}
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	log := logger.New(cfg.LogLevel)
+	defer log.Sync()
+
+	log.Info("starting agent-service",
+		logger.String("port", cfg.Port),
+		logger.String("env", cfg.Env),
+	)
+
+	// Infrastructure connections
+	ctx := context.Background()
+	pgPool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal("failed to connect to postgres", logger.Error(err))
+	}
+	defer pgPool.Close()
+
+	redisClient, err := redis.NewClient(cfg.RedisURL)
+	if err != nil {
+		log.Fatal("failed to connect to redis", logger.Error(err))
+	}
+	defer redisClient.Close()
+
+	nc, err := nats.NewConn(cfg.NATSURL)
+	if err != nil {
+		log.Fatal("failed to connect to nats", logger.Error(err))
+	}
+	defer nc.Close()
+
+	// Agent runtime wiring
+	llmClient := llm.NewOllamaClient(cfg.OllamaURL)
+
+	convStore := store.NewConversationStore(pgPool)
+	msgStore := store.NewMessageStore(pgPool)
+	artStore := store.NewArtifactStore(pgPool)
+	agentStore := store.NewAgentStore(pgPool)
+
+	toolRegistry := tools.NewRegistry()
+	_ = toolRegistry.Register(tools.NewFileWriteTool(artStore))
+	_ = toolRegistry.Register(tools.NewCodeExecuteTool(tools.NewHTTPSandboxClient(cfg.SandboxServiceURL)))
+
+	sessions := runtime.NewSessionManager(convStore, msgStore)
+	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore)
+
+	if cfg.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	srv := newServer(orchestrator, artStore, log)
+	r := srv.setupRouter()
+
+	httpSrv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
+	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("server failed", logger.Error(err))
+		}
+	}()
+
+	log.Info("agent-service running", logger.String("addr", httpSrv.Addr))
+
+	<-quit
+	log.Info("shutting down agent-service")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		log.Error("server forced to shutdown", logger.Error(err))
+	}
+
+	log.Info("agent-service exited")
+}

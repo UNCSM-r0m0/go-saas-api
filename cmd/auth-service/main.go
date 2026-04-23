@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/r0lm0/go-saas-api/internal/shared/config"
-	"github.com/r0lm0/go-saas-api/internal/shared/logger"
-	"github.com/r0lm0/go-saas-api/internal/shared/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/config"
+	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
 )
 
 func main() {

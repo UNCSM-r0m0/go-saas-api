@@ -64,7 +64,8 @@ lint:
 build:
 	@echo "🔨 Compilando binarios..."
 	CGO_ENABLED=0 go build -o bin/api-gateway ./cmd/api-gateway
-	CGO_ENABLED=0 go build -o bin/chat-service ./cmd/chat-service
+	CGO_ENABLED=0 go build -o bin/agent-service ./cmd/agent-service
+	CGO_ENABLED=0 go build -o bin/sandbox-service ./cmd/sandbox-service
 	CGO_ENABLED=0 go build -o bin/auth-service ./cmd/auth-service
 	CGO_ENABLED=0 go build -o bin/billing-service ./cmd/billing-service
 	CGO_ENABLED=0 go build -o bin/usage-service ./cmd/usage-service
@@ -74,7 +75,7 @@ build:
 health:
 	@echo "🏥 Health checks:"
 	@curl -s http://localhost:3001/health | jq . || echo "API Gateway no responde"
-	@curl -s http://localhost:3002/health | jq . || echo "Chat Service no responde"
+	@curl -s http://localhost:3002/health | jq . || echo "Agent Service no responde"
 	@curl -s http://localhost:3003/health | jq . || echo "Auth Service no responde"
 	@curl -s http://localhost:3004/health | jq . || echo "Billing Service no responde"
 	@curl -s http://localhost:3005/health | jq . || echo "Usage Service no responde"
