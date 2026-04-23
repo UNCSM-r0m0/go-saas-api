@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/r0lm0/go-saas-api/internal/apikey"
 	"github.com/r0lm0/go-saas-api/internal/auth"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/health"
@@ -93,6 +94,12 @@ func main() {
 	// Auth endpoints
 	authHandler.RegisterRoutes(r)
 	oauthHandler.RegisterRoutes(r)
+
+	// API key management
+	apiKeyStore := apikey.NewPostgresStore(pgPool)
+	apiKeyService := apikey.NewService(apiKeyStore)
+	apiKeyHandler := apikey.NewHandler(apiKeyService, log)
+	apiKeyHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))
 
 	// Protected me endpoint (validates its own JWT if called directly)
 	me := r.Group("/auth")

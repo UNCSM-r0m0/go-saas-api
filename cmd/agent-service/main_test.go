@@ -31,8 +31,14 @@ func (m *memConversationRepo) Create(_ context.Context, conv *model.Conversation
 func (m *memConversationRepo) GetByID(_ context.Context, _, id uuid.UUID) (*model.Conversation, error) {
 	return m.convs[id], nil
 }
-func (m *memConversationRepo) ListByUser(_ context.Context, _, _ uuid.UUID, _, _ int) ([]model.Conversation, error) {
-	return nil, nil
+func (m *memConversationRepo) ListByUser(_ context.Context, _, userID uuid.UUID, _, _ int) ([]model.Conversation, error) {
+	var list []model.Conversation
+	for _, conv := range m.convs {
+		if conv.UserID == userID {
+			list = append(list, *conv)
+		}
+	}
+	return list, nil
 }
 func (m *memConversationRepo) Update(_ context.Context, _ *model.Conversation) error { return nil }
 func (m *memConversationRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
@@ -123,7 +129,7 @@ func setupTestServer() *Server {
 	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo)
 
 	multiClient := llm.NewMultiClient()
-	return newServer(orch, artRepo, log, multiClient, nil)
+	return newServer(orch, convRepo, msgRepo, artRepo, log, multiClient, nil)
 }
 
 // ---- tests ----
@@ -222,6 +228,152 @@ func TestCreateArtifact_Success(t *testing.T) {
 	}
 	if art.TenantID != tenantID {
 		t.Fatalf("expected tenant_id %s, got %s", tenantID, art.TenantID)
+	}
+}
+
+func TestListConversations_MissingAuth(t *testing.T) {
+	srv := setupTestServer()
+	r := srv.setupRouter()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/conversations", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestListConversations_Success(t *testing.T) {
+	srv := setupTestServer()
+	r := srv.setupRouter()
+
+	tenantID := uuid.New()
+	userID := uuid.New()
+	convID := uuid.New()
+	srv.convRepo.(*memConversationRepo).convs[convID] = &model.Conversation{
+		ID:       convID,
+		TenantID: tenantID,
+		UserID:   userID,
+		Title:    "Test Conv",
+		Status:   model.ConversationActive,
+	}
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/conversations", nil)
+	req.Header.Set("X-Tenant-ID", tenantID.String())
+	req.Header.Set("X-User-ID", userID.String())
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Test Conv") {
+		t.Fatalf("expected body to contain 'Test Conv', got: %s", w.Body.String())
+	}
+}
+
+func TestGetConversation_Success(t *testing.T) {
+	srv := setupTestServer()
+	r := srv.setupRouter()
+
+	tenantID := uuid.New()
+	convID := uuid.New()
+	srv.convRepo.(*memConversationRepo).convs[convID] = &model.Conversation{
+		ID:       convID,
+		TenantID: tenantID,
+		Title:    "Test Conv",
+		Status:   model.ConversationActive,
+	}
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/conversations/"+convID.String(), nil)
+	req.Header.Set("X-Tenant-ID", tenantID.String())
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Test Conv") {
+		t.Fatalf("expected body to contain 'Test Conv', got: %s", w.Body.String())
+	}
+}
+
+func TestUpdateConversation_Success(t *testing.T) {
+	srv := setupTestServer()
+	r := srv.setupRouter()
+
+	tenantID := uuid.New()
+	convID := uuid.New()
+	srv.convRepo.(*memConversationRepo).convs[convID] = &model.Conversation{
+		ID:       convID,
+		TenantID: tenantID,
+		Title:    "Old Title",
+		Status:   model.ConversationActive,
+	}
+
+	body := `{"title":"New Title","status":"archived"}`
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PATCH", "/conversations/"+convID.String(), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", tenantID.String())
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "New Title") {
+		t.Fatalf("expected body to contain 'New Title', got: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "archived") {
+		t.Fatalf("expected body to contain 'archived', got: %s", w.Body.String())
+	}
+}
+
+func TestDeleteConversation_Success(t *testing.T) {
+	srv := setupTestServer()
+	r := srv.setupRouter()
+
+	tenantID := uuid.New()
+	convID := uuid.New()
+	srv.convRepo.(*memConversationRepo).convs[convID] = &model.Conversation{
+		ID:       convID,
+		TenantID: tenantID,
+		Title:    "Test Conv",
+		Status:   model.ConversationActive,
+	}
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/conversations/"+convID.String(), nil)
+	req.Header.Set("X-Tenant-ID", tenantID.String())
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestListMessages_Success(t *testing.T) {
+	srv := setupTestServer()
+	r := srv.setupRouter()
+
+	tenantID := uuid.New()
+	convID := uuid.New()
+	srv.msgRepo.(*memMessageRepo).msgs = []model.Message{
+		{ID: uuid.New(), TenantID: tenantID, ConversationID: convID, Role: model.MessageRoleUser, Content: "hello"},
+		{ID: uuid.New(), TenantID: tenantID, ConversationID: convID, Role: model.MessageRoleAssistant, Content: "hi there"},
+	}
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/conversations/"+convID.String()+"/messages", nil)
+	req.Header.Set("X-Tenant-ID", tenantID.String())
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "hello") {
+		t.Fatalf("expected body to contain 'hello', got: %s", w.Body.String())
 	}
 }
 

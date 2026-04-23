@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/apikey"
 	"github.com/r0lm0/go-saas-api/internal/billing"
 	"github.com/r0lm0/go-saas-api/internal/platform/cache"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
@@ -76,6 +77,10 @@ func main() {
 	// Health checker
 	hc := health.NewChecker(pgPool, redisClient, nil)
 
+	// API key service for gateway-level authentication
+	apiKeyStore := apikey.NewPostgresStore(pgPool)
+	apiKeyService := apikey.NewService(apiKeyStore)
+
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID())
@@ -106,23 +111,35 @@ func main() {
 		v1.GET("/auth/github", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.GET("/auth/github/callback", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
-		// Protected auth route (gateway validates JWT)
-		v1.GET("/auth/me", middleware.JWTAuth(jwtMgr), proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		// Protected auth route (gateway validates JWT or API key)
+		v1.GET("/auth/me", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
-		// Agent routes: optional auth + rate limit
+		// Agent routes: optional auth (JWT or API key) + rate limit
 		// Anonymous users get free tier (IP-based); authenticated get tier from DB
 		agent := v1.Group("")
+		agent.Use(middleware.APIKeyAuth(apiKeyService))
 		agent.Use(middleware.JWTAuthOptional(jwtMgr))
 		agent.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
 			agent.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 		}
 
-		// Protected service routes (JWT required + rate limit)
+		// API key management routes (JWT required)
+		apiKeys := v1.Group("")
+		apiKeys.Use(middleware.JWTAuth(jwtMgr))
+		apiKeys.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
+		{
+			apiKeys.Any("/api-keys", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+			apiKeys.Any("/api-keys/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		}
+
+		// Protected service routes (JWT or API key required + rate limit)
 		protected := v1.Group("")
-		protected.Use(middleware.JWTAuth(jwtMgr))
+		protected.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
 		protected.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))

@@ -29,14 +29,16 @@ import (
 // Server holds all HTTP handlers and dependencies.
 type Server struct {
 	orch        *runtime.Orchestrator
+	convRepo    repository.ConversationRepo
+	msgRepo     repository.MessageRepo
 	artRepo     repository.ArtifactRepo
 	log         logger.Logger
 	llmManager  *llm.MultiClient
 	hc          *health.Checker
 }
 
-func newServer(orch *runtime.Orchestrator, artRepo repository.ArtifactRepo, log logger.Logger, manager *llm.MultiClient, hc *health.Checker) *Server {
-	return &Server{orch: orch, artRepo: artRepo, log: log, llmManager: manager, hc: hc}
+func newServer(orch *runtime.Orchestrator, convRepo repository.ConversationRepo, msgRepo repository.MessageRepo, artRepo repository.ArtifactRepo, log logger.Logger, manager *llm.MultiClient, hc *health.Checker) *Server {
+	return &Server{orch: orch, convRepo: convRepo, msgRepo: msgRepo, artRepo: artRepo, log: log, llmManager: manager, hc: hc}
 }
 
 func (s *Server) setupRouter() *gin.Engine {
@@ -51,6 +53,15 @@ func (s *Server) setupRouter() *gin.Engine {
 	r.POST("/agent/chat", s.handleAgentChat)
 	r.POST("/artifacts", s.handleCreateArtifact)
 	r.GET("/artifacts/:id/preview", s.handlePreviewArtifact)
+
+	// Conversations REST API
+	r.GET("/conversations", s.handleListConversations)
+	r.GET("/conversations/:id", s.handleGetConversation)
+	r.PATCH("/conversations/:id", s.handleUpdateConversation)
+	r.DELETE("/conversations/:id", s.handleDeleteConversation)
+
+	// Messages REST API
+	r.GET("/conversations/:id/messages", s.handleListMessages)
 
 	return r
 }
@@ -226,6 +237,188 @@ func (s *Server) handlePreviewArtifact(c *gin.Context) {
 	c.String(http.StatusOK, art.Content)
 }
 
+func (s *Server) handleListConversations(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	userIDStr := c.GetHeader("X-User-ID")
+	if tenantIDStr == "" || userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID or X-User-ID"})
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+		return
+	}
+
+	limit := 20
+	offset := 0
+	if l := c.Query("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if o := c.Query("offset"); o != "" {
+		fmt.Sscanf(o, "%d", &offset)
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	convs, err := s.convRepo.ListByUser(c.Request.Context(), tenantID, userID, limit, offset)
+	if err != nil {
+		s.log.Error("list conversations failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list conversations"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"conversations": convs})
+}
+
+func (s *Server) handleGetConversation(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	if tenantIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	conv, err := s.convRepo.GetByID(c.Request.Context(), tenantID, id)
+	if err != nil {
+		s.log.Error("get conversation failed", logger.Error(err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, conv)
+}
+
+func (s *Server) handleUpdateConversation(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	if tenantIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	conv, err := s.convRepo.GetByID(c.Request.Context(), tenantID, id)
+	if err != nil {
+		s.log.Error("get conversation for update failed", logger.Error(err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
+		return
+	}
+
+	var req struct {
+		Title  string `json:"title"`
+		Status string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Title != "" {
+		conv.Title = req.Title
+	}
+	if req.Status != "" {
+		conv.Status = model.ConversationStatus(req.Status)
+	}
+	conv.UpdatedAt = time.Now()
+
+	if err := s.convRepo.Update(c.Request.Context(), conv); err != nil {
+		s.log.Error("update conversation failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update conversation"})
+		return
+	}
+
+	c.JSON(http.StatusOK, conv)
+}
+
+func (s *Server) handleDeleteConversation(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	if tenantIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := s.convRepo.Delete(c.Request.Context(), tenantID, id); err != nil {
+		s.log.Error("delete conversation failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete conversation"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "conversation deleted"})
+}
+
+func (s *Server) handleListMessages(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	if tenantIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+		return
+	}
+
+	conversationID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		return
+	}
+
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	msgs, err := s.msgRepo.ListByConversation(c.Request.Context(), tenantID, conversationID, limit)
+	if err != nil {
+		s.log.Error("list messages failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list messages"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"messages": msgs})
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -327,7 +520,7 @@ func main() {
 	// Health checker
 	hc := health.NewChecker(pgPool, redisClient, nc)
 
-	srv := newServer(orchestrator, artStore, log, multiClient, hc)
+	srv := newServer(orchestrator, convStore, msgStore, artStore, log, multiClient, hc)
 	r := srv.setupRouter()
 	r.Use(middleware.RequestTimeout(60 * time.Second))
 
