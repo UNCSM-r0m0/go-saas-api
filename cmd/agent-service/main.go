@@ -525,6 +525,8 @@ func main() {
 		}
 	}
 
+	multiClient.StartHealthChecks(ctx, 30*time.Second)
+
 	llmClient := llm.Client(multiClient)
 
 	// Provider admin service

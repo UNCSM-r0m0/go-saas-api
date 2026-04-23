@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+const (
+	circuitBreakerThreshold = 3
+	healthCheckTimeout      = 10 * time.Second
+)
+
 // ProviderConfig holds configuration for a single provider.
 type ProviderConfig struct {
 	Name    string
@@ -18,18 +23,21 @@ type ProviderConfig struct {
 
 // MultiClient implements Client with multi-provider support and fallback.
 type MultiClient struct {
-	mu        sync.RWMutex
-	providers map[string]*ProviderConfig // name -> config
-	modelMap  map[string]string          // model -> preferred provider name
-	defaults  []string                   // fallback order by provider name
+	mu             sync.RWMutex
+	providers      map[string]*ProviderConfig // name -> config
+	modelMap       map[string]string          // model -> preferred provider name
+	defaults       []string                   // fallback order by provider name
+	failureCounts  map[string]int             // consecutive failures per provider
+	fallbackCount  int64                      // total fallback events
 }
 
 // NewMultiClient creates a new multi-provider client.
 func NewMultiClient() *MultiClient {
 	return &MultiClient{
-		providers: make(map[string]*ProviderConfig),
-		modelMap:  make(map[string]string),
-		defaults:  []string{},
+		providers:     make(map[string]*ProviderConfig),
+		modelMap:      make(map[string]string),
+		defaults:      []string{},
+		failureCounts: make(map[string]int),
 	}
 }
 
@@ -42,7 +50,10 @@ func (mc *MultiClient) Register(cfg ProviderConfig) {
 	for _, model := range cfg.Models {
 		mc.modelMap[model] = cfg.Name
 	}
-	// Rebuild defaults order by weight (descending)
+	mc.rebuildDefaults()
+}
+
+func (mc *MultiClient) rebuildDefaults() {
 	mc.defaults = mc.defaults[:0]
 	type weighted struct {
 		name   string
@@ -88,6 +99,7 @@ func (mc *MultiClient) Stream(ctx context.Context, req Request) (<-chan Chunk, e
 	}
 
 	var lastErr error
+	var usedProvider string
 	for _, name := range providerNames {
 		mc.mu.RLock()
 		provider, ok := mc.providers[name]
@@ -99,8 +111,21 @@ func (mc *MultiClient) Stream(ctx context.Context, req Request) (<-chan Chunk, e
 		ch, err := provider.Client.Stream(ctx, req)
 		if err != nil {
 			lastErr = fmt.Errorf("provider %s: %w", name, err)
+			mc.recordFailure(name)
 			continue
 		}
+
+		usedProvider = name
+		// Reset failures on success
+		mc.resetFailures(name)
+
+		// Check if fallback was used (not the preferred provider)
+		if preferred, ok := mc.modelMap[req.Model]; ok && usedProvider != preferred {
+			mc.mu.Lock()
+			mc.fallbackCount++
+			mc.mu.Unlock()
+		}
+
 		return ch, nil
 	}
 
@@ -108,6 +133,66 @@ func (mc *MultiClient) Stream(ctx context.Context, req Request) (<-chan Chunk, e
 		return nil, fmt.Errorf("all providers failed: %w", lastErr)
 	}
 	return nil, fmt.Errorf("no available providers for model %s", req.Model)
+}
+
+func (mc *MultiClient) recordFailure(name string) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	mc.failureCounts[name]++
+	if mc.failureCounts[name] >= circuitBreakerThreshold {
+		if p, ok := mc.providers[name]; ok {
+			p.Enabled = false
+			mc.rebuildDefaults()
+		}
+	}
+}
+
+func (mc *MultiClient) resetFailures(name string) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	mc.failureCounts[name] = 0
+}
+
+// StartHealthChecks runs periodic health checks and re-enables recovered providers.
+func (mc *MultiClient) StartHealthChecks(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				mc.runHealthChecks(ctx)
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+func (mc *MultiClient) runHealthChecks(ctx context.Context) {
+	mc.mu.RLock()
+	providers := make([]*ProviderConfig, 0, len(mc.providers))
+	for _, p := range mc.providers {
+		providers = append(providers, p)
+	}
+	mc.mu.RUnlock()
+
+	for _, p := range providers {
+		if p.Enabled || p.Client == nil {
+			continue
+		}
+		ctxCheck, cancel := context.WithTimeout(ctx, healthCheckTimeout)
+		err := p.Client.HealthCheck(ctxCheck)
+		cancel()
+		if err == nil {
+			mc.mu.Lock()
+			p.Enabled = true
+			mc.failureCounts[p.Name] = 0
+			mc.rebuildDefaults()
+			mc.mu.Unlock()
+		}
+	}
 }
 
 // HealthCheck checks all registered providers.
@@ -124,7 +209,7 @@ func (mc *MultiClient) HealthCheck(ctx context.Context) error {
 		if p.Client == nil {
 			continue
 		}
-		ctxCheck, cancel := context.WithTimeout(ctx, 10*time.Second)
+		ctxCheck, cancel := context.WithTimeout(ctx, healthCheckTimeout)
 		err := p.Client.HealthCheck(ctxCheck)
 		cancel()
 		if err != nil {
@@ -147,4 +232,11 @@ func (mc *MultiClient) ListProviders() []ProviderConfig {
 		result = append(result, *p)
 	}
 	return result
+}
+
+// FallbackCount returns the number of times fallback was used.
+func (mc *MultiClient) FallbackCount() int64 {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+	return mc.fallbackCount
 }
