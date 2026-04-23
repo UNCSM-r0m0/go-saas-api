@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/pkg/jwt"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
@@ -129,14 +130,14 @@ func setupTestServer() *Server {
 	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, nil)
 
 	multiClient := llm.NewMultiClient()
-	return newServer(orch, convRepo, msgRepo, artRepo, nil, log, multiClient, nil)
+	return newServer(orch, convRepo, msgRepo, artRepo, nil, log, multiClient, nil, nil)
 }
 
 // ---- tests ----
 
 func TestHealth(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/health", nil)
@@ -152,7 +153,7 @@ func TestHealth(t *testing.T) {
 
 func TestAgentChat_MissingAuth(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/agent/chat", strings.NewReader(`{"message":"hi"}`))
@@ -166,7 +167,7 @@ func TestAgentChat_MissingAuth(t *testing.T) {
 
 func TestAgentChat_Success(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	body := `{"message":"hello"}`
 	w := httptest.NewRecorder()
@@ -190,7 +191,7 @@ func TestAgentChat_Success(t *testing.T) {
 
 func TestCreateArtifact_MissingAuth(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	body := `{"conversation_id":"` + uuid.New().String() + `","name":"test.html","type":"html","content":"<h1>hi</h1>"}`
 	w := httptest.NewRecorder()
@@ -205,7 +206,7 @@ func TestCreateArtifact_MissingAuth(t *testing.T) {
 
 func TestCreateArtifact_Success(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	tenantID := uuid.New()
 	body := `{"conversation_id":"` + uuid.New().String() + `","name":"test.html","type":"html","content":"<h1>hi</h1>"}`
@@ -233,7 +234,7 @@ func TestCreateArtifact_Success(t *testing.T) {
 
 func TestListConversations_MissingAuth(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/conversations", nil)
@@ -246,7 +247,7 @@ func TestListConversations_MissingAuth(t *testing.T) {
 
 func TestListConversations_Success(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	tenantID := uuid.New()
 	userID := uuid.New()
@@ -275,7 +276,7 @@ func TestListConversations_Success(t *testing.T) {
 
 func TestGetConversation_Success(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	tenantID := uuid.New()
 	convID := uuid.New()
@@ -301,7 +302,7 @@ func TestGetConversation_Success(t *testing.T) {
 
 func TestUpdateConversation_Success(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	tenantID := uuid.New()
 	convID := uuid.New()
@@ -332,7 +333,7 @@ func TestUpdateConversation_Success(t *testing.T) {
 
 func TestDeleteConversation_Success(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	tenantID := uuid.New()
 	convID := uuid.New()
@@ -355,7 +356,7 @@ func TestDeleteConversation_Success(t *testing.T) {
 
 func TestListMessages_Success(t *testing.T) {
 	srv := setupTestServer()
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 
 	tenantID := uuid.New()
 	convID := uuid.New()
@@ -388,7 +389,7 @@ func TestPreviewArtifact_Success(t *testing.T) {
 		Content:  "preview content",
 	}
 
-	r := srv.setupRouter()
+	r := srv.setupRouter(jwt.NewManager("test-secret"))
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/artifacts/"+artID.String()+"/preview", nil)
 	req.Header.Set("X-Tenant-ID", tenantID.String())

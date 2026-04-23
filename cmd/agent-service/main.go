@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -24,26 +24,29 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/nats"
 	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
 	"github.com/r0lm0/go-saas-api/internal/platform/redis"
+	"github.com/r0lm0/go-saas-api/internal/provider"
+	"github.com/r0lm0/go-saas-api/pkg/jwt"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
 // Server holds all HTTP handlers and dependencies.
 type Server struct {
-	orch        *runtime.Orchestrator
-	convRepo    repository.ConversationRepo
-	msgRepo     repository.MessageRepo
-	artRepo     repository.ArtifactRepo
-	fileHandler *fileupload.Handler
-	log         logger.Logger
-	llmManager  *llm.MultiClient
-	hc          *health.Checker
+	orch            *runtime.Orchestrator
+	convRepo        repository.ConversationRepo
+	msgRepo         repository.MessageRepo
+	artRepo         repository.ArtifactRepo
+	fileHandler     *fileupload.Handler
+	log             logger.Logger
+	llmManager      *llm.MultiClient
+	hc              *health.Checker
+	providerHandler *provider.Handler
 }
 
-func newServer(orch *runtime.Orchestrator, convRepo repository.ConversationRepo, msgRepo repository.MessageRepo, artRepo repository.ArtifactRepo, fileHandler *fileupload.Handler, log logger.Logger, manager *llm.MultiClient, hc *health.Checker) *Server {
-	return &Server{orch: orch, convRepo: convRepo, msgRepo: msgRepo, artRepo: artRepo, fileHandler: fileHandler, log: log, llmManager: manager, hc: hc}
+func newServer(orch *runtime.Orchestrator, convRepo repository.ConversationRepo, msgRepo repository.MessageRepo, artRepo repository.ArtifactRepo, fileHandler *fileupload.Handler, log logger.Logger, manager *llm.MultiClient, hc *health.Checker, providerHandler *provider.Handler) *Server {
+	return &Server{orch: orch, convRepo: convRepo, msgRepo: msgRepo, artRepo: artRepo, fileHandler: fileHandler, log: log, llmManager: manager, hc: hc, providerHandler: providerHandler}
 }
 
-func (s *Server) setupRouter() *gin.Engine {
+func (s *Server) setupRouter(jwtMgr *jwt.Manager) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID())
@@ -67,6 +70,11 @@ func (s *Server) setupRouter() *gin.Engine {
 
 	// File Upload API
 	s.fileHandler.RegisterRoutes(r)
+
+	// Admin provider routes (JWT required)
+	if s.providerHandler != nil {
+		s.providerHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))
+	}
 
 	return r
 }
@@ -463,49 +471,62 @@ func main() {
 	// Agent runtime wiring
 	multiClient := llm.NewMultiClient()
 
-	// Register Ollama (local, always available if URL set)
-	multiClient.Register(llm.ProviderConfig{
-		Name:    "ollama",
-		Models:  []string{"qwen2.5-coder:7b", "deepseek-r1:7b", "llama3.2:3b"},
-		Client:  llm.NewOllamaClient(cfg.OllamaURL),
-		Enabled: cfg.OllamaURL != "",
-		Weight:  50, // medium priority - good for code tasks
-	})
+	// Provider management
+	providerStore := provider.NewPostgresStore(pgPool)
+	providerLoader := NewProviderLoader(providerStore, multiClient)
 
-	// Register OpenAI
-	if cfg.OpenAIAPIKey != "" {
-		multiClient.Register(llm.ProviderConfig{
-			Name:    "openai",
-			Models:  []string{"gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"},
-			Client:  llm.NewOpenAIClient(cfg.OpenAIAPIKey),
-			Enabled: true,
-			Weight:  100, // highest priority
-		})
+	ctx = context.Background()
+	if err := providerLoader.LoadAll(ctx); err != nil {
+		log.Warn("failed to load providers from database, using env fallback", logger.Error(err))
 	}
 
-	// Register Gemini
-	if cfg.GeminiAPIKey != "" {
+	// Fallback: if no providers loaded from DB, register from env
+	if len(multiClient.ListProviders()) == 0 {
+		// Register Ollama (local, always available if URL set)
 		multiClient.Register(llm.ProviderConfig{
-			Name:    "gemini",
-			Models:  []string{"gemini-1.5-flash", "gemini-1.5-pro"},
-			Client:  llm.NewGeminiClient(cfg.GeminiAPIKey),
-			Enabled: true,
-			Weight:  80,
+			Name:    "ollama",
+			Models:  []string{"qwen2.5-coder:7b", "deepseek-r1:7b", "llama3.2:3b"},
+			Client:  llm.NewOllamaClient(cfg.OllamaURL),
+			Enabled: cfg.OllamaURL != "",
+			Weight:  50,
 		})
-	}
 
-	// Register DeepSeek
-	if cfg.DeepSeekAPIKey != "" {
-		multiClient.Register(llm.ProviderConfig{
-			Name:    "deepseek",
-			Models:  []string{"deepseek-chat", "deepseek-coder"},
-			Client:  llm.NewDeepSeekClient(cfg.DeepSeekAPIKey),
-			Enabled: true,
-			Weight:  90, // high priority for code
-		})
+		if cfg.OpenAIAPIKey != "" {
+			multiClient.Register(llm.ProviderConfig{
+				Name:    "openai",
+				Models:  []string{"gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"},
+				Client:  llm.NewOpenAIClient(cfg.OpenAIAPIKey),
+				Enabled: true,
+				Weight:  100,
+			})
+		}
+
+		if cfg.GeminiAPIKey != "" {
+			multiClient.Register(llm.ProviderConfig{
+				Name:    "gemini",
+				Models:  []string{"gemini-1.5-flash", "gemini-1.5-pro"},
+				Client:  llm.NewGeminiClient(cfg.GeminiAPIKey),
+				Enabled: true,
+				Weight:  80,
+			})
+		}
+
+		if cfg.DeepSeekAPIKey != "" {
+			multiClient.Register(llm.ProviderConfig{
+				Name:    "deepseek",
+				Models:  []string{"deepseek-chat", "deepseek-coder"},
+				Client:  llm.NewDeepSeekClient(cfg.DeepSeekAPIKey),
+				Enabled: true,
+				Weight:  90,
+			})
+		}
 	}
 
 	llmClient := llm.Client(multiClient)
+
+	// Provider admin service
+	providerService := provider.NewService(providerStore)
+	providerHandler := provider.NewHandler(providerService, log)
 
 	convStore := store.NewConversationStore(pgPool)
 	msgStore := store.NewMessageStore(pgPool)
@@ -531,8 +552,9 @@ func main() {
 	// Health checker
 	hc := health.NewChecker(pgPool, redisClient, nc)
 
-	srv := newServer(orchestrator, convStore, msgStore, artStore, fileHandler, log, multiClient, hc)
-	r := srv.setupRouter()
+	jwtMgr := jwt.NewManager(cfg.JWTSecret)
+	srv := newServer(orchestrator, convStore, msgStore, artStore, fileHandler, log, multiClient, hc, providerHandler)
+	r := srv.setupRouter(jwtMgr)
 	r.Use(middleware.RequestTimeout(60 * time.Second))
 
 	httpSrv := &http.Server{
