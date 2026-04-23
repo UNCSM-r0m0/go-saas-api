@@ -1,4 +1,4 @@
-package config
+﻿package config
 
 import (
 	"os"
@@ -42,6 +42,10 @@ type Config struct {
 	OllamaURL      string `mapstructure:"OLLAMA_URL"`
 	OllamaProxyURL string `mapstructure:"OLLAMA_PROXY_URL"`
 	OllamaProxyKey string `mapstructure:"OLLAMA_PROXY_API_KEY"`
+	OpenAIAPIKey   string `mapstructure:"OPENAI_API_KEY"`
+	OpenAIBaseURL  string `mapstructure:"OPENAI_BASE_URL"`
+	GeminiAPIKey   string `mapstructure:"GEMINI_API_KEY"`
+	DeepSeekAPIKey string `mapstructure:"DEEPSEEK_API_KEY"`
 	SandboxServiceURL string `mapstructure:"SANDBOX_SERVICE_URL"`
 
 	// Service URLs (for internal communication)
@@ -77,6 +81,10 @@ func Load() (*Config, error) {
 		OllamaURL:         getEnv("OLLAMA_URL", "http://localhost:11434"),
 		OllamaProxyURL:    getEnv("OLLAMA_PROXY_URL", ""),
 		OllamaProxyKey:    getEnv("OLLAMA_PROXY_API_KEY", ""),
+		OpenAIAPIKey:      getEnv("OPENAI_API_KEY", ""),
+		OpenAIBaseURL:     getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		GeminiAPIKey:      getEnv("GEMINI_API_KEY", ""),
+		DeepSeekAPIKey:    getEnv("DEEPSEEK_API_KEY", ""),
 		SandboxServiceURL: getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://localhost:3002"),
 		AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://localhost:3003"),

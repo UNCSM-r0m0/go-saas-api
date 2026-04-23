@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -27,13 +27,14 @@ import (
 
 // Server holds all HTTP handlers and dependencies.
 type Server struct {
-	orch     *runtime.Orchestrator
-	artRepo  repository.ArtifactRepo
-	log      logger.Logger
+	orch        *runtime.Orchestrator
+	artRepo     repository.ArtifactRepo
+	log         logger.Logger
+	llmManager  *llm.MultiClient
 }
 
-func newServer(orch *runtime.Orchestrator, artRepo repository.ArtifactRepo, log logger.Logger) *Server {
-	return &Server{orch: orch, artRepo: artRepo, log: log}
+func newServer(orch *runtime.Orchestrator, artRepo repository.ArtifactRepo, log logger.Logger, manager *llm.MultiClient) *Server {
+	return &Server{orch: orch, artRepo: artRepo, log: log, llmManager: manager}
 }
 
 func (s *Server) setupRouter() *gin.Engine {
@@ -61,12 +62,20 @@ func (s *Server) handleHealth(c *gin.Context) {
 }
 
 func (s *Server) handleListModels(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"models": []gin.H{
-			{"id": "qwen2.5-coder:7b", "name": "Qwen 2.5 Coder 7B", "provider": "ollama"},
-			{"id": "deepseek-r1:7b", "name": "DeepSeek R1 7B", "provider": "ollama"},
-		},
-	})
+	providers := s.llmManager.ListProviders()
+	models := make([]gin.H, 0)
+	for _, p := range providers {
+		if !p.Enabled {
+			continue
+		}
+		for _, m := range p.Models {
+			models = append(models, gin.H{
+				"id":       m,
+				"provider": p.Name,
+			})
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"models": models})
 }
 
 func (s *Server) handleAgentChat(c *gin.Context) {
@@ -232,7 +241,51 @@ func main() {
 	defer nc.Close()
 
 	// Agent runtime wiring
-	llmClient := llm.NewOllamaClient(cfg.OllamaURL)
+	multiClient := llm.NewMultiClient()
+
+	// Register Ollama (local, always available if URL set)
+	multiClient.Register(llm.ProviderConfig{
+		Name:    "ollama",
+		Models:  []string{"qwen2.5-coder:7b", "deepseek-r1:7b", "llama3.2:3b"},
+		Client:  llm.NewOllamaClient(cfg.OllamaURL),
+		Enabled: cfg.OllamaURL != "",
+		Weight:  50, // medium priority - good for code tasks
+	})
+
+	// Register OpenAI
+	if cfg.OpenAIAPIKey != "" {
+		multiClient.Register(llm.ProviderConfig{
+			Name:    "openai",
+			Models:  []string{"gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"},
+			Client:  llm.NewOpenAIClient(cfg.OpenAIAPIKey),
+			Enabled: true,
+			Weight:  100, // highest priority
+		})
+	}
+
+	// Register Gemini
+	if cfg.GeminiAPIKey != "" {
+		multiClient.Register(llm.ProviderConfig{
+			Name:    "gemini",
+			Models:  []string{"gemini-1.5-flash", "gemini-1.5-pro"},
+			Client:  llm.NewGeminiClient(cfg.GeminiAPIKey),
+			Enabled: true,
+			Weight:  80,
+		})
+	}
+
+	// Register DeepSeek
+	if cfg.DeepSeekAPIKey != "" {
+		multiClient.Register(llm.ProviderConfig{
+			Name:    "deepseek",
+			Models:  []string{"deepseek-chat", "deepseek-coder"},
+			Client:  llm.NewDeepSeekClient(cfg.DeepSeekAPIKey),
+			Enabled: true,
+			Weight:  90, // high priority for code
+		})
+	}
+
+	llmClient := llm.Client(multiClient)
 
 	convStore := store.NewConversationStore(pgPool)
 	msgStore := store.NewMessageStore(pgPool)
@@ -250,7 +303,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	srv := newServer(orchestrator, artStore, log)
+	srv := newServer(orchestrator, artStore, log, multiClient)
 	r := srv.setupRouter()
 
 	httpSrv := &http.Server{

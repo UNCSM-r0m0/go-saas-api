@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -122,7 +122,8 @@ func setupTestServer() *Server {
 	sessions := runtime.NewSessionManager(convRepo, msgRepo)
 	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo)
 
-	return newServer(orch, artRepo, log)
+	multiClient := llm.NewMultiClient()
+	return newServer(orch, artRepo, log, multiClient)
 }
 
 // ---- tests ----
