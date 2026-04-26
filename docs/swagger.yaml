@@ -1,0 +1,2540 @@
+definitions:
+  cmd_api-gateway.apiKeyCreateReq:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  cmd_api-gateway.apiKeyCreateResp:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      key:
+        type: string
+      name:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+    type: object
+  cmd_api-gateway.apiKeysResp:
+    properties:
+      keys:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_apikey.APIKey'
+        type: array
+    type: object
+  cmd_api-gateway.artifactReq:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      language:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    required:
+    - content
+    - conversation_id
+    - name
+    - type
+    type: object
+  cmd_api-gateway.cancelResp:
+    properties:
+      status:
+        type: string
+    type: object
+  cmd_api-gateway.chatReq:
+    properties:
+      conversation_id:
+        type: string
+      file_ids:
+        items:
+          type: string
+        type: array
+      message:
+        type: string
+    required:
+    - message
+    type: object
+  cmd_api-gateway.conversationsResp:
+    properties:
+      conversations:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation'
+        type: array
+    type: object
+  cmd_api-gateway.filesResp:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload'
+        type: array
+    type: object
+  cmd_api-gateway.forgotPasswordResp:
+    properties:
+      message:
+        type: string
+    type: object
+  cmd_api-gateway.healthResp:
+    properties:
+      healthy:
+        type: boolean
+      status:
+        type: string
+    type: object
+  cmd_api-gateway.limitInfo:
+    properties:
+      features:
+        additionalProperties: {}
+        type: object
+      max_tokens_per_request:
+        type: integer
+      messages_per_day:
+        type: integer
+    type: object
+  cmd_api-gateway.loginResp:
+    properties:
+      token:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.TokenPair'
+      user:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User'
+    type: object
+  cmd_api-gateway.logoutResp:
+    properties:
+      message:
+        type: string
+    type: object
+  cmd_api-gateway.meResp:
+    properties:
+      user:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User'
+    type: object
+  cmd_api-gateway.messagesResp:
+    properties:
+      messages:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Message'
+        type: array
+    type: object
+  cmd_api-gateway.modelItem:
+    properties:
+      id:
+        type: string
+      provider:
+        type: string
+    type: object
+  cmd_api-gateway.modelsListResp:
+    properties:
+      models:
+        items:
+          $ref: '#/definitions/cmd_api-gateway.modelItem'
+        type: array
+    type: object
+  cmd_api-gateway.plansResp:
+    properties:
+      plans:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Plan'
+        type: array
+    type: object
+  cmd_api-gateway.providerModelsResp:
+    properties:
+      models:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel'
+        type: array
+    type: object
+  cmd_api-gateway.providersResp:
+    properties:
+      providers:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider'
+        type: array
+    type: object
+  cmd_api-gateway.refreshResp:
+    properties:
+      token:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.TokenPair'
+      user:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User'
+    type: object
+  cmd_api-gateway.registerResp:
+    properties:
+      user:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User'
+    type: object
+  cmd_api-gateway.resetPasswordResp:
+    properties:
+      message:
+        type: string
+    type: object
+  cmd_api-gateway.subscribeReq:
+    properties:
+      email:
+        type: string
+      plan_slug:
+        type: string
+    required:
+    - email
+    - plan_slug
+    type: object
+  cmd_api-gateway.subscribeResp:
+    properties:
+      checkout_url:
+        type: string
+    type: object
+  cmd_api-gateway.subscriptionResp:
+    properties:
+      plan:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Plan'
+      subscription:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Subscription'
+    type: object
+  cmd_api-gateway.trackUsageReq:
+    properties:
+      conversation_id:
+        type: string
+      cost_usd:
+        type: number
+      latency_ms:
+        type: integer
+      model:
+        type: string
+      provider:
+        type: string
+      tenant_id:
+        type: string
+      tokens_input:
+        type: integer
+      tokens_output:
+        type: integer
+      user_id:
+        type: string
+    required:
+    - model
+    - provider
+    - tenant_id
+    - user_id
+    type: object
+  cmd_api-gateway.trackUsageResp:
+    properties:
+      status:
+        type: string
+    type: object
+  cmd_api-gateway.usageLimitsResp:
+    properties:
+      limits:
+        additionalProperties:
+          $ref: '#/definitions/cmd_api-gateway.limitInfo'
+        type: object
+    type: object
+  cmd_api-gateway.usageStatsResp:
+    properties:
+      stats:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_billing.DailyUsage'
+        type: array
+    type: object
+  cmd_api-gateway.webhookResp:
+    properties:
+      status:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_agent_model.Artifact:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      is_deleted:
+        type: boolean
+      language:
+        type: string
+      message_id:
+        type: string
+      name:
+        type: string
+      tenant_id:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  github_com_r0lm0_go-saas-api_internal_agent_model.Conversation:
+    properties:
+      agent_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      messages:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Message'
+        type: array
+      metadata:
+        additionalProperties: {}
+        type: object
+      status:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.ConversationStatus'
+      tenant_id:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_agent_model.ConversationStatus:
+    enum:
+    - active
+    - archived
+    - deleted
+    type: string
+    x-enum-varnames:
+    - ConversationActive
+    - ConversationArchived
+    - ConversationDeleted
+  github_com_r0lm0_go-saas-api_internal_agent_model.Message:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      latency_ms:
+        type: integer
+      model:
+        type: string
+      role:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.MessageRole'
+      tenant_id:
+        type: string
+      tokens_input:
+        type: integer
+      tokens_output:
+        type: integer
+      tool_calls:
+        items:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.ToolCall'
+        type: array
+    type: object
+  github_com_r0lm0_go-saas-api_internal_agent_model.MessageRole:
+    enum:
+    - user
+    - assistant
+    - system
+    - tool
+    type: string
+    x-enum-varnames:
+    - MessageRoleUser
+    - MessageRoleAssistant
+    - MessageRoleSystem
+    - MessageRoleTool
+  github_com_r0lm0_go-saas-api_internal_agent_model.ToolCall:
+    properties:
+      arguments:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_apikey.APIKey:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      last_used_at:
+        type: string
+      name:
+        type: string
+      revoked_at:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+      tenant_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_auth.ForgotPasswordRequest:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  github_com_r0lm0_go-saas-api_internal_auth.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  github_com_r0lm0_go-saas-api_internal_auth.RegisterRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - name
+    - password
+    type: object
+  github_com_r0lm0_go-saas-api_internal_auth.ResetPasswordRequest:
+    properties:
+      new_password:
+        minLength: 8
+        type: string
+      token:
+        type: string
+    required:
+    - new_password
+    - token
+    type: object
+  github_com_r0lm0_go-saas-api_internal_auth.TokenPair:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        description: seconds
+        type: integer
+      refresh_token:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_auth.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      oauth_provider:
+        type: string
+      oauth_subject:
+        type: string
+      role:
+        type: string
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_billing.DailyUsage:
+    properties:
+      cost_usd:
+        type: number
+      date:
+        type: string
+      requests:
+        type: integer
+      tenant_id:
+        type: string
+      tokens_input:
+        type: integer
+      tokens_output:
+        type: integer
+      user_id:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_billing.Plan:
+    properties:
+      amount_cents:
+        type: integer
+      created_at:
+        type: string
+      currency:
+        type: string
+      description:
+        type: string
+      features:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      interval:
+        type: string
+      is_active:
+        type: boolean
+      max_tokens_per_request:
+        type: integer
+      messages_per_day:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      stripe_price_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_billing.Subscription:
+    properties:
+      cancel_at_period_end:
+        type: boolean
+      canceled_at:
+        type: string
+      created_at:
+        type: string
+      current_period_end:
+        type: string
+      current_period_start:
+        type: string
+      id:
+        type: string
+      plan_id:
+        type: string
+      status:
+        type: string
+      stripe_customer_id:
+        type: string
+      stripe_subscription_id:
+        type: string
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_fileupload.Upload:
+    properties:
+      content_type:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      metadata:
+        additionalProperties: {}
+        type: object
+      name:
+        type: string
+      original_name:
+        type: string
+      size_bytes:
+        type: integer
+      tenant_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_provider.AIModel:
+    properties:
+      config:
+        additionalProperties: {}
+        type: object
+      context_window:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      display_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_premium:
+        type: boolean
+      is_public:
+        type: boolean
+      max_tokens:
+        type: integer
+      name:
+        type: string
+      provider_id:
+        type: string
+      supports_images:
+        type: boolean
+      supports_streaming:
+        type: boolean
+      updated_at:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_provider.AIProvider:
+    properties:
+      base_url:
+        type: string
+      config:
+        additionalProperties: {}
+        type: object
+      created_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_public:
+        type: boolean
+      name:
+        type: string
+      priority:
+        type: integer
+      tenant_id:
+        type: string
+      type:
+        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.ProviderType'
+      updated_at:
+        type: string
+    type: object
+  github_com_r0lm0_go-saas-api_internal_provider.ProviderType:
+    enum:
+    - ollama
+    - openai
+    - gemini
+    - deepseek
+    - kimi
+    - lmstudio
+    - anthropic
+    - custom
+    type: string
+    x-enum-varnames:
+    - ProviderOllama
+    - ProviderOpenAI
+    - ProviderGemini
+    - ProviderDeepSeek
+    - ProviderKimi
+    - ProviderLMStudio
+    - ProviderAnthropic
+    - ProviderCustom
+info:
+  contact: {}
+paths:
+  /api/v1/admin/models/{id}:
+    delete:
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a model
+      tags:
+      - admin
+    get:
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a model
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Model update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a model
+      tags:
+      - admin
+  /api/v1/admin/providers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.providersResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List AI providers
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider config
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new AI provider
+      tags:
+      - admin
+  /api/v1/admin/providers/{id}:
+    delete:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete an AI provider
+      tags:
+      - admin
+    get:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get an AI provider
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Provider update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update an AI provider
+      tags:
+      - admin
+  /api/v1/admin/providers/{id}/models:
+    get:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.providerModelsResp'
+      security:
+      - BearerAuth: []
+      summary: List models for a provider
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Model config
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel'
+      security:
+      - BearerAuth: []
+      summary: Create a model for a provider
+      tags:
+      - admin
+  /api/v1/admin/providers/{id}/sync-models:
+    post:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Sync models from provider
+      tags:
+      - admin
+  /api/v1/admin/providers/{id}/test:
+    post:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test provider connectivity
+      tags:
+      - admin
+  /api/v1/agent/chat:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Chat message
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cmd_api-gateway.chatReq'
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Chat with AI agent (SSE streaming)
+      tags:
+      - agent
+  /api/v1/agent/ws:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      responses:
+        "101":
+          description: WebSocket upgrade
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: WebSocket chat upgrade
+      tags:
+      - agent
+  /api/v1/api-keys:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.apiKeysResp'
+      security:
+      - BearerAuth: []
+      summary: List API keys
+      tags:
+      - api-keys
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: API key name
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cmd_api-gateway.apiKeyCreateReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.apiKeyCreateResp'
+      security:
+      - BearerAuth: []
+      summary: Create a new API key
+      tags:
+      - api-keys
+  /api/v1/api-keys/{id}:
+    delete:
+      parameters:
+      - description: API Key ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Revoke an API key
+      tags:
+      - api-keys
+  /api/v1/artifacts:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Artifact data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cmd_api-gateway.artifactReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Artifact'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new artifact
+      tags:
+      - agent
+  /api/v1/artifacts/{id}/preview:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Artifact ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Artifact content
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Preview artifact content
+      tags:
+      - agent
+  /api/v1/auth/callback:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: OAuth code and state
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.loginResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Unified OAuth callback (r3-chat)
+      tags:
+      - auth
+  /api/v1/auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email address
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.forgotPasswordResp'
+      summary: Request password reset email
+      tags:
+      - auth
+  /api/v1/auth/github:
+    get:
+      produces:
+      - application/json
+      responses:
+        "307":
+          description: Redirects to GitHub
+          schema:
+            type: string
+      summary: Initiate GitHub OAuth login
+      tags:
+      - auth
+  /api/v1/auth/github/callback:
+    get:
+      parameters:
+      - description: Authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.loginResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: GitHub OAuth callback
+      tags:
+      - auth
+  /api/v1/auth/google:
+    get:
+      produces:
+      - application/json
+      responses:
+        "307":
+          description: Redirects to Google
+          schema:
+            type: string
+      summary: Initiate Google OAuth login
+      tags:
+      - auth
+  /api/v1/auth/google/callback:
+    get:
+      parameters:
+      - description: Authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.loginResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Google OAuth callback
+      tags:
+      - auth
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.loginResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login with email and password
+      tags:
+      - auth
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.logoutResp'
+      summary: Logout and invalidate refresh token
+      tags:
+      - auth
+  /api/v1/auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.meResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current authenticated user
+      tags:
+      - auth
+  /api/v1/auth/profile:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.meResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user profile (r3-chat alias)
+      tags:
+      - auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.refreshResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh access token
+      tags:
+      - auth
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Registration info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.registerResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
+  /api/v1/auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reset token and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.resetPasswordResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Reset password with token
+      tags:
+      - auth
+  /api/v1/billing/cancel:
+    post:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.cancelResp'
+      security:
+      - BearerAuth: []
+      summary: Cancel subscription
+      tags:
+      - billing
+  /api/v1/billing/plans:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.plansResp'
+      security:
+      - BearerAuth: []
+      summary: List billing plans
+      tags:
+      - billing
+  /api/v1/billing/subscribe:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Subscription request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cmd_api-gateway.subscribeReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.subscribeResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create Stripe checkout session
+      tags:
+      - billing
+  /api/v1/billing/subscription:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.subscriptionResp'
+      security:
+      - BearerAuth: []
+      summary: Get current subscription
+      tags:
+      - billing
+  /api/v1/billing/webhook:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Stripe signature
+        in: header
+        name: Stripe-Signature
+        required: true
+        type: string
+      - description: Webhook payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.webhookResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stripe webhook
+      tags:
+      - billing
+  /api/v1/chat:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Chat title and model
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new chat (r3-chat)
+      tags:
+      - agent
+  /api/v1/chat/{id}:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get chat with messages (r3-chat)
+      tags:
+      - agent
+  /api/v1/chat/message:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Chat message
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cmd_api-gateway.chatReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Send chat message (sync, r3-chat)
+      tags:
+      - agent
+  /api/v1/chat/message/stream:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Chat message
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cmd_api-gateway.chatReq'
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Send chat message with streaming (r3-chat SSE)
+      tags:
+      - agent
+  /api/v1/chat/models:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.modelsListResp'
+      summary: List available AI models
+      tags:
+      - agent
+  /api/v1/chat/sessions:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List chat sessions (r3-chat alias)
+      tags:
+      - agent
+  /api/v1/chat/sessions/{id}:
+    delete:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete chat session (r3-chat alias)
+      tags:
+      - agent
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update chat session (r3-chat alias)
+      tags:
+      - agent
+  /api/v1/conversations:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.conversationsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List user conversations
+      tags:
+      - agent
+  /api/v1/conversations/{id}:
+    delete:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Conversation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a conversation
+      tags:
+      - agent
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Conversation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a conversation
+      tags:
+      - agent
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Conversation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update conversation title or status
+      tags:
+      - agent
+  /api/v1/conversations/{id}/messages:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: Conversation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - default: 50
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.messagesResp'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List messages in a conversation
+      tags:
+      - agent
+  /api/v1/files:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.filesResp'
+      security:
+      - BearerAuth: []
+      summary: List uploaded files
+      tags:
+      - files
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upload a file
+      tags:
+      - files
+  /api/v1/files/{id}:
+    delete:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a file
+      tags:
+      - files
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get file metadata
+      tags:
+      - files
+  /api/v1/files/{id}/download:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: File content
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Download a file
+      tags:
+      - files
+  /api/v1/health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.healthResp'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.healthResp'
+      summary: Health check
+      tags:
+      - health
+  /api/v1/models/public:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List public models (r3-chat format)
+      tags:
+      - agent
+  /api/v1/stripe/confirm-session:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Session ID
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Confirm Stripe checkout session (r3-chat)
+      tags:
+      - billing
+  /api/v1/stripe/create-checkout-session:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Price ID
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create Stripe checkout session (r3-chat)
+      tags:
+      - billing
+  /api/v1/stripe/create-portal-session:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create Stripe portal session (r3-chat)
+      tags:
+      - billing
+  /api/v1/stripe/subscription:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get Stripe subscription (r3-chat)
+      tags:
+      - billing
+  /api/v1/subscriptions:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Plan
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create subscription (r3-chat)
+      tags:
+      - billing
+  /api/v1/subscriptions/cancel:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel subscription (r3-chat)
+      tags:
+      - billing
+  /api/v1/usage/limits:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.usageLimitsResp'
+      summary: Get usage limits by plan
+      tags:
+      - usage
+  /api/v1/usage/stats:
+    get:
+      parameters:
+      - description: Tenant ID
+        in: header
+        name: X-Tenant-ID
+        required: true
+        type: string
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.usageStatsResp'
+      security:
+      - BearerAuth: []
+      summary: Get usage statistics
+      tags:
+      - usage
+  /api/v1/usage/track:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Usage event
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cmd_api-gateway.trackUsageReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.trackUsageResp'
+      security:
+      - BearerAuth: []
+      summary: Track a usage event
+      tags:
+      - usage
+  /api/v1/users/profile:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Profile updates
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd_api-gateway.meResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - users
+swagger: "2.0"

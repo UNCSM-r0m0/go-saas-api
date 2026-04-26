@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v81"
+	portal "github.com/stripe/stripe-go/v81/billingportal/session"
 	"github.com/stripe/stripe-go/v81/checkout/session"
 	"github.com/stripe/stripe-go/v81/customer"
 	"github.com/stripe/stripe-go/v81/subscription"
@@ -41,7 +42,7 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, tenantID, us
 	if err != nil {
 		return "", fmt.Errorf("plan not found: %w", err)
 	}
-	if plan.StripePriceID == "" {
+	if plan.StripePriceID == nil || *plan.StripePriceID == "" {
 		return "", fmt.Errorf("plan %s has no stripe price id", planSlug)
 	}
 
@@ -62,7 +63,7 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, tenantID, us
 		Customer:   stripe.String(cus.ID),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
-				Price:    stripe.String(plan.StripePriceID),
+				Price:    stripe.String(*plan.StripePriceID),
 				Quantity: stripe.Int64(1),
 			},
 		},
@@ -256,4 +257,19 @@ func (s *BillingService) handleSubscriptionDeleted(ctx context.Context, event st
 
 	now := time.Now().UTC()
 	return s.subs.CancelSubscription(ctx, sub.ID, now, false)
+}
+
+// CreatePortalSession creates a Stripe customer portal session.
+func (s *BillingService) CreatePortalSession(ctx context.Context, customerID string) (string, error) {
+	params := &stripe.BillingPortalSessionParams{
+		Customer:  stripe.String(customerID),
+		ReturnURL: stripe.String(s.frontendURL + "/billing"),
+	}
+
+	ps, err := portal.New(params)
+	if err != nil {
+		return "", fmt.Errorf("create portal session: %w", err)
+	}
+
+	return ps.URL, nil
 }

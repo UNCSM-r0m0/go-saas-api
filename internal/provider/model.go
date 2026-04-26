@@ -27,8 +27,8 @@ type AIProvider struct {
 	Name            string         `json:"name"`
 	Type            ProviderType   `json:"type"`
 	BaseURL         string         `json:"base_url"`
-	APIKeyEncrypted string         `json:"-"` // never expose
-	APIKeyHash      string         `json:"-"` // never expose
+	APIKeyEncrypted *string        `json:"-"` // never expose
+	APIKeyHash      *string        `json:"-"` // never expose
 	IsActive        bool           `json:"is_active"`
 	IsPublic        bool           `json:"is_public"`
 	Priority        int            `json:"priority"`

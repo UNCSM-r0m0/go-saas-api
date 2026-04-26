@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/internal/platform/response"
 )
 
 // OAuthHandler provides HTTP handlers for OAuth flows
@@ -26,6 +27,7 @@ func (h *OAuthHandler) RegisterRoutes(r *gin.Engine) {
 		oauth.GET("/google/callback", h.GoogleCallback)
 		oauth.GET("/github", h.GitHubRedirect)
 		oauth.GET("/github/callback", h.GitHubCallback)
+		oauth.POST("/callback", h.GenericCallback)
 	}
 }
 
@@ -34,7 +36,7 @@ func (h *OAuthHandler) GoogleRedirect(c *gin.Context) {
 	url, err := h.oauthService.GetGoogleAuthURL(c.Request.Context())
 	if err != nil {
 		h.log.Error("google auth URL failed", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "oauth failed"})
+		response.Error(c, http.StatusInternalServerError, "oauth failed")
 		return
 	}
 	c.Redirect(http.StatusTemporaryRedirect, url)
@@ -46,21 +48,19 @@ func (h *OAuthHandler) GoogleCallback(c *gin.Context) {
 	state := c.Query("state")
 
 	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing code"})
+		response.Error(c, http.StatusBadRequest, "missing code")
 		return
 	}
 
 	pair, user, err := h.oauthService.HandleGoogleCallback(c.Request.Context(), code, state)
 	if err != nil {
 		h.log.Error("google callback failed", logger.Error(err))
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "oauth callback failed"})
+		response.Error(c, http.StatusUnauthorized, "oauth callback failed")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"user":  user,
-		"token": pair,
-	})
+	setAuthCookies(c, pair)
+	response.OK(c, gin.H{"user": user, "token": pair}, "oauth login successful")
 }
 
 // GitHubRedirect redirects the user to GitHub's OAuth consent screen
@@ -68,7 +68,7 @@ func (h *OAuthHandler) GitHubRedirect(c *gin.Context) {
 	url, err := h.oauthService.GetGitHubAuthURL(c.Request.Context())
 	if err != nil {
 		h.log.Error("github auth URL failed", logger.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "oauth failed"})
+		response.Error(c, http.StatusInternalServerError, "oauth failed")
 		return
 	}
 	c.Redirect(http.StatusTemporaryRedirect, url)
@@ -80,19 +80,61 @@ func (h *OAuthHandler) GitHubCallback(c *gin.Context) {
 	state := c.Query("state")
 
 	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing code"})
+		response.Error(c, http.StatusBadRequest, "missing code")
 		return
 	}
 
 	pair, user, err := h.oauthService.HandleGitHubCallback(c.Request.Context(), code, state)
 	if err != nil {
 		h.log.Error("github callback failed", logger.Error(err))
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "oauth callback failed"})
+		response.Error(c, http.StatusUnauthorized, "oauth callback failed")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"user":  user,
-		"token": pair,
-	})
+	setAuthCookies(c, pair)
+	response.OK(c, gin.H{"user": user, "token": pair}, "oauth login successful")
+}
+
+// GenericCallback handles OAuth callbacks in a unified way (POST).
+// The frontend sends {code, state} and the backend tries Google first, then GitHub.
+// In practice, the provider is inferred from the state token.
+type genericCallbackReq struct {
+	Code     string `json:"code" binding:"required"`
+	State    string `json:"state" binding:"required"`
+	Provider string `json:"provider"` // optional hint: "google" or "github"
+}
+
+func (h *OAuthHandler) GenericCallback(c *gin.Context) {
+	var req genericCallbackReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var pair *TokenPair
+	var user *User
+	var err error
+
+	// Try based on provider hint, or try both
+	switch req.Provider {
+	case "google":
+		pair, user, err = h.oauthService.HandleGoogleCallback(c.Request.Context(), req.Code, req.State)
+	case "github":
+		pair, user, err = h.oauthService.HandleGitHubCallback(c.Request.Context(), req.Code, req.State)
+	default:
+		// Try Google first, then GitHub
+		pair, user, err = h.oauthService.HandleGoogleCallback(c.Request.Context(), req.Code, req.State)
+		if err != nil {
+			pair, user, err = h.oauthService.HandleGitHubCallback(c.Request.Context(), req.Code, req.State)
+		}
+	}
+
+	if err != nil {
+		h.log.Error("oauth callback failed", logger.Error(err))
+		response.Error(c, http.StatusUnauthorized, "oauth callback failed")
+		return
+	}
+
+	setAuthCookies(c, pair)
+	response.OK(c, gin.H{"user": user, "token": pair}, "oauth login successful")
 }

@@ -43,3 +43,6 @@ temp/
 .atl/
 
 go.work.sum
+
+r3-chat/*
+r3-chat

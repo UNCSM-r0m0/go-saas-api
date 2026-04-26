@@ -14,6 +14,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	_ "github.com/r0lm0/go-saas-api/docs"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	swaggerFiles "github.com/swaggo/files"
 	"github.com/r0lm0/go-saas-api/internal/apikey"
 	"github.com/r0lm0/go-saas-api/internal/billing"
 	"github.com/r0lm0/go-saas-api/internal/platform/cache"
@@ -88,6 +91,11 @@ func main() {
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestTimeout(30 * time.Second))
 
+	// Swagger UI (development only)
+	if cfg.Env != "production" {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
+
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		report := hc.Check(c.Request.Context())
@@ -110,9 +118,18 @@ func main() {
 		v1.GET("/auth/google/callback", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.GET("/auth/github", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.GET("/auth/github/callback", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.POST("/auth/callback", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
-		// Protected auth route (gateway validates JWT or API key)
+		// Protected auth routes (gateway validates JWT or API key)
 		v1.GET("/auth/me", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.GET("/auth/profile", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AuthServiceURL, "/api/v1"))
+
+		// Protected user routes
+		v1.PUT("/users/profile", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AuthServiceURL, "/api/v1"))
+
+		// Public agent routes (no auth required)
+		v1.GET("/chat/models", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		v1.GET("/models/public", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 
 		// Agent routes: optional auth (JWT or API key) + rate limit
 		// Anonymous users get free tier (IP-based); authenticated get tier from DB
@@ -124,6 +141,9 @@ func main() {
 			agent.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			// r3-chat frontend chat routes
+			agent.Any("/chat", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.Any("/chat/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 		}
 
 		// API key management routes (JWT required)
@@ -145,6 +165,10 @@ func main() {
 			protected.Any("/files", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/files/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
+			// r3-chat frontend billing routes
+			protected.Any("/stripe/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
+			protected.Any("/subscriptions", proxyTo(cfg.BillingServiceURL, "/api/v1"))
+			protected.Any("/subscriptions/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			protected.Any("/usage/*path", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 		}
 	}
@@ -186,6 +210,7 @@ func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.FlushInterval = -1 // stream SSE/WebSocket chunks immediately
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
@@ -197,6 +222,21 @@ func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
 		}
 	}
 
+	// Inject auth context from Gin into outgoing request headers
+	// so downstream services receive X-User-ID / X-Tenant-ID even
+	// when the client only sent an Authorization header.
+	injectAuth := func(c *gin.Context) {
+		if uid, ok := c.Get("user_id"); ok && uid != "" {
+			c.Request.Header.Set("X-User-ID", fmt.Sprintf("%v", uid))
+		}
+		if tid, ok := c.Get("tenant_id"); ok && tid != "" {
+			c.Request.Header.Set("X-Tenant-ID", fmt.Sprintf("%v", tid))
+		}
+		if role, ok := c.Get("role"); ok && role != "" {
+			c.Request.Header.Set("X-User-Role", fmt.Sprintf("%v", role))
+		}
+	}
+
 	// Error handler for proxy failures
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		w.WriteHeader(http.StatusBadGateway)
@@ -204,6 +244,7 @@ func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		injectAuth(c)
 		proxy.ServeHTTP(c.Writer, c.Request)
 	}
 }

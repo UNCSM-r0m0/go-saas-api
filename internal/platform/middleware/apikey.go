@@ -2,7 +2,6 @@
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/r0lm0/go-saas-api/internal/apikey"
@@ -36,25 +35,18 @@ func APIKeyAuth(service *apikey.Service) gin.HandlerFunc {
 	}
 }
 
-// JWTOrAPIKeyAuth requires either a valid JWT or a valid API key.
+// JWTOrAPIKeyAuth requires either a valid JWT (cookie or header) or a valid API key.
 // It tries JWT first, then falls back to API key.
 func JWTOrAPIKeyAuth(jwtMgr *jwt.Manager, apiKeyService *apikey.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Try JWT first
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" {
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
-				claims, err := jwtMgr.ValidateToken(parts[1])
-				if err == nil {
-					c.Set("user_id", claims.UserID)
-					c.Set("tenant_id", claims.TenantID)
-					c.Set("role", claims.Role)
-					c.Header("X-User-ID", claims.UserID)
-					c.Header("X-Tenant-ID", claims.TenantID)
-					c.Next()
-					return
-				}
+		// Try JWT first (cookie or header)
+		token, malformed := extractToken(c)
+		if token != "" {
+			claims, err := jwtMgr.ValidateToken(token)
+			if err == nil {
+				setAuthContext(c, claims)
+				c.Next()
+				return
 			}
 		}
 
@@ -71,6 +63,11 @@ func JWTOrAPIKeyAuth(jwtMgr *jwt.Manager, apiKeyService *apikey.Service) gin.Han
 				c.Next()
 				return
 			}
+		}
+
+		if malformed {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
+			return
 		}
 
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})

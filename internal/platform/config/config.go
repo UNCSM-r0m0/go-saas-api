@@ -110,8 +110,8 @@ func Load() (*Config, error) {
 		BillingServiceURL: getEnv("BILLING_SERVICE_URL", "http://localhost:3004"),
 		UsageServiceURL:   getEnv("USAGE_SERVICE_URL", "http://localhost:3005"),
 		FreeMessageLimit:      getInt("FREE_USER_MESSAGE_LIMIT", 3),
-		RegisteredMessageLimit: getInt("REGISTERED_USER_MESSAGE_LIMIT", 50),
-		PremiumMessageLimit:    getInt("PREMIUM_USER_MESSAGE_LIMIT", 1000),
+		RegisteredMessageLimit: getInt("REGISTERED_USER_MESSAGE_LIMIT", 10),
+		PremiumMessageLimit:    getInt("PREMIUM_USER_MESSAGE_LIMIT", 100),
 		UploadPath:            getEnv("UPLOAD_PATH", "./uploads"),
 		MaxUploadSize:         getInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
 		SMTPHost:              getEnv("SMTP_HOST", ""),

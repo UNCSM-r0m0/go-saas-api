@@ -66,19 +66,24 @@ func (pl *ProviderLoader) createClient(p provider.AIProvider) (llm.Client, error
 	case provider.ProviderOllama:
 		return llm.NewOllamaClient(p.BaseURL), nil
 	case provider.ProviderOpenAI:
-		apiKey := p.APIKeyEncrypted // TODO: decrypt if encrypted
+		apiKey := ""
+		if p.APIKeyEncrypted != nil { apiKey = *p.APIKeyEncrypted }
 		return llm.NewOpenAIClient(apiKey), nil
 	case provider.ProviderGemini:
-		apiKey := p.APIKeyEncrypted // TODO: decrypt if encrypted
+		apiKey := ""
+		if p.APIKeyEncrypted != nil { apiKey = *p.APIKeyEncrypted }
 		return llm.NewGeminiClient(apiKey), nil
 	case provider.ProviderDeepSeek:
-		apiKey := p.APIKeyEncrypted // TODO: decrypt if encrypted
+		apiKey := ""
+		if p.APIKeyEncrypted != nil { apiKey = *p.APIKeyEncrypted }
 		return llm.NewDeepSeekClient(apiKey), nil
 	case provider.ProviderKimi:
-		apiKey := p.APIKeyEncrypted // TODO: decrypt if encrypted
+		apiKey := ""
+		if p.APIKeyEncrypted != nil { apiKey = *p.APIKeyEncrypted }
 		return llm.NewKimiClient(apiKey), nil
 	case provider.ProviderLMStudio:
-		apiKey := p.APIKeyEncrypted // TODO: decrypt if encrypted
+		apiKey := ""
+		if p.APIKeyEncrypted != nil { apiKey = *p.APIKeyEncrypted }
 		return llm.NewLMStudioClient(p.BaseURL, apiKey), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider type: %s", p.Type)

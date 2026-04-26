@@ -37,8 +37,9 @@ func (s *Service) CreateProvider(ctx context.Context, tenantID uuid.UUID, name s
 		UpdatedAt: time.Now(),
 	}
 	if apiKey != "" {
-		p.APIKeyEncrypted = apiKey // TODO: encrypt with AES-256
-		p.APIKeyHash = hashString(apiKey)
+		p.APIKeyEncrypted = &apiKey // TODO: encrypt with AES-256
+		hash := hashString(apiKey)
+		p.APIKeyHash = &hash
 	}
 	if err := s.store.CreateProvider(ctx, p); err != nil {
 		return nil, fmt.Errorf("create provider: %w", err)
@@ -79,8 +80,9 @@ func (s *Service) UpdateProvider(ctx context.Context, tenantID uuid.UUID, id uui
 	p.IsPublic = isPublic
 	p.UpdatedAt = time.Now()
 	if apiKey != "" {
-		p.APIKeyEncrypted = apiKey // TODO: encrypt with AES-256
-		p.APIKeyHash = hashString(apiKey)
+		p.APIKeyEncrypted = &apiKey // TODO: encrypt with AES-256
+		hash := hashString(apiKey)
+		p.APIKeyHash = &hash
 	}
 	if err := s.store.UpdateProvider(ctx, tenantID, p); err != nil {
 		return nil, fmt.Errorf("update provider: %w", err)

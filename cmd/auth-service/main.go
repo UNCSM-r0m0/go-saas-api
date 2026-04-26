@@ -116,10 +116,16 @@ func main() {
 	apiKeyHandler := apikey.NewHandler(apiKeyService, log)
 	apiKeyHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))
 
-	// Protected me endpoint (validates its own JWT if called directly)
-	me := r.Group("/auth")
-	me.Use(middleware.JWTAuth(jwtMgr))
-	me.GET("/me", authHandler.Me)
+	// Protected auth endpoints (validates its own JWT if called directly)
+	protectedAuth := r.Group("/auth")
+	protectedAuth.Use(middleware.JWTAuth(jwtMgr))
+	protectedAuth.GET("/me", authHandler.Me)
+	protectedAuth.GET("/profile", authHandler.Me) // alias for r3-chat frontend
+
+	// User profile routes (protected)
+	users := r.Group("/users")
+	users.Use(middleware.JWTAuth(jwtMgr))
+	users.PUT("/profile", authHandler.UpdateProfile)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,

@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func strPtr(s string) *string { return &s }
+
 // ---- mock repositories ----
 
 type mockPlanRepo struct {
@@ -43,7 +45,7 @@ func (m *mockPlanRepo) GetPlanByID(ctx context.Context, id uuid.UUID) (*Plan, er
 
 func (m *mockPlanRepo) GetPlanByStripePriceID(ctx context.Context, priceID string) (*Plan, error) {
 	for _, p := range m.plans {
-		if p.StripePriceID == priceID {
+		if p.StripePriceID != nil && *p.StripePriceID == priceID {
 			return p, nil
 		}
 	}
@@ -107,7 +109,7 @@ func setupService() (*BillingService, *mockPlanRepo, *mockSubRepo) {
 			ID:             uuid.New(),
 			Slug:           "free",
 			Name:           "Free",
-			StripePriceID:  "",
+			StripePriceID:  nil,
 			AmountCents:    0,
 			MessagesPerDay: 3,
 		},
@@ -115,7 +117,7 @@ func setupService() (*BillingService, *mockPlanRepo, *mockSubRepo) {
 			ID:             uuid.New(),
 			Slug:           "premium",
 			Name:           "Premium",
-			StripePriceID:  "price_premium",
+			StripePriceID:  strPtr("price_premium"),
 			AmountCents:    999,
 			MessagesPerDay: 1000,
 		},

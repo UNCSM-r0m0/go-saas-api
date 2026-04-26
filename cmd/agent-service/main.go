@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/nats"
 	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
 	"github.com/r0lm0/go-saas-api/internal/platform/redis"
+	"github.com/r0lm0/go-saas-api/internal/platform/response"
 	"github.com/r0lm0/go-saas-api/internal/provider"
 	"github.com/r0lm0/go-saas-api/pkg/jwt"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
@@ -57,19 +59,27 @@ func (s *Server) setupRouter(jwtMgr *jwt.Manager) *gin.Engine {
 
 	r.GET("/health", s.handleHealthDetailed(s.hc))
 	r.GET("/chat/models", s.handleListModels)
+	r.GET("/models/public", s.handleListModelsPublic)
 	r.POST("/agent/chat", s.handleAgentChat)
 	r.GET("/agent/ws", s.wsManager.HandleUpgrade)
 	r.POST("/artifacts", s.handleCreateArtifact)
 	r.GET("/artifacts/:id/preview", s.handlePreviewArtifact)
 
-	// Conversations REST API
+	// Conversations REST API (legacy)
 	r.GET("/conversations", s.handleListConversations)
 	r.GET("/conversations/:id", s.handleGetConversation)
 	r.PATCH("/conversations/:id", s.handleUpdateConversation)
 	r.DELETE("/conversations/:id", s.handleDeleteConversation)
-
-	// Messages REST API
 	r.GET("/conversations/:id/messages", s.handleListMessages)
+
+	// r3-chat frontend compatible chat routes
+	r.GET("/chat/sessions", s.handleListConversations)
+	r.POST("/chat", s.handleCreateChat)
+	r.GET("/chat/:id", s.handleGetChatWithMessages)
+	r.PATCH("/chat/sessions/:id", s.handleUpdateConversation)
+	r.DELETE("/chat/sessions/:id", s.handleDeleteConversation)
+	r.POST("/chat/message", s.handleChatMessage)
+	r.POST("/chat/message/stream", s.handleChatMessageStream)
 
 	// File Upload API
 	s.fileHandler.RegisterRoutes(r)
@@ -124,6 +134,313 @@ func (s *Server) handleListModels(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"models": models})
+}
+
+func (s *Server) handleListModelsPublic(c *gin.Context) {
+	providers := s.llmManager.ListProviders()
+	models := make([]gin.H, 0)
+	for _, p := range providers {
+		if !p.Enabled {
+			continue
+		}
+		for _, m := range p.Models {
+			models = append(models, gin.H{
+				"id":                m,
+				"name":              m,
+				"provider":          p.Name,
+				"description":       "Model " + m + " via " + p.Name,
+				"maxTokens":         4096,
+				"supportsImages":    false,
+				"supportsReasoning": false,
+				"isPremium":         p.Name != "ollama",
+				"isAvailable":       true,
+				"available":         true,
+				"features":          []string{},
+			})
+		}
+	}
+	response.OK(c, models, "models retrieved")
+}
+
+func (s *Server) handleCreateChat(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	userIDStr := c.GetHeader("X-User-ID")
+	if tenantIDStr == "" || userIDStr == "" {
+		response.Error(c, http.StatusUnauthorized, "missing X-Tenant-ID or X-User-ID")
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid user_id")
+		return
+	}
+
+	var req struct {
+		Title string `json:"title" binding:"required"`
+		Model string `json:"model"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	conv := &model.Conversation{
+		ID:        uuid.New(),
+		TenantID:  tenantID,
+		UserID:    userID,
+		Title:     req.Title,
+		Status:    model.ConversationActive,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if req.Model != "" {
+		conv.Metadata = map[string]any{"model": req.Model}
+	}
+
+	if err := s.convRepo.Create(c.Request.Context(), conv); err != nil {
+		s.log.Error("create chat failed", logger.Error(err))
+		response.Error(c, http.StatusInternalServerError, "failed to create chat")
+		return
+	}
+
+	response.Created(c, conv, "chat created")
+}
+
+func (s *Server) handleGetChatWithMessages(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	if tenantIDStr == "" {
+		response.Error(c, http.StatusUnauthorized, "missing X-Tenant-ID")
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	conv, err := s.convRepo.GetByID(c.Request.Context(), tenantID, id)
+	if err != nil {
+		s.log.Error("get chat failed", logger.Error(err))
+		response.Error(c, http.StatusNotFound, "chat not found")
+		return
+	}
+
+	msgs, err := s.msgRepo.ListByConversation(c.Request.Context(), tenantID, id, 100)
+	if err != nil {
+		s.log.Error("list messages failed", logger.Error(err))
+		response.Error(c, http.StatusInternalServerError, "failed to load messages")
+		return
+	}
+
+	conv.Messages = msgs
+	response.OK(c, conv, "chat retrieved")
+}
+
+func (s *Server) handleChatMessage(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	userIDStr := c.GetHeader("X-User-ID")
+	if tenantIDStr == "" || userIDStr == "" {
+		response.Error(c, http.StatusUnauthorized, "missing X-Tenant-ID or X-User-ID")
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid user_id")
+		return
+	}
+
+	var req struct {
+		Content        string     `json:"content" binding:"required"`
+		Model          string     `json:"model"`
+		Context        string     `json:"context"`
+		ConversationID *uuid.UUID `json:"conversationId"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ctx := c.Request.Context()
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, nil)
+	if err != nil {
+		s.log.Error("chat failed", logger.Error(err))
+		response.Error(c, http.StatusInternalServerError, "chat failed")
+		return
+	}
+
+	var fullContent strings.Builder
+	for chunk := range streamCh {
+		fullContent.WriteString(chunk.Content)
+		if chunk.Done {
+			break
+		}
+	}
+
+	// The orchestrator already saved the assistant message.
+	// Fetch the conversation to return it.
+	var convID uuid.UUID
+	if req.ConversationID != nil {
+		convID = *req.ConversationID
+	} else {
+		// Find the most recent conversation for this user
+		convs, err := s.convRepo.ListByUser(ctx, tenantID, userID, 1, 0)
+		if err != nil || len(convs) == 0 {
+			response.Error(c, http.StatusInternalServerError, "failed to retrieve conversation")
+			return
+		}
+		convID = convs[0].ID
+	}
+
+	conv, err := s.convRepo.GetByID(ctx, tenantID, convID)
+	if err != nil {
+		s.log.Error("get conversation after chat failed", logger.Error(err))
+		response.Error(c, http.StatusInternalServerError, "failed to retrieve conversation")
+		return
+	}
+
+	msgs, err := s.msgRepo.ListByConversation(ctx, tenantID, convID, 100)
+	if err != nil {
+		s.log.Error("list messages after chat failed", logger.Error(err))
+		response.Error(c, http.StatusInternalServerError, "failed to retrieve messages")
+		return
+	}
+	conv.Messages = msgs
+
+	// Find the last assistant message
+	var assistantMsg *model.Message
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == model.MessageRoleAssistant {
+			assistantMsg = &msgs[i]
+			break
+		}
+	}
+
+	usage := gin.H{
+		"promptTokens":     0,
+		"completionTokens": 0,
+		"totalTokens":      0,
+	}
+	if assistantMsg != nil {
+		usage["promptTokens"] = assistantMsg.TokensInput
+		usage["completionTokens"] = assistantMsg.TokensOutput
+		usage["totalTokens"] = assistantMsg.TokensInput + assistantMsg.TokensOutput
+	}
+
+	response.OK(c, gin.H{
+		"message": assistantMsg,
+		"chat":    conv,
+		"usage":   usage,
+	}, "message sent")
+}
+
+func (s *Server) handleChatMessageStream(c *gin.Context) {
+	tenantIDStr := c.GetHeader("X-Tenant-ID")
+	userIDStr := c.GetHeader("X-User-ID")
+	if tenantIDStr == "" || userIDStr == "" {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Writer.WriteHeader(http.StatusUnauthorized)
+		c.Writer.Write([]byte("data: {\"error\":\"AUTH_ERROR\",\"message\":\"missing auth\"}\n\n"))
+		return
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Writer.WriteHeader(http.StatusBadRequest)
+		c.Writer.Write([]byte("data: {\"error\":\"STREAM_ERROR\",\"message\":\"invalid tenant\"}\n\n"))
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Writer.WriteHeader(http.StatusBadRequest)
+		c.Writer.Write([]byte("data: {\"error\":\"STREAM_ERROR\",\"message\":\"invalid user\"}\n\n"))
+		return
+	}
+
+	var req struct {
+		Content        string     `json:"content" binding:"required"`
+		Model          string     `json:"model"`
+		Context        string     `json:"context"`
+		ConversationID *uuid.UUID `json:"conversationId"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Writer.WriteHeader(http.StatusBadRequest)
+		c.Writer.Write([]byte(fmt.Sprintf("data: {\"error\":\"STREAM_ERROR\",\"message\":%q}\n\n", err.Error())))
+		return
+	}
+
+	ctx := c.Request.Context()
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, nil)
+	if err != nil {
+		s.log.Error("chat stream failed", logger.Error(err))
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Writer.WriteHeader(http.StatusOK)
+		c.Writer.Write([]byte(fmt.Sprintf("data: {\"error\":\"STREAM_ERROR\",\"message\":%q}\n\n", err.Error())))
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Writer.WriteHeader(http.StatusOK)
+
+	var conversationID string
+	if req.ConversationID != nil {
+		conversationID = req.ConversationID.String()
+	}
+
+	for chunk := range streamCh {
+		data := fmt.Sprintf("data: {\"content\":%q,\"finished\":%v,\"conversationId\":%q}\n\n",
+			chunk.Content, chunk.Done, conversationID)
+		_, _ = c.Writer.Write([]byte(data))
+		if flusher, ok := c.Writer.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		if chunk.Done {
+			break
+		}
+	}
+
+	// Send final done event with conversation ID
+	if conversationID == "" {
+		// Find the most recent conversation
+		convs, err := s.convRepo.ListByUser(ctx, tenantID, userID, 1, 0)
+		if err == nil && len(convs) > 0 {
+			conversationID = convs[0].ID.String()
+		}
+	}
+	finalData := fmt.Sprintf("data: {\"content\":\"\",\"finished\":true,\"conversationId\":%q}\n\n", conversationID)
+	_, _ = c.Writer.Write([]byte(finalData))
+	if flusher, ok := c.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 func (s *Server) handleAgentChat(c *gin.Context) {

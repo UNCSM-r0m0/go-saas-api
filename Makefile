@@ -55,6 +55,11 @@ test:
 	@echo "🧪 Ejecutando tests..."
 	go test ./...
 
+# Swagger docs
+swagger:
+	@echo "📄 Generando Swagger docs..."
+	swag init -g cmd/api-gateway/main.go --parseDependency --parseInternal
+
 # Lint
 lint:
 	@echo "🔍 Ejecutando linter..."

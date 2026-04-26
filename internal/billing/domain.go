@@ -12,7 +12,7 @@ type Plan struct {
 	Slug                string         `json:"slug"`
 	Name                string         `json:"name"`
 	Description         string         `json:"description"`
-	StripePriceID       string         `json:"stripe_price_id,omitempty"`
+	StripePriceID       *string        `json:"stripe_price_id,omitempty"`
 	AmountCents         int            `json:"amount_cents"`
 	Currency            string         `json:"currency"`
 	Interval            string         `json:"interval"`

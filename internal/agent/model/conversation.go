@@ -24,6 +24,7 @@ type Conversation struct {
 	AgentID   *uuid.UUID         `json:"agent_id,omitempty"`
 	Status    ConversationStatus `json:"status"`
 	Metadata  map[string]any     `json:"metadata"`
+	Messages  []Message          `json:"messages,omitempty"`
 	CreatedAt time.Time          `json:"created_at"`
 	UpdatedAt time.Time          `json:"updated_at"`
 }
