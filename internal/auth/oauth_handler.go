@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
@@ -52,7 +53,7 @@ func (h *OAuthHandler) GoogleCallback(c *gin.Context) {
 		return
 	}
 
-	pair, user, err := h.oauthService.HandleGoogleCallback(c.Request.Context(), code, state)
+	pair, _, err := h.oauthService.HandleGoogleCallback(c.Request.Context(), code, state)
 	if err != nil {
 		h.log.Error("google callback failed", logger.Error(err))
 		response.Error(c, http.StatusUnauthorized, "oauth callback failed")
@@ -60,7 +61,12 @@ func (h *OAuthHandler) GoogleCallback(c *gin.Context) {
 	}
 
 	setAuthCookies(c, pair)
-	response.OK(c, gin.H{"user": user, "token": pair}, "oauth login successful")
+	// Redirect to frontend after successful OAuth login
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
+	}
+	c.Redirect(http.StatusTemporaryRedirect, frontendURL)
 }
 
 // GitHubRedirect redirects the user to GitHub's OAuth consent screen
@@ -84,7 +90,7 @@ func (h *OAuthHandler) GitHubCallback(c *gin.Context) {
 		return
 	}
 
-	pair, user, err := h.oauthService.HandleGitHubCallback(c.Request.Context(), code, state)
+	pair, _, err := h.oauthService.HandleGitHubCallback(c.Request.Context(), code, state)
 	if err != nil {
 		h.log.Error("github callback failed", logger.Error(err))
 		response.Error(c, http.StatusUnauthorized, "oauth callback failed")
@@ -92,7 +98,12 @@ func (h *OAuthHandler) GitHubCallback(c *gin.Context) {
 	}
 
 	setAuthCookies(c, pair)
-	response.OK(c, gin.H{"user": user, "token": pair}, "oauth login successful")
+	// Redirect to frontend after successful OAuth login
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
+	}
+	c.Redirect(http.StatusTemporaryRedirect, frontendURL)
 }
 
 // GenericCallback handles OAuth callbacks in a unified way (POST).
