@@ -141,9 +141,14 @@ func main() {
 			agent.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			// r3-chat frontend chat routes
-			agent.Any("/chat", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.Any("/chat/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			// r3-chat frontend chat routes (explicit to avoid conflict with /chat/models)
+			agent.POST("/chat", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.GET("/chat/sessions", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.GET("/chat/:id", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.PATCH("/chat/sessions/:id", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.DELETE("/chat/sessions/:id", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.POST("/chat/message", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.POST("/chat/message/stream", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 		}
 
 		// API key management routes (JWT required)

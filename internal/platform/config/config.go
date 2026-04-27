@@ -50,8 +50,9 @@ type Config struct {
 	LMStudioAPIKey string `mapstructure:"LM_STUDIO_API_KEY"`
 	SandboxServiceURL string `mapstructure:"SANDBOX_SERVICE_URL"`
 
-	// Frontend
+	// Frontend / Public URL
 	FrontendURL string `mapstructure:"FRONTEND_URL"`
+	PublicURL   string `mapstructure:"PUBLIC_URL"`
 
 	// Service URLs (for internal communication)
 	AgentServiceURL    string `mapstructure:"AGENT_SERVICE_URL"`
@@ -105,10 +106,11 @@ func Load() (*Config, error) {
 		LMStudioAPIKey:    getEnv("LM_STUDIO_API_KEY", ""),
 		SandboxServiceURL: getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
 		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:5173"),
+		PublicURL:         getEnv("PUBLIC_URL", "http://localhost:3000"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://localhost:3002"),
-		AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://localhost:3003"),
-		BillingServiceURL: getEnv("BILLING_SERVICE_URL", "http://localhost:3004"),
-		UsageServiceURL:   getEnv("USAGE_SERVICE_URL", "http://localhost:3005"),
+		AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://localhost:3001"),
+		BillingServiceURL: getEnv("BILLING_SERVICE_URL", "http://localhost:3003"),
+		UsageServiceURL:   getEnv("USAGE_SERVICE_URL", "http://localhost:3004"),
 		FreeMessageLimit:      getInt("FREE_USER_MESSAGE_LIMIT", 3),
 		RegisteredMessageLimit: getInt("REGISTERED_USER_MESSAGE_LIMIT", 10),
 		PremiumMessageLimit:    getInt("PREMIUM_USER_MESSAGE_LIMIT", 100),

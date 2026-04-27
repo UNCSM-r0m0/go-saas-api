@@ -80,8 +80,8 @@ func main() {
 	oauthStateStore := auth.NewRedisOAuthStateStore(redisClient)
 	oauthService := auth.NewOAuthService(
 		userStore, refreshStore, jwtMgr, oauthStateStore,
-		cfg.GoogleClientID, cfg.GoogleClientSecret, fmt.Sprintf("http://localhost:%s/auth/google/callback", cfg.Port),
-		cfg.GitHubClientID, cfg.GitHubClientSecret, fmt.Sprintf("http://localhost:%s/auth/github/callback", cfg.Port),
+		cfg.GoogleClientID, cfg.GoogleClientSecret, fmt.Sprintf("%s/api/v1/auth/google/callback", cfg.PublicURL),
+		cfg.GitHubClientID, cfg.GitHubClientSecret, fmt.Sprintf("%s/api/v1/auth/github/callback", cfg.PublicURL),
 		cfg.JWTExpiration, 7*24*time.Hour,
 	)
 	oauthHandler := auth.NewOAuthHandler(oauthService, log)

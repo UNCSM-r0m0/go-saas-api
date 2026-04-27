@@ -50,7 +50,7 @@ func initSwagger() {
 // @contact.email support@example.com
 // @license.name MIT
 // @license.url https://opensource.org/licenses/MIT
-// @host localhost:13000
+// @host localhost:3000
 // @BasePath /api/v1
 // @schemes http
 // @securityDefinitions.apikey BearerAuth
