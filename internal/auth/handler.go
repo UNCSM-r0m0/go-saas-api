@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,13 @@ func NewHandler(service *Service, log logger.Logger) *Handler {
 }
 
 // cookieConfig returns the appropriate cookie settings based on environment.
+// When PUBLIC_URL uses HTTPS (e.g. Cloudflare Tunnel), we need SameSite=None + Secure
+// so cookies work across different domains (frontend vs API).
 func cookieConfig() (secure bool, sameSite string) {
+	publicURL := os.Getenv("PUBLIC_URL")
+	if strings.HasPrefix(publicURL, "https://") {
+		return true, "none"
+	}
 	if os.Getenv("ENV") == "production" || os.Getenv("ENV") == "prod" {
 		return true, "lax"
 	}
