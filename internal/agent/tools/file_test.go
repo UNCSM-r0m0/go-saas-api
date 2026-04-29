@@ -23,6 +23,10 @@ func (m *mockArtifactRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*model.Ar
 	return nil, nil
 }
 
+func (m *mockArtifactRepo) GetByName(_ context.Context, _, _ uuid.UUID, _ string) (*model.Artifact, error) {
+	return nil, nil
+}
+
 func (m *mockArtifactRepo) ListByConversation(_ context.Context, _, _ uuid.UUID) ([]model.Artifact, error) {
 	return nil, nil
 }

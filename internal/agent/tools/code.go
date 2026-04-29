@@ -28,6 +28,18 @@ func (c *CodeExecuteTool) Description() string {
 	return "Execute code in an isolated sandbox. Args: code (string), language (string)."
 }
 
+// Schema returns the JSON Schema for the tool's parameters.
+func (c *CodeExecuteTool) Schema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"code":     map[string]any{"type": "string", "description": "Code to execute"},
+			"language": map[string]any{"type": "string", "description": "Programming language (e.g., python, go, javascript)"},
+		},
+		"required": []string{"code"},
+	}
+}
+
 // Execute runs code in the sandbox and returns the output.
 func (c *CodeExecuteTool) Execute(ctx context.Context, args map[string]any) (Result, error) {
 	code, ok := args["code"].(string)

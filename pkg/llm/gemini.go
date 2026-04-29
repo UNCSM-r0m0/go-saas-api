@@ -122,6 +122,72 @@ func (c *GeminiClient) Stream(ctx context.Context, req Request) (<-chan Chunk, e
 	return ch, nil
 }
 
+// Complete sends a non-streaming request and returns the full response text.
+func (c *GeminiClient) Complete(ctx context.Context, req Request) (string, error) {
+	contents := make([]map[string]any, len(req.Messages))
+	for i, m := range req.Messages {
+		role := m.Role
+		if role == "system" {
+			role = "user"
+		}
+		if role == "assistant" {
+			role = "model"
+		}
+		contents[i] = map[string]any{
+			"role": role,
+			"parts": []map[string]any{
+				{"text": m.Content},
+			},
+		}
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"contents": contents,
+		"generationConfig": map[string]any{
+			"temperature":     req.Temperature,
+			"maxOutputTokens": req.MaxTokens,
+		},
+	})
+
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, req.Model, c.apiKey)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("gemini returned %d", resp.StatusCode)
+	}
+
+	var parsed struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return "", fmt.Errorf("decode response: %w", err)
+	}
+	if len(parsed.Candidates) == 0 {
+		return "", fmt.Errorf("no candidates in response")
+	}
+	var result string
+	for _, part := range parsed.Candidates[0].Content.Parts {
+		result += part.Text
+	}
+	return result, nil
+}
+
 // HealthCheck verifies connectivity to Gemini.
 func (c *GeminiClient) HealthCheck(ctx context.Context) error {
 	url := fmt.Sprintf("%s/v1beta/models?key=%s", c.baseURL, c.apiKey)

@@ -26,6 +26,10 @@ var AllowedContentTypes = map[string]bool{
 	"image/jpeg":             true,
 	"image/gif":              true,
 	"image/webp":             true,
+	// Document types (extracted via document-service)
+	"application/pdf":                                              true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":       true,
 }
 
 // Service provides business logic for file uploads.
@@ -165,6 +169,12 @@ func normalizeContentType(ct, filename string) string {
 		return "image/gif"
 	case ".webp":
 		return "image/webp"
+	case ".pdf":
+		return "application/pdf"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	}
 	if detected := mime.TypeByExtension(ext); detected != "" {
 		return detected

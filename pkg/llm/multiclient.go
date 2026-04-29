@@ -195,6 +195,59 @@ func (mc *MultiClient) runHealthChecks(ctx context.Context) {
 	}
 }
 
+// Complete sends a non-streaming request via the appropriate provider with fallback.
+func (mc *MultiClient) Complete(ctx context.Context, req Request) (string, error) {
+	mc.mu.RLock()
+	providerNames := make([]string, 0, len(mc.defaults)+1)
+	if preferred, ok := mc.modelMap[req.Model]; ok {
+		providerNames = append(providerNames, preferred)
+	}
+	for _, name := range mc.defaults {
+		if name != mc.modelMap[req.Model] {
+			providerNames = append(providerNames, name)
+		}
+	}
+	mc.mu.RUnlock()
+
+	if len(providerNames) == 0 {
+		return "", fmt.Errorf("no providers registered")
+	}
+
+	var lastErr error
+	var usedProvider string
+	for _, name := range providerNames {
+		mc.mu.RLock()
+		provider, ok := mc.providers[name]
+		mc.mu.RUnlock()
+		if !ok || !provider.Enabled || provider.Client == nil {
+			continue
+		}
+
+		result, err := provider.Client.Complete(ctx, req)
+		if err != nil {
+			lastErr = fmt.Errorf("provider %s: %w", name, err)
+			mc.recordFailure(name)
+			continue
+		}
+
+		usedProvider = name
+		mc.resetFailures(name)
+
+		if preferred, ok := mc.modelMap[req.Model]; ok && usedProvider != preferred {
+			mc.mu.Lock()
+			mc.fallbackCount++
+			mc.mu.Unlock()
+		}
+
+		return result, nil
+	}
+
+	if lastErr != nil {
+		return "", fmt.Errorf("all providers failed: %w", lastErr)
+	}
+	return "", fmt.Errorf("no available providers for model %s", req.Model)
+}
+
 // HealthCheck checks all registered providers.
 func (mc *MultiClient) HealthCheck(ctx context.Context) error {
 	mc.mu.RLock()

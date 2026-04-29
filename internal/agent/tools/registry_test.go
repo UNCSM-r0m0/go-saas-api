@@ -14,6 +14,9 @@ type mockTool struct {
 
 func (m *mockTool) Name() string        { return m.name }
 func (m *mockTool) Description() string { return m.description }
+func (m *mockTool) Schema() map[string]any {
+	return map[string]any{"type": "object", "properties": map[string]any{}}
+}
 func (m *mockTool) Execute(_ context.Context, _ map[string]any) (Result, error) {
 	return m.result, m.err
 }

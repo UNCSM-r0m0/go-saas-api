@@ -17,6 +17,12 @@ type mockTool struct {
 
 func (m mockTool) Name() string        { return m.name }
 func (m mockTool) Description() string { return m.desc }
+func (m mockTool) Schema() map[string]any {
+	return map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"msg": map[string]any{"type": "string"}},
+	}
+}
 func (m mockTool) Execute(_ context.Context, _ map[string]any) (tools.Result, error) {
 	return m.result, m.err
 }
@@ -49,8 +55,14 @@ func TestBuildRequest(t *testing.T) {
 	if req.Messages[0].Role != "system" {
 		t.Fatalf("expected first message role system, got %s", req.Messages[0].Role)
 	}
-	if !contains(req.Messages[0].Content, "file_write") {
-		t.Error("expected system prompt to mention file_write tool")
+	if contains(req.Messages[0].Content, "file_write") {
+		t.Error("expected system prompt NOT to mention file_write tool (native tool calling)")
+	}
+	if len(req.Tools) != 1 {
+		t.Fatalf("expected 1 tool definition, got %d", len(req.Tools))
+	}
+	if req.Tools[0].Function.Name != "file_write" {
+		t.Fatalf("expected tool name file_write, got %s", req.Tools[0].Function.Name)
 	}
 	if req.Messages[3].Content != "create html page" {
 		t.Fatalf("expected user message 'create html page', got %s", req.Messages[3].Content)
@@ -66,8 +78,8 @@ func TestBuildRequest_NoTools(t *testing.T) {
 	if len(req.Messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(req.Messages))
 	}
-	if contains(req.Messages[0].Content, "file_write") {
-		t.Error("did not expect tool mention when no tools provided")
+	if len(req.Tools) != 0 {
+		t.Error("did not expect tools when no tools provided")
 	}
 }
 

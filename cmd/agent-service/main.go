@@ -18,6 +18,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/store"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/internal/agent/websocket"
+	"github.com/r0lm0/go-saas-api/internal/document"
 	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
 	"github.com/r0lm0/go-saas-api/internal/platform/health"
@@ -266,10 +267,11 @@ func (s *Server) handleChatMessage(c *gin.Context) {
 	}
 
 	var req struct {
-		Content        string     `json:"content" binding:"required"`
-		Model          string     `json:"model"`
-		Context        string     `json:"context"`
-		ConversationID *uuid.UUID `json:"conversationId"`
+		Content        string      `json:"content" binding:"required"`
+		Model          string      `json:"model"`
+		Context        string      `json:"context"`
+		ConversationID *uuid.UUID  `json:"conversationId"`
+		FileIDs        []uuid.UUID `json:"fileIds"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
@@ -277,7 +279,7 @@ func (s *Server) handleChatMessage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, nil)
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, req.FileIDs)
 	if err != nil {
 		s.log.Error("chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "chat failed")
@@ -380,10 +382,11 @@ func (s *Server) handleChatMessageStream(c *gin.Context) {
 	}
 
 	var req struct {
-		Content        string     `json:"content" binding:"required"`
-		Model          string     `json:"model"`
-		Context        string     `json:"context"`
-		ConversationID *uuid.UUID `json:"conversationId"`
+		Content        string      `json:"content" binding:"required"`
+		Model          string      `json:"model"`
+		Context        string      `json:"context"`
+		ConversationID *uuid.UUID  `json:"conversationId"`
+		FileIDs        []uuid.UUID `json:"fileIds"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Header("Content-Type", "text/event-stream")
@@ -395,7 +398,7 @@ func (s *Server) handleChatMessageStream(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, nil)
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, req.FileIDs)
 	if err != nil {
 		s.log.Error("chat stream failed", logger.Error(err))
 		c.Header("Content-Type", "text/event-stream")
@@ -840,6 +843,16 @@ func main() {
 				Weight:  90,
 			})
 		}
+
+		if cfg.KimiAPIKey != "" {
+			multiClient.Register(llm.ProviderConfig{
+				Name:    "kimi",
+				Models:  []string{"kimi-k2-0711-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"},
+				Client:  llm.NewKimiClient(cfg.KimiAPIKey),
+				Enabled: true,
+				Weight:  95,
+			})
+		}
 	}
 
 	multiClient.StartHealthChecks(ctx, 30*time.Second)
@@ -857,7 +870,9 @@ func main() {
 
 	toolRegistry := tools.NewRegistry()
 	_ = toolRegistry.Register(tools.NewFileWriteTool(artStore))
+	_ = toolRegistry.Register(tools.NewReadFileTool(artStore))
 	_ = toolRegistry.Register(tools.NewCodeExecuteTool(tools.NewHTTPSandboxClient(cfg.SandboxServiceURL)))
+	_ = toolRegistry.Register(tools.NewWebSearchTool())
 
 	sessions := runtime.NewSessionManager(convStore, msgStore)
 
@@ -865,7 +880,12 @@ func main() {
 	fileService := fileupload.NewService(fileStore, cfg.UploadPath, cfg.MaxUploadSize)
 	fileHandler := fileupload.NewHandler(fileService, log)
 
-	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, fileService)
+	var docClient *document.Client
+	if cfg.DocumentServiceURL != "" {
+		docClient = document.NewClient(cfg.DocumentServiceURL)
+	}
+
+	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, fileService, docClient)
 
 	// WebSocket manager
 	wsManager := websocket.NewManager(orchestrator, log)

@@ -72,6 +72,9 @@ func (m *memArtifactRepo) Create(_ context.Context, art *model.Artifact) error {
 func (m *memArtifactRepo) GetByID(_ context.Context, _, id uuid.UUID) (*model.Artifact, error) {
 	return m.arts[id], nil
 }
+func (m *memArtifactRepo) GetByName(_ context.Context, _, _ uuid.UUID, _ string) (*model.Artifact, error) {
+	return nil, nil
+}
 func (m *memArtifactRepo) ListByConversation(_ context.Context, _, _ uuid.UUID) ([]model.Artifact, error) {
 	return nil, nil
 }
@@ -80,7 +83,8 @@ var _ repository.ArtifactRepo = (*memArtifactRepo)(nil)
 
 type memAgentRepo struct{}
 
-func (m *memAgentRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*model.Agent, error) { return nil, nil }
+func (m *memAgentRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*model.Agent, error)  { return nil, nil }
+func (m *memAgentRepo) GetByRole(_ context.Context, _ uuid.UUID, _ model.AgentRole) (*model.Agent, error) { return nil, nil }
 func (m *memAgentRepo) GetDefault(_ context.Context, _ uuid.UUID) (*model.Agent, error) { return nil, nil }
 
 var _ repository.AgentRepo = (*memAgentRepo)(nil)
@@ -101,6 +105,17 @@ func (m *mockLLM) Stream(_ context.Context, _ llm.Request) (<-chan llm.Chunk, er
 		}
 	}()
 	return ch, m.err
+}
+
+func (m *mockLLM) Complete(_ context.Context, _ llm.Request) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	var result string
+	for _, c := range m.chunks {
+		result += c.Content
+	}
+	return result, nil
 }
 
 func (m *mockLLM) HealthCheck(_ context.Context) error { return nil }
@@ -128,7 +143,7 @@ func setupTestServer() *Server {
 
 	registry := tools.NewRegistry()
 	sessions := runtime.NewSessionManager(convRepo, msgRepo)
-	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, nil)
+	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
 
 	multiClient := llm.NewMultiClient()
 	wsManager := websocket.NewManager(orch, log)

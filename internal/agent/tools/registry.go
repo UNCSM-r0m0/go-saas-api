@@ -15,6 +15,7 @@ type Result struct {
 type Tool interface {
 	Name() string
 	Description() string
+	Schema() map[string]any
 	Execute(ctx context.Context, args map[string]any) (Result, error)
 }
 

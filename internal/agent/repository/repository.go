@@ -26,11 +26,13 @@ type MessageRepo interface {
 type ArtifactRepo interface {
 	Create(ctx context.Context, art *model.Artifact) error
 	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*model.Artifact, error)
+	GetByName(ctx context.Context, tenantID, conversationID uuid.UUID, name string) (*model.Artifact, error)
 	ListByConversation(ctx context.Context, tenantID, conversationID uuid.UUID) ([]model.Artifact, error)
 }
 
 // AgentRepo handles agent definitions.
 type AgentRepo interface {
 	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*model.Agent, error)
+	GetByRole(ctx context.Context, tenantID uuid.UUID, role model.AgentRole) (*model.Agent, error)
 	GetDefault(ctx context.Context, tenantID uuid.UUID) (*model.Agent, error)
 }

@@ -87,6 +87,46 @@ func (c *OllamaClient) Stream(ctx context.Context, req Request) (<-chan Chunk, e
 	return ch, nil
 }
 
+// Complete sends a non-streaming request and returns the full response text.
+func (c *OllamaClient) Complete(ctx context.Context, req Request) (string, error) {
+	body, _ := json.Marshal(map[string]any{
+		"model":    req.Model,
+		"messages": req.Messages,
+		"stream":   false,
+		"options": map[string]any{
+			"temperature": req.Temperature,
+			"num_predict": req.MaxTokens,
+		},
+	})
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/chat", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ollama returned %d", resp.StatusCode)
+	}
+
+	var parsed struct {
+		Message struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return "", fmt.Errorf("decode response: %w", err)
+	}
+	return parsed.Message.Content, nil
+}
+
 // HealthCheck verifies connectivity to Ollama.
 func (c *OllamaClient) HealthCheck(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/api/tags", nil)

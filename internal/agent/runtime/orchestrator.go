@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -12,27 +11,32 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/prompts"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/document"
 	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
 // Orchestrator routes messages through classification → LLM → tools → response.
 type Orchestrator struct {
-	llmClient llm.Client
-	registry  *tools.Registry
-	sessions  *SessionManager
-	agentRepo repository.AgentRepo
-	fileSvc   *fileupload.Service
+	llmClient     llm.Client
+	registry      *tools.Registry
+	sessions      *SessionManager
+	agentRepo     repository.AgentRepo
+	fileSvc       *fileupload.Service
+	docClient     *document.Client
+	classifier    *LLMClassifier
 }
 
 // NewOrchestrator creates a new chat orchestrator.
-func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, fileSvc *fileupload.Service) *Orchestrator {
+func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, fileSvc *fileupload.Service, docClient *document.Client) *Orchestrator {
 	return &Orchestrator{
-		llmClient: client,
-		registry:  registry,
-		sessions:  sessions,
-		agentRepo: agentRepo,
-		fileSvc:   fileSvc,
+		llmClient:  client,
+		registry:   registry,
+		sessions:   sessions,
+		agentRepo:  agentRepo,
+		fileSvc:    fileSvc,
+		docClient:  docClient,
+		classifier: NewLLMClassifier(client),
 	}
 }
 
@@ -69,8 +73,18 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 		return nil, fmt.Errorf("load history: %w", err)
 	}
 
-	// 4. Classify intent
-	role := Classify(content)
+	// 4. Classify intent with LLM, fallback to keyword matching
+	var role model.AgentRole
+	if o.classifier != nil {
+		classifiedRole, err := o.classifier.Classify(ctx, content)
+		if err != nil {
+			role = ClassifyKeyword(content)
+		} else {
+			role = classifiedRole
+		}
+	} else {
+		role = ClassifyKeyword(content)
+	}
 
 	// 5. Resolve agent
 	agent, err := o.resolveAgent(ctx, tenantID, role)
@@ -107,8 +121,12 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 	go func() {
 		defer close(outCh)
 		var assistantContent strings.Builder
+		var toolCall *llm.ToolCall
 		for chunk := range llmCh {
 			assistantContent.WriteString(chunk.Content)
+			if chunk.ToolCall != nil {
+				toolCall = chunk.ToolCall
+			}
 			select {
 			case outCh <- chunk:
 			case <-ctx.Done():
@@ -119,22 +137,21 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 			}
 		}
 
-		// 9. Parse tool calls from accumulated content
-		toolResult, hasTool := o.parseToolCall(assistantContent.String())
-		if hasTool {
+		// 9. Execute native tool call if present
+		if toolCall != nil {
 			// Inject tool context
 			toolCtx := context.WithValue(ctx, "tenant_id", tenantID)
 			toolCtx = context.WithValue(toolCtx, "conversation_id", conversationID)
-			res, err := o.registry.Execute(toolCtx, toolResult.Name, toolResult.Arguments)
+			res, err := o.registry.Execute(toolCtx, toolCall.Name, toolCall.Arguments)
 			if err != nil {
 				res.Error = err.Error()
 			}
 			resultChunk := llm.Chunk{
-				Content: fmt.Sprintf("\n[Tool %s result: %s]", toolResult.Name, res.Content),
+				Content: fmt.Sprintf("\n[Tool %s result: %s]", toolCall.Name, res.Content),
 				Done:    true,
 			}
 			if res.Error != "" {
-				resultChunk.Content = fmt.Sprintf("\n[Tool %s error: %s]", toolResult.Name, res.Error)
+				resultChunk.Content = fmt.Sprintf("\n[Tool %s error: %s]", toolCall.Name, res.Error)
 			}
 			select {
 			case outCh <- resultChunk:
@@ -154,11 +171,11 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 			Model:          agent.Model,
 			CreatedAt:      time.Now(),
 		}
-		if hasTool {
+		if toolCall != nil {
 			assistantMsg.ToolCalls = []model.ToolCall{{
 				ID:        uuid.New().String(),
-				Name:      toolResult.Name,
-				Arguments: toolResult.Arguments,
+				Name:      toolCall.Name,
+				Arguments: toolCall.Arguments,
 			}}
 		}
 		_ = o.sessions.AddMessage(ctx, assistantMsg)
@@ -168,8 +185,17 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 }
 
 func (o *Orchestrator) resolveAgent(ctx context.Context, tenantID uuid.UUID, role model.AgentRole) (*model.Agent, error) {
-	// TODO: lookup specialized agent by role from agentRepo
-	// For now, return a default agent based on role
+	// Try to get specialized agent from DB
+	agent, err := o.agentRepo.GetByRole(ctx, tenantID, role)
+	if err == nil && agent != nil {
+		return agent, nil
+	}
+
+	// Fallback to default agent
+	return o.createDefaultAgent(role), nil
+}
+
+func (o *Orchestrator) createDefaultAgent(role model.AgentRole) *model.Agent {
 	agent := &model.Agent{
 		ID:    uuid.New(),
 		Name:  string(role),
@@ -186,32 +212,7 @@ func (o *Orchestrator) resolveAgent(ctx context.Context, tenantID uuid.UUID, rol
 	default:
 		agent.SystemPrompt = prompts.Conversational()
 	}
-	return agent, nil
-}
-
-type inlineToolCall struct {
-	Name      string         `json:"tool"`
-	Arguments map[string]any `json:"args"`
-}
-
-func (o *Orchestrator) parseToolCall(content string) (*inlineToolCall, bool) {
-	startMarker := "TOOL_CALL:"
-	endMarker := ":END_TOOL_CALL"
-	start := strings.Index(content, startMarker)
-	end := strings.Index(content, endMarker)
-	if start == -1 || end == -1 || end <= start {
-		return nil, false
-	}
-	jsonStr := strings.TrimSpace(content[start+len(startMarker) : end])
-	var tc inlineToolCall
-	if err := json.Unmarshal([]byte(jsonStr), &tc); err != nil {
-		return nil, false
-	}
-	if tc.Name == "" {
-		return nil, false
-	}
-	_, ok := o.registry.Get(tc.Name)
-	return &tc, ok
+	return agent
 }
 
 func (o *Orchestrator) buildFileContext(ctx context.Context, tenantID uuid.UUID, fileIDs []uuid.UUID) (string, error) {
@@ -221,10 +222,44 @@ func (o *Orchestrator) buildFileContext(ctx context.Context, tenantID uuid.UUID,
 		if err != nil {
 			continue
 		}
-		text, err := o.fileSvc.ReadText(upload)
+		
+		var text string
+		
+		// Try to read as text first
+		text, err = o.fileSvc.ReadText(upload)
 		if err != nil {
-			continue
+			// Not a text file - try document extraction service
+			if o.docClient != nil {
+				file, err := o.fileSvc.Open(upload)
+				if err != nil {
+					continue
+				}
+				defer file.Close()
+				
+				var result *document.ExtractResponse
+				switch upload.ContentType {
+				case "application/pdf":
+					result, err = o.docClient.ExtractPDF(ctx, upload.OriginalName, file)
+				case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+					result, err = o.docClient.ExtractDOCX(ctx, upload.OriginalName, file)
+				case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+					result, err = o.docClient.ExtractXLSX(ctx, upload.OriginalName, file)
+				case "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif":
+					result, err = o.docClient.ExtractImage(ctx, upload.OriginalName, upload.ContentType, file)
+				default:
+					continue
+				}
+				
+				if err != nil {
+					parts = append(parts, fmt.Sprintf("--- File: %s ---\n[Error extracting content: %v]", upload.OriginalName, err))
+					continue
+				}
+				text = result.Text
+			} else {
+				continue
+			}
 		}
+		
 		if len(text) > 10000 {
 			text = text[:10000] + "\n...[truncated]"
 		}

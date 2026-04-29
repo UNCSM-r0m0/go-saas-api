@@ -26,6 +26,17 @@ func (m *mockClient) Stream(_ context.Context, _ Request) (<-chan Chunk, error) 
 	return ch, nil
 }
 
+func (m *mockClient) Complete(_ context.Context, _ Request) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	var result string
+	for _, c := range m.chunks {
+		result += c.Content
+	}
+	return result, nil
+}
+
 func (m *mockClient) HealthCheck(_ context.Context) error { return nil }
 
 func TestMultiClient_RegisterAndList(t *testing.T) {

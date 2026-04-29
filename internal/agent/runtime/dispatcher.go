@@ -1,9 +1,6 @@
 package runtime
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
@@ -17,19 +14,6 @@ func BuildRequest(agent *model.Agent, history []model.Message, userMessage strin
 	systemContent := agent.SystemPrompt
 	if systemContent == "" {
 		systemContent = string(agent.Role)
-	}
-
-	// Append available tools to system prompt
-	if len(toolList) > 0 {
-		var desc strings.Builder
-		desc.WriteString("\n\nYou have access to the following tools:\n")
-		for _, t := range toolList {
-			desc.WriteString(fmt.Sprintf("- %s: %s\n", t.Name(), t.Description()))
-		}
-		desc.WriteString("\nTo use a tool, respond exactly with:\n" +
-			"TOOL_CALL: {\"tool\":\"name\",\"args\":{...}} :END_TOOL_CALL\n" +
-			"Otherwise respond normally.")
-		systemContent += desc.String()
 	}
 
 	messages = append(messages, llm.Message{Role: "system", Content: systemContent})
@@ -47,9 +31,23 @@ func BuildRequest(agent *model.Agent, history []model.Message, userMessage strin
 	// User message
 	messages = append(messages, llm.Message{Role: "user", Content: userMessage})
 
+	// Build tool definitions
+	var toolDefs []llm.ToolDefinition
+	for _, t := range toolList {
+		toolDefs = append(toolDefs, llm.ToolDefinition{
+			Type: "function",
+			Function: llm.FunctionSchema{
+				Name:        t.Name(),
+				Description: t.Description(),
+				Parameters:  t.Schema(),
+			},
+		})
+	}
+
 	return llm.Request{
 		Model:       agent.Model,
 		Messages:    messages,
+		Tools:       toolDefs,
 		Temperature: 0.7,
 		MaxTokens:   4096,
 		Stream:      true,

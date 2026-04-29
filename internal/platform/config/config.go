@@ -46,9 +46,12 @@ type Config struct {
 	OpenAIBaseURL  string `mapstructure:"OPENAI_BASE_URL"`
 	GeminiAPIKey   string `mapstructure:"GEMINI_API_KEY"`
 	DeepSeekAPIKey string `mapstructure:"DEEPSEEK_API_KEY"`
-	LMStudioURL    string `mapstructure:"LM_STUDIO_URL"`
-	LMStudioAPIKey string `mapstructure:"LM_STUDIO_API_KEY"`
-	SandboxServiceURL string `mapstructure:"SANDBOX_SERVICE_URL"`
+	LMStudioURL       string `mapstructure:"LM_STUDIO_URL"`
+	LMStudioAPIKey    string `mapstructure:"LM_STUDIO_API_KEY"`
+	KimiAPIKey        string `mapstructure:"KIMI_API_KEY"`
+	KimiBaseURL       string `mapstructure:"KIMI_BASE_URL"`
+	SandboxServiceURL    string `mapstructure:"SANDBOX_SERVICE_URL"`
+	DocumentServiceURL   string `mapstructure:"DOCUMENT_SERVICE_URL"`
 
 	// Frontend / Public URL
 	FrontendURL string `mapstructure:"FRONTEND_URL"`
@@ -68,6 +71,10 @@ type Config struct {
 	// File Upload
 	UploadPath     string `mapstructure:"UPLOAD_PATH"`
 	MaxUploadSize  int64  `mapstructure:"MAX_UPLOAD_SIZE"`
+
+	// Sandbox & NATS
+	SandboxRateLimit  int  `mapstructure:"SANDBOX_RATE_LIMIT"`
+	NATSEventsEnabled bool `mapstructure:"NATS_EVENTS_ENABLED"`
 
 	// SMTP / Email
 	SMTPHost     string `mapstructure:"SMTP_HOST"`
@@ -104,7 +111,10 @@ func Load() (*Config, error) {
 		DeepSeekAPIKey:    getEnv("DEEPSEEK_API_KEY", ""),
 		LMStudioURL:       getEnv("LM_STUDIO_URL", ""),
 		LMStudioAPIKey:    getEnv("LM_STUDIO_API_KEY", ""),
-		SandboxServiceURL: getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
+		KimiAPIKey:        getEnv("KIMI_API_KEY", ""),
+		KimiBaseURL:       getEnv("KIMI_BASE_URL", "https://api.kimi.com/coding/v1"),
+		SandboxServiceURL:  getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
+		DocumentServiceURL: getEnv("DOCUMENT_SERVICE_URL", "http://localhost:3007"),
 		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:5173"),
 		PublicURL:         getEnv("PUBLIC_URL", "http://localhost:3000"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://localhost:3002"),
@@ -116,6 +126,8 @@ func Load() (*Config, error) {
 		PremiumMessageLimit:    getInt("PREMIUM_USER_MESSAGE_LIMIT", 100),
 		UploadPath:            getEnv("UPLOAD_PATH", "./uploads"),
 		MaxUploadSize:         getInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+		SandboxRateLimit:      getInt("SANDBOX_RATE_LIMIT", 5),
+		NATSEventsEnabled:     getEnv("NATS_EVENTS_ENABLED", "true") == "true",
 		SMTPHost:              getEnv("SMTP_HOST", ""),
 		SMTPPort:              getEnv("SMTP_PORT", "587"),
 		SMTPUser:              getEnv("SMTP_USER", ""),
