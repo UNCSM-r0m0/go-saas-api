@@ -15,7 +15,9 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/health"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/nats"
 	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
+	natsio "github.com/nats-io/nats.go"
 )
 
 func main() {
@@ -44,13 +46,25 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// NATS connection (optional)
+	var nc *natsio.Conn
+	if cfg.NATSEventsEnabled {
+		var err error
+		nc, err = nats.NewConn(cfg.NATSURL)
+		if err != nil {
+			log.Warn("failed to connect to nats, continuing without events", logger.Error(err))
+		} else {
+			defer nc.Close()
+		}
+	}
+
 	// Billing wiring
 	store := billing.NewPostgresBillingStore(pgPool)
-	billingService := billing.NewBillingService(store, store, cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.FrontendURL)
+	billingService := billing.NewBillingService(store, store, cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.FrontendURL, nc)
 	billingHandler := billing.NewHandler(billingService)
 
 	// Health checker
-	hc := health.NewChecker(pgPool, nil, nil)
+	hc := health.NewChecker(pgPool, nil, nc)
 
 	r := gin.New()
 	r.Use(gin.Recovery())

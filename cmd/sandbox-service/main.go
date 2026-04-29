@@ -35,7 +35,7 @@ func main() {
 		w.Write([]byte(`{"status":"ok","service":"sandbox-service"}`))
 	})
 
-	http.HandleFunc("/execute", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/sandbox/execute", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return

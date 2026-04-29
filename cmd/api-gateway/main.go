@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -24,10 +27,12 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/health"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
+	"github.com/r0lm0/go-saas-api/internal/platform/nats"
 	"github.com/r0lm0/go-saas-api/internal/platform/postgres"
 	"github.com/r0lm0/go-saas-api/internal/platform/ratelimit"
 	"github.com/r0lm0/go-saas-api/internal/platform/redis"
 	"github.com/r0lm0/go-saas-api/pkg/jwt"
+	natsio "github.com/nats-io/nats.go"
 )
 
 func main() {
@@ -84,6 +89,40 @@ func main() {
 	apiKeyStore := apikey.NewPostgresStore(pgPool)
 	apiKeyService := apikey.NewService(apiKeyStore)
 
+	// NATS consumer for cache invalidation
+	if cfg.NATSEventsEnabled {
+		nc, err := nats.NewConn(cfg.NATSURL)
+		if err != nil {
+			log.Warn("failed to connect to nats, continuing without events", logger.Error(err))
+		} else {
+			defer nc.Close()
+			// Subscribe to usage.recorded and subscription.changed
+		_, _ = nc.Subscribe("usage.recorded", func(msg *natsio.Msg) {
+			var event struct {
+				TenantID string `json:"tenant_id"`
+				UserID   string `json:"user_id"`
+			}
+			if err := json.Unmarshal(msg.Data, &event); err == nil {
+				key := fmt.Sprintf("tier:%s:%s", event.TenantID, event.UserID)
+				_ = redisClient.Del(context.Background(), key).Err()
+				log.Info("nats: invalidated cache", logger.String("key", key))
+			}
+		})
+		_, _ = nc.Subscribe("subscription.changed", func(msg *natsio.Msg) {
+			var event struct {
+				TenantID string `json:"tenant_id"`
+				UserID   string `json:"user_id"`
+			}
+			if err := json.Unmarshal(msg.Data, &event); err == nil {
+				key := fmt.Sprintf("tier:%s:%s", event.TenantID, event.UserID)
+				_ = redisClient.Del(context.Background(), key).Err()
+				log.Info("nats: invalidated cache", logger.String("key", key))
+			}
+		})
+			log.Info("nats cache invalidation consumer started")
+		}
+	}
+
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID())
@@ -114,6 +153,8 @@ func main() {
 		v1.POST("/auth/login", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.POST("/auth/refresh", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.POST("/auth/logout", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.POST("/auth/forgot-password", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		v1.POST("/auth/reset-password", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.GET("/auth/google", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.GET("/auth/google/callback", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		v1.GET("/auth/github", proxyTo(cfg.AuthServiceURL, "/api/v1"))
@@ -131,14 +172,18 @@ func main() {
 		v1.GET("/chat/models", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 		v1.GET("/models/public", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 
-		// Agent routes: optional auth (JWT or API key) + rate limit
-		// Anonymous users get free tier (IP-based); authenticated get tier from DB
+		// Agent routes: require auth (JWT or API key) + rate limit
+		// The agent-service requires X-Tenant-ID / X-User-ID on all chat endpoints.
 		agent := v1.Group("")
-		agent.Use(middleware.APIKeyAuth(apiKeyService))
-		agent.Use(middleware.JWTAuthOptional(jwtMgr))
+		agent.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
 		agent.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
-			agent.Any("/agent/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			// WebSocket upgrade at v1 level (avoids Gin wildcard conflict with /agent/*path)
+			v1.GET("/agent/ws",
+				middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService),
+				middleware.RateLimit(rateLimiter, cfg, log, tierResolver),
+				proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.POST("/agent/chat", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			agent.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			// r3-chat frontend chat routes (explicit to avoid conflict with /chat/models)
@@ -160,6 +205,30 @@ func main() {
 			apiKeys.Any("/api-keys/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		}
 
+		// Sandbox routes (JWT or API key + strict sandbox rate limit + 15s timeout)
+		sandbox := v1.Group("/sandbox")
+		sandbox.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
+		sandbox.Use(middleware.SandboxRateLimit(rateLimiter, cfg, log))
+		sandbox.Use(middleware.RequestTimeout(15 * time.Second))
+		{
+			sandbox.Any("/*path", proxyTo(cfg.SandboxServiceURL, "/api/v1/sandbox"))
+		}
+
+		// Document routes (JWT or API key + rate limit)
+		documents := v1.Group("")
+		documents.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
+		documents.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
+		{
+			documents.POST("/files/upload", uploadSizeCheck(cfg.MaxUploadSize), proxyTo(cfg.DocumentServiceURL, "/api/v1"))
+			documents.GET("/documents/:id", proxyTo(cfg.DocumentServiceURL, "/api/v1"))
+		}
+
+		// Usage stats route (JWT or API key + rate limit)
+		v1.GET("/chat/usage/stats",
+			middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService),
+			middleware.RateLimit(rateLimiter, cfg, log, tierResolver),
+			proxyToWithPrefix(cfg.UsageServiceURL, "/api/v1", "/usage"))
+
 		// Protected service routes (JWT or API key required + rate limit)
 		protected := v1.Group("")
 		protected.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
@@ -170,10 +239,10 @@ func main() {
 			protected.Any("/files", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/files/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
-			// r3-chat frontend billing routes
-			protected.Any("/stripe/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
-			protected.Any("/subscriptions", proxyTo(cfg.BillingServiceURL, "/api/v1"))
-			protected.Any("/subscriptions/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
+			// r3-chat frontend billing routes — billing service registers these under /billing
+			protected.Any("/stripe/*path", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
+			protected.Any("/subscriptions", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
+			protected.Any("/subscriptions/*path", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
 			protected.Any("/usage/*path", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 		}
 	}
@@ -209,6 +278,11 @@ func main() {
 
 // proxyTo creates a reverse proxy to a target service, optionally stripping a path prefix
 func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
+	return proxyToWithPrefix(targetURL, stripPrefix, "")
+}
+
+// proxyToWithPrefix creates a reverse proxy that strips a prefix and adds another prefix.
+func proxyToWithPrefix(targetURL, stripPrefix, addPrefix string) gin.HandlerFunc {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		panic(fmt.Sprintf("invalid target URL %s: %v", targetURL, err))
@@ -225,11 +299,15 @@ func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
 				req.URL.Path = "/"
 			}
 		}
+		if addPrefix != "" {
+			req.URL.Path = addPrefix + req.URL.Path
+		}
 	}
 
 	// Inject auth context from Gin into outgoing request headers
 	// so downstream services receive X-User-ID / X-Tenant-ID even
 	// when the client only sent an Authorization header.
+	// For unauthenticated requests, inject X-Anonymous-ID (anonymousId from body or ClientIP).
 	injectAuth := func(c *gin.Context) {
 		if uid, ok := c.Get("user_id"); ok && uid != "" {
 			c.Request.Header.Set("X-User-ID", fmt.Sprintf("%v", uid))
@@ -240,6 +318,25 @@ func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
 		if role, ok := c.Get("role"); ok && role != "" {
 			c.Request.Header.Set("X-User-Role", fmt.Sprintf("%v", role))
 		}
+		// Anonymous identification for unauthenticated requests
+		if _, ok := c.Get("user_id"); !ok {
+			anonID := extractAnonymousID(c)
+			if anonID != "" {
+				c.Request.Header.Set("X-Anonymous-ID", anonID)
+			}
+		}
+	}
+
+	// Remove CORS headers from backend response so the gateway's CORS
+	// middleware is the single source of truth and avoids duplicates.
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		resp.Header.Del("Access-Control-Allow-Origin")
+		resp.Header.Del("Access-Control-Allow-Methods")
+		resp.Header.Del("Access-Control-Allow-Headers")
+		resp.Header.Del("Access-Control-Allow-Credentials")
+		resp.Header.Del("Access-Control-Expose-Headers")
+		resp.Header.Del("Access-Control-Max-Age")
+		return nil
 	}
 
 	// Error handler for proxy failures
@@ -251,6 +348,42 @@ func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		injectAuth(c)
 		proxy.ServeHTTP(c.Writer, c.Request)
+	}
+}
+
+// extractAnonymousID extracts an anonymous identifier from the request body or falls back to ClientIP.
+func extractAnonymousID(c *gin.Context) string {
+	// Try to read anonymousId from JSON body (best effort)
+	if c.Request.Body != nil && c.Request.ContentLength > 0 {
+		body, err := io.ReadAll(c.Request.Body)
+		if err == nil && len(body) > 0 {
+			var payload struct {
+				AnonymousID string `json:"anonymousId"`
+			}
+			if json.Unmarshal(body, &payload) == nil && payload.AnonymousID != "" {
+				// Restore body so downstream handlers can read it again
+				c.Request.Body = io.NopCloser(bytes.NewReader(body))
+				return payload.AnonymousID
+			}
+			// Restore body even if parsing failed
+			c.Request.Body = io.NopCloser(bytes.NewReader(body))
+		}
+	}
+	return c.ClientIP()
+}
+
+// uploadSizeCheck returns a middleware that validates Content-Length against max size.
+// It returns 413 before proxying if the upload exceeds the limit.
+func uploadSizeCheck(maxSize int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.ContentLength > maxSize {
+			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error":       "upload too large",
+				"max_size_mb": maxSize / (1024 * 1024),
+			})
+			return
+		}
+		c.Next()
 	}
 }
 

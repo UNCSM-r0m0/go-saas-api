@@ -123,7 +123,7 @@ func setupService() (*BillingService, *mockPlanRepo, *mockSubRepo) {
 		},
 	}}
 	subs := &mockSubRepo{subs: make(map[uuid.UUID]*Subscription)}
-	svc := NewBillingService(plans, subs, "sk_test_key", "whsec_secret", "http://localhost:5173")
+	svc := NewBillingService(plans, subs, "sk_test_key", "whsec_secret", "http://localhost:5173", nil)
 	return svc, plans, subs
 }
 

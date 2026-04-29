@@ -1,22 +1,25 @@
 ﻿package billing
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	natsio "github.com/nats-io/nats.go"
 )
 
 // UsageHandler holds HTTP handlers for usage endpoints.
 type UsageHandler struct {
 	usageRepo UsageRepository
 	plans     PlanRepository
+	natsConn  *natsio.Conn
 }
 
 // NewUsageHandler creates a new usage handler.
-func NewUsageHandler(usageRepo UsageRepository, plans PlanRepository) *UsageHandler {
-	return &UsageHandler{usageRepo: usageRepo, plans: plans}
+func NewUsageHandler(usageRepo UsageRepository, plans PlanRepository, nc *natsio.Conn) *UsageHandler {
+	return &UsageHandler{usageRepo: usageRepo, plans: plans, natsConn: nc}
 }
 
 // RegisterRoutes registers usage routes.
@@ -118,6 +121,20 @@ func (h *UsageHandler) handleTrackUsage(c *gin.Context) {
 		req.TokensInput, req.TokensOutput, req.CostUSD); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Publish usage.recorded event if NATS is enabled
+	if h.natsConn != nil {
+		event := map[string]interface{}{
+			"tenant_id":     req.TenantID.String(),
+			"user_id":       req.UserID.String(),
+			"tokens_input":  req.TokensInput,
+			"tokens_output": req.TokensOutput,
+			"cost_usd":      req.CostUSD,
+			"timestamp":     time.Now().UTC().Format(time.RFC3339),
+		}
+		data, _ := json.Marshal(event)
+		_ = h.natsConn.Publish("usage.recorded", data)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"status": "tracked"})

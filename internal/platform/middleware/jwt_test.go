@@ -119,3 +119,51 @@ func TestJWTAuthOptional_NoToken(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "false")
 }
+
+func TestExtractToken_WebSocketQueryParam(t *testing.T) {
+	r, mgr := setupJWTRouter()
+	r.GET("/ws", JWTAuth(mgr), func(c *gin.Context) {
+		c.Status(http.StatusSwitchingProtocols)
+	})
+
+	token, _ := mgr.GenerateToken("user-ws", "tenant-ws", "member", time.Hour)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ws?token="+token, nil)
+	req.Header.Set("Upgrade", "websocket")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusSwitchingProtocols, w.Code)
+}
+
+func TestExtractToken_QueryParamWithoutUpgradeHeader(t *testing.T) {
+	r, mgr := setupJWTRouter()
+	r.GET("/ws", JWTAuth(mgr), func(c *gin.Context) {
+		c.Status(http.StatusSwitchingProtocols)
+	})
+
+	token, _ := mgr.GenerateToken("user-ws", "tenant-ws", "member", time.Hour)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ws?token="+token, nil)
+	// No Upgrade header
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "missing authorization")
+}
+
+func TestExtractToken_InvalidWebSocketQueryParam(t *testing.T) {
+	r, mgr := setupJWTRouter()
+	r.GET("/ws", JWTAuth(mgr), func(c *gin.Context) {
+		c.Status(http.StatusSwitchingProtocols)
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ws?token=invalid-token", nil)
+	req.Header.Set("Upgrade", "websocket")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid token")
+}

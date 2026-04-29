@@ -25,15 +25,16 @@ type ToolCall struct {
 
 // Message is a single turn in a conversation.
 type Message struct {
-	ID             uuid.UUID  `json:"id"`
-	TenantID       uuid.UUID  `json:"tenant_id"`
-	ConversationID uuid.UUID  `json:"conversation_id"`
+	ID             uuid.UUID   `json:"id"`
+	TenantID       uuid.UUID   `json:"tenant_id"`
+	ConversationID uuid.UUID   `json:"conversation_id"`
 	Role           MessageRole `json:"role"`
-	Content        string     `json:"content"`
-	ToolCalls      []ToolCall `json:"tool_calls,omitempty"`
-	Model          string     `json:"model,omitempty"`
-	TokensInput    int        `json:"tokens_input,omitempty"`
-	TokensOutput   int        `json:"tokens_output,omitempty"`
-	LatencyMs      int        `json:"latency_ms,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
+	Content        string      `json:"content"`
+	ToolCalls      []ToolCall  `json:"tool_calls,omitempty"`
+	FileIDs        []uuid.UUID `json:"file_ids,omitempty"`
+	Model          string      `json:"model,omitempty"`
+	TokensInput    int         `json:"tokens_input,omitempty"`
+	TokensOutput   int         `json:"tokens_output,omitempty"`
+	LatencyMs      int         `json:"latency_ms,omitempty"`
+	CreatedAt      time.Time   `json:"created_at"`
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	natsio "github.com/nats-io/nats.go"
 	"github.com/stripe/stripe-go/v81"
 	portal "github.com/stripe/stripe-go/v81/billingportal/session"
 	"github.com/stripe/stripe-go/v81/checkout/session"
@@ -17,15 +18,16 @@ import (
 
 // BillingService handles Stripe integration and subscription logic.
 type BillingService struct {
-	plans        PlanRepository
-	subs         SubscriptionRepository
-	stripeKey    string
+	plans         PlanRepository
+	subs          SubscriptionRepository
+	stripeKey     string
 	webhookSecret string
-	frontendURL  string
+	frontendURL   string
+	natsConn      *natsio.Conn
 }
 
 // NewBillingService creates a new billing service.
-func NewBillingService(plans PlanRepository, subs SubscriptionRepository, stripeKey, webhookSecret, frontendURL string) *BillingService {
+func NewBillingService(plans PlanRepository, subs SubscriptionRepository, stripeKey, webhookSecret, frontendURL string, nc *natsio.Conn) *BillingService {
 	stripe.Key = stripeKey
 	return &BillingService{
 		plans:         plans,
@@ -33,6 +35,7 @@ func NewBillingService(plans PlanRepository, subs SubscriptionRepository, stripe
 		stripeKey:     stripeKey,
 		webhookSecret: webhookSecret,
 		frontendURL:   frontendURL,
+		natsConn:      nc,
 	}
 }
 
@@ -168,6 +171,21 @@ func (s *BillingService) HandleWebhook(ctx context.Context, p WebhookPayload) er
 	return nil
 }
 
+func (s *BillingService) publishSubscriptionChanged(tenantID, userID uuid.UUID, planSlug, status string) {
+	if s.natsConn == nil {
+		return
+	}
+	event := map[string]interface{}{
+		"tenant_id": tenantID.String(),
+		"user_id":   userID.String(),
+		"plan_slug": planSlug,
+		"status":    status,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+	data, _ := json.Marshal(event)
+	_ = s.natsConn.Publish("subscription.changed", data)
+}
+
 func (s *BillingService) handleCheckoutCompleted(ctx context.Context, event stripe.Event) error {
 	var sess stripe.CheckoutSession
 	if err := json.Unmarshal(event.Data.Raw, &sess); err != nil {
@@ -188,7 +206,11 @@ func (s *BillingService) handleCheckoutCompleted(ctx context.Context, event stri
 	sub.StripeSubscriptionID = sess.Subscription.ID
 	sub.Status = string(stripe.SubscriptionStatusActive)
 	sub.UpdatedAt = time.Now().UTC()
-	return s.subs.UpdateSubscription(ctx, sub)
+	if err := s.subs.UpdateSubscription(ctx, sub); err != nil {
+		return err
+	}
+	s.publishSubscriptionChanged(sub.TenantID, sub.UserID, "premium", sub.Status)
+	return nil
 }
 
 func (s *BillingService) handleInvoicePaid(ctx context.Context, event stripe.Event) error {
@@ -210,7 +232,11 @@ func (s *BillingService) handleInvoicePaid(ctx context.Context, event stripe.Eve
 
 	sub.Status = string(stripe.SubscriptionStatusActive)
 	sub.UpdatedAt = time.Now().UTC()
-	return s.subs.UpdateSubscription(ctx, sub)
+	if err := s.subs.UpdateSubscription(ctx, sub); err != nil {
+		return err
+	}
+	s.publishSubscriptionChanged(sub.TenantID, sub.UserID, "premium", sub.Status)
+	return nil
 }
 
 func (s *BillingService) handleSubscriptionUpdated(ctx context.Context, event stripe.Event) error {
@@ -238,7 +264,11 @@ func (s *BillingService) handleSubscriptionUpdated(ctx context.Context, event st
 	}
 	sub.CancelAtPeriodEnd = stripeSub.CancelAtPeriodEnd
 	sub.UpdatedAt = time.Now().UTC()
-	return s.subs.UpdateSubscription(ctx, sub)
+	if err := s.subs.UpdateSubscription(ctx, sub); err != nil {
+		return err
+	}
+	s.publishSubscriptionChanged(sub.TenantID, sub.UserID, "premium", sub.Status)
+	return nil
 }
 
 func (s *BillingService) handleSubscriptionDeleted(ctx context.Context, event stripe.Event) error {
@@ -256,7 +286,11 @@ func (s *BillingService) handleSubscriptionDeleted(ctx context.Context, event st
 	}
 
 	now := time.Now().UTC()
-	return s.subs.CancelSubscription(ctx, sub.ID, now, false)
+	if err := s.subs.CancelSubscription(ctx, sub.ID, now, false); err != nil {
+		return err
+	}
+	s.publishSubscriptionChanged(sub.TenantID, sub.UserID, "free", "cancelled")
+	return nil
 }
 
 // CreatePortalSession creates a Stripe customer portal session.

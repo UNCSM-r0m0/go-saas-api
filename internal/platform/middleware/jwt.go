@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -20,15 +22,37 @@ func extractToken(c *gin.Context) (string, bool) {
 
 	// 2. Fall back to Authorization header
 	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		return "", false
+	if authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			return "", true // malformed
+		}
+		return parts[1], false
 	}
 
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-		return "", true // malformed
+	// 3. Final fallback: query param for WebSocket upgrades
+	if strings.ToLower(c.GetHeader("Upgrade")) == "websocket" {
+		if token := c.Query("token"); token != "" {
+			return token, false
+		}
 	}
-	return parts[1], false
+
+	return "", false
+}
+
+// Debug log helper — logs to stderr in dev so we can trace auth issues without
+// requiring a logger dependency in this low-level middleware.
+func debugAuthLog(c *gin.Context, msg string) {
+	// Only log when ENV != production to avoid leaking info in prod.
+	if os.Getenv("ENV") == "production" || os.Getenv("ENV") == "prod" {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[gateway-auth-debug] %s | path=%s | cookie_present=%v | header_present=%v\n",
+		msg,
+		c.Request.URL.Path,
+		c.GetHeader("Cookie") != "",
+		c.GetHeader("Authorization") != "",
+	)
 }
 
 // setAuthContext stores JWT claims in the Gin context and response headers.
@@ -45,6 +69,7 @@ func JWTAuth(jwtMgr *jwt.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, malformed := extractToken(c)
 		if token == "" {
+			debugAuthLog(c, "JWTAuth: no token found")
 			if malformed {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
 			} else {
@@ -55,6 +80,7 @@ func JWTAuth(jwtMgr *jwt.Manager) gin.HandlerFunc {
 
 		claims, err := jwtMgr.ValidateToken(token)
 		if err != nil {
+			debugAuthLog(c, fmt.Sprintf("JWTAuth: token validation failed: %v", err))
 			if err == jwt.ErrExpiredToken {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
 				return
@@ -63,6 +89,7 @@ func JWTAuth(jwtMgr *jwt.Manager) gin.HandlerFunc {
 			return
 		}
 
+		debugAuthLog(c, fmt.Sprintf("JWTAuth: success uid=%s", claims.UserID))
 		setAuthContext(c, claims)
 		c.Next()
 	}
@@ -73,16 +100,19 @@ func JWTAuthOptional(jwtMgr *jwt.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, _ := extractToken(c)
 		if token == "" {
+			debugAuthLog(c, "JWTAuthOptional: no token, continuing as anonymous")
 			c.Next()
 			return
 		}
 
 		claims, err := jwtMgr.ValidateToken(token)
 		if err != nil {
+			debugAuthLog(c, fmt.Sprintf("JWTAuthOptional: token invalid (%v), continuing as anonymous", err))
 			c.Next()
 			return
 		}
 
+		debugAuthLog(c, fmt.Sprintf("JWTAuthOptional: success uid=%s", claims.UserID))
 		setAuthContext(c, claims)
 		c.Next()
 	}

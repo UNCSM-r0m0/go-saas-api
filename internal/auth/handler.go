@@ -26,9 +26,16 @@ func NewHandler(service *Service, log logger.Logger) *Handler {
 // cookieConfig returns the appropriate cookie settings based on environment.
 // When PUBLIC_URL uses HTTPS (e.g. Cloudflare Tunnel), we need SameSite=None + Secure
 // so cookies work across different domains (frontend vs API).
+// In local development (localhost/127.0.0.1), frontend and API run on different
+// ports (cross-origin). SameSite=Lax blocks cookies on AJAX/fetch cross-origin
+// requests, so we also use None+Secure for localhost. Chrome/Edge allow Secure
+// cookies over http://localhost; Firefox may need about:config exception.
 func cookieConfig() (secure bool, sameSite string) {
 	publicURL := os.Getenv("PUBLIC_URL")
 	if strings.HasPrefix(publicURL, "https://") {
+		return true, "none"
+	}
+	if strings.Contains(publicURL, "localhost") || strings.Contains(publicURL, "127.0.0.1") {
 		return true, "none"
 	}
 	if os.Getenv("ENV") == "production" || os.Getenv("ENV") == "prod" {

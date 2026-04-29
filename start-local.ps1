@@ -4,7 +4,32 @@
 
 $ErrorActionPreference = "Stop"
 $root = "D:\WORKSPACES\GO\go-saas-api"
-$frontend = "D:\WORKSPACES\NESTJS\chat\r3-chat"
+$frontend = "$root\r3-chat"
+
+# ===================================================================
+# MATAR PROCESOS VIEJOS (para que tomen .env actualizado)
+# ===================================================================
+Write-Host "Deteniendo servicios anteriores..."
+
+$serviceNames = @("auth-service", "agent-service", "billing-service", "usage-service", "sandbox-service", "api-gateway")
+foreach ($svc in $serviceNames) {
+    $procs = Get-Process -Name $svc -ErrorAction SilentlyContinue
+    if ($procs) {
+        $procs | Stop-Process -Force
+        Write-Host "  Parado $svc"
+    }
+}
+
+# Matar node/npm del frontend (si hay)
+$nodeProcs = Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -like "*r3-chat*" -or $_.CommandLine -like "*vite*"
+}
+if ($nodeProcs) {
+    $nodeProcs | Stop-Process -Force
+    Write-Host "  Parado frontend (node/vite)"
+}
+
+Start-Sleep -Milliseconds 500
 
 # Cargar variables de entorno desde .env
 $envFile = "$root\.env"
@@ -25,9 +50,40 @@ if (Test-Path $envFile) {
     Write-Host "WARN: .env no encontrado en $envFile"
 }
 
-# Crear carpeta de logs
+# Crear carpeta de logs y tmp
 $logDir = "$root\logs"
+$tmpDir = "$root\tmp"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+
+# ===================================================================
+# RECOMPILAR SERVICIOS (para que .env se compile si es necesario)
+# ===================================================================
+Write-Host "Recompilando servicios Go..."
+$services = @(
+    @{ Name="auth-service";   Path="cmd/auth-service" },
+    @{ Name="agent-service";  Path="cmd/agent-service" },
+    @{ Name="billing-service"; Path="cmd/billing-service" },
+    @{ Name="usage-service";  Path="cmd/usage-service" },
+    @{ Name="sandbox-service"; Path="cmd/sandbox-service" },
+    @{ Name="api-gateway";    Path="cmd/api-gateway" }
+)
+
+foreach ($svc in $services) {
+    $out = "$tmpDir\$($svc.Name).exe"
+    $src = "$root\$($svc.Path)"
+    if (Test-Path $src) {
+        Write-Host "  BUILD $($svc.Name)"
+        go build -o $out $src 2>&1 | Out-Null
+        if (-not (Test-Path $out)) {
+            Write-Host "  ERROR: fallo compilacion de $($svc.Name)"
+        }
+    } else {
+        Write-Host "  WARN: no se encontro $src"
+    }
+}
+
+Write-Host "Compilacion finalizada."
 
 # Verificar que infraestructura este corriendo
 Write-Host "Verificando infraestructura..."
@@ -89,6 +145,7 @@ Write-Host ""
 Write-Host "Levantando frontend (r3-chat)..."
 $frontendLog = "$logDir\frontend.log"
 $frontendErr = "$logDir\frontend.err.log"
+
 Start-Process -FilePath "cmd" -ArgumentList "/c","npm","run","dev" -WorkingDirectory $frontend -WindowStyle Hidden -RedirectStandardOutput $frontendLog -RedirectStandardError $frontendErr
 
 Write-Host ""
