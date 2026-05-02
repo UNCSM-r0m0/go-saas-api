@@ -80,20 +80,28 @@ func (s *OAuthService) GetGoogleAuthURL(ctx context.Context) (string, error) {
 func (s *OAuthService) HandleGoogleCallback(ctx context.Context, code, state string) (*TokenPair, *User, error) {
 	valid, err := s.stateStore.ValidateState(ctx, state)
 	if err != nil || !valid {
+		fmt.Println("[AUTH] Google callback: invalid state, err:", err, "valid:", valid)
 		return nil, nil, fmt.Errorf("invalid state")
 	}
 
 	token, err := s.googleCfg.Exchange(ctx, code)
 	if err != nil {
+		fmt.Println("[AUTH] Google callback: exchange code failed:", err)
 		return nil, nil, fmt.Errorf("exchange code: %w", err)
 	}
 
 	userInfo, err := s.fetchGoogleUserInfo(ctx, token.AccessToken)
 	if err != nil {
+		fmt.Println("[AUTH] Google callback: fetch user info failed:", err)
 		return nil, nil, fmt.Errorf("fetch user info: %w", err)
 	}
 
-	return s.findOrCreateOAuthUser(ctx, "google", userInfo.ID, userInfo.Email, userInfo.Name)
+	fmt.Println("[AUTH] Google callback: user info fetched, email:", userInfo.Email)
+	pair, user, err := s.findOrCreateOAuthUser(ctx, "google", userInfo.ID, userInfo.Email, userInfo.Name)
+	if err != nil {
+		fmt.Println("[AUTH] Google callback: findOrCreateOAuthUser failed:", err)
+	}
+	return pair, user, err
 }
 
 // GetGitHubAuthURL returns the URL to redirect the user to for GitHub OAuth

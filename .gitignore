@@ -30,9 +30,19 @@ Thumbs.db
 
 # Logs
 *.log
+*.err
+logs/
+log_*.err
+
+# Binaries directory
+bin/
 
 # Docker
 .dockerignore
+
+# Test files
+test_body*.json
+postman-collection.json
 
 # Temporary
 tmp/

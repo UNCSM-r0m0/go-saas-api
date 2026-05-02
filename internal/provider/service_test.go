@@ -105,7 +105,7 @@ func (m *memStore) DeleteModel(_ context.Context, _, id uuid.UUID) error {
 
 func TestCreateProvider(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
 	tenantID := uuid.New()
 	p, err := svc.CreateProvider(context.Background(), tenantID, "OpenAI", ProviderOpenAI, "https://api.openai.com", "sk-test", 100, true)
@@ -122,7 +122,7 @@ func TestCreateProvider(t *testing.T) {
 
 func TestListProviders(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
 	tenantID := uuid.New()
 	_, _ = svc.CreateProvider(context.Background(), tenantID, "Ollama", ProviderOllama, "http://localhost:11434", "", 50, true)
@@ -139,7 +139,7 @@ func TestListProviders(t *testing.T) {
 
 func TestUpdateProvider(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
 	tenantID := uuid.New()
 	p, _ := svc.CreateProvider(context.Background(), tenantID, "OpenAI", ProviderOpenAI, "https://api.openai.com", "sk-test", 100, true)
@@ -158,7 +158,7 @@ func TestUpdateProvider(t *testing.T) {
 
 func TestDeleteProvider(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
 	tenantID := uuid.New()
 	p, _ := svc.CreateProvider(context.Background(), tenantID, "Gemini", ProviderGemini, "https://gemini.googleapis.com", "", 80, true)
@@ -175,7 +175,7 @@ func TestDeleteProvider(t *testing.T) {
 
 func TestCreateModel(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
 	tenantID := uuid.New()
 	providerID := uuid.New()
@@ -193,7 +193,7 @@ func TestCreateModel(t *testing.T) {
 
 func TestListModelsByProvider(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
 	tenantID := uuid.New()
 	providerID := uuid.New()
@@ -211,7 +211,7 @@ func TestListModelsByProvider(t *testing.T) {
 
 func TestDeleteModel(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
 	tenantID := uuid.New()
 	providerID := uuid.New()

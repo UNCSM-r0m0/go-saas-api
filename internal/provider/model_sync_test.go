@@ -69,7 +69,7 @@ func TestSyncModels_Ollama(t *testing.T) {
 		models: []AIModel{},
 	}
 
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 	result, err := svc.SyncModels(context.Background(), store.provider.TenantID, store.provider.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Added)
@@ -98,17 +98,28 @@ func TestSyncModels_LMStudio(t *testing.T) {
 		models: []AIModel{},
 	}
 
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 	result, err := svc.SyncModels(context.Background(), store.provider.TenantID, store.provider.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.Added)
 	assert.Equal(t, 0, result.Removed)
 	require.Len(t, store.created, 2)
-	assert.Equal(t, "qwen2-vl-7b", store.created[0].Name)
-	assert.True(t, store.created[0].SupportsImages) // vlm type
-	assert.Equal(t, "llama-3.1-8b", store.created[1].Name)
-	assert.False(t, store.created[1].SupportsImages)
-	assert.Equal(t, 131072, store.created[1].ContextWindow)
+
+	// Build map since order is non-deterministic (Go map iteration)
+	createdMap := make(map[string]AIModel)
+	for _, m := range store.created {
+		createdMap[m.Name] = m
+	}
+
+	qwen, ok := createdMap["qwen2-vl-7b"]
+	require.True(t, ok, "qwen2-vl-7b should be created")
+	assert.True(t, qwen.SupportsImages) // vlm type
+	assert.Equal(t, 32768, qwen.ContextWindow)
+
+	llama, ok := createdMap["llama-3.1-8b"]
+	require.True(t, ok, "llama-3.1-8b should be created")
+	assert.False(t, llama.SupportsImages)
+	assert.Equal(t, 131072, llama.ContextWindow)
 }
 
 func TestSyncModels_DeactivatesMissing(t *testing.T) {
@@ -133,7 +144,7 @@ func TestSyncModels_DeactivatesMissing(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 	result, err := svc.SyncModels(context.Background(), store.provider.TenantID, store.provider.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Added)

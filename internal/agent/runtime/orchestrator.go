@@ -41,7 +41,7 @@ func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *Sess
 }
 
 // Chat handles a single user turn and returns a stream of chunks.
-func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID) (<-chan llm.Chunk, error) {
+func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string) (<-chan llm.Chunk, error) {
 	// 1. Ensure conversation exists
 	var conversationID uuid.UUID
 	if convID != nil {
@@ -90,6 +90,9 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 	agent, err := o.resolveAgent(ctx, tenantID, role)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent: %w", err)
+	}
+	if selectedModel != "" {
+		agent.Model = selectedModel
 	}
 
 	// 6. Attach file contents if provided
@@ -200,7 +203,7 @@ func (o *Orchestrator) createDefaultAgent(role model.AgentRole) *model.Agent {
 		ID:    uuid.New(),
 		Name:  string(role),
 		Role:  role,
-		Model: "qwen2.5-coder:7b",
+		Model: "qwen2.5-coder:3b",
 	}
 	switch role {
 	case model.RoleCoder:

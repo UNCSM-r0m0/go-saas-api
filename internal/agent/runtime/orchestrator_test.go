@@ -115,7 +115,7 @@ func TestOrchestrator_Chat(t *testing.T) {
 	tenantID := uuid.New()
 	userID := uuid.New()
 
-	ch, err := orch.Chat(ctx, tenantID, userID, nil, "hi there", nil)
+	ch, err := orch.Chat(ctx, tenantID, userID, nil, "hi there", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), uuid.New(), nil, "ping", nil)
+	ch, err := orch.Chat(ctx, uuid.New(), uuid.New(), nil, "ping", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), uuid.New(), nil, "ping", nil)
+	ch, err := orch.Chat(ctx, uuid.New(), uuid.New(), nil, "ping", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestOrchestrator_resolveAgent_FallbackToDefault(t *testing.T) {
 	if agent.Role != model.RoleCoder {
 		t.Fatalf("expected role coder, got %s", agent.Role)
 	}
-	if agent.Model != "qwen2.5-coder:7b" {
+	if agent.Model != "qwen2.5-coder:3b" {
 		t.Fatalf("expected default model, got %s", agent.Model)
 	}
 	if agent.SystemPrompt == "" {

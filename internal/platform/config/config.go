@@ -38,6 +38,9 @@ type Config struct {
 	StripeWebhookSecret  string `mapstructure:"STRIPE_WEBHOOK_SECRET"`
 	StripePremiumPriceID string `mapstructure:"STRIPE_PREMIUM_PRICE_ID"`
 
+	// Encryption
+	MasterEncryptionKey string `mapstructure:"MASTER_ENCRYPTION_KEY"`
+
 	// AI Providers
 	OllamaURL      string `mapstructure:"OLLAMA_URL"`
 	OllamaProxyURL string `mapstructure:"OLLAMA_PROXY_URL"`
@@ -50,6 +53,8 @@ type Config struct {
 	LMStudioAPIKey    string `mapstructure:"LM_STUDIO_API_KEY"`
 	KimiAPIKey        string `mapstructure:"KIMI_API_KEY"`
 	KimiBaseURL       string `mapstructure:"KIMI_BASE_URL"`
+	OpenCodeAPIKey    string `mapstructure:"OPENCODE_API_KEY"`
+	OpenCodeBaseURL   string `mapstructure:"OPENCODE_BASE_URL"`
 	SandboxServiceURL    string `mapstructure:"SANDBOX_SERVICE_URL"`
 	DocumentServiceURL   string `mapstructure:"DOCUMENT_SERVICE_URL"`
 
@@ -102,6 +107,7 @@ func Load() (*Config, error) {
 		StripeSecretKey:   getEnv("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		StripePremiumPriceID: getEnv("STRIPE_PREMIUM_PRICE_ID", ""),
+		MasterEncryptionKey: getEnv("MASTER_ENCRYPTION_KEY", ""),
 		OllamaURL:         getEnv("OLLAMA_URL", "http://localhost:11434"),
 		OllamaProxyURL:    getEnv("OLLAMA_PROXY_URL", ""),
 		OllamaProxyKey:    getEnv("OLLAMA_PROXY_API_KEY", ""),
@@ -113,6 +119,8 @@ func Load() (*Config, error) {
 		LMStudioAPIKey:    getEnv("LM_STUDIO_API_KEY", ""),
 		KimiAPIKey:        getEnv("KIMI_API_KEY", ""),
 		KimiBaseURL:       getEnv("KIMI_BASE_URL", "https://api.kimi.com/coding/v1"),
+		OpenCodeAPIKey:    getEnv("OPENCODE_API_KEY", ""),
+		OpenCodeBaseURL:   getEnv("OPENCODE_BASE_URL", "https://opencode.ai/zen/go/v1"),
 		SandboxServiceURL:  getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
 		DocumentServiceURL: getEnv("DOCUMENT_SERVICE_URL", "http://localhost:3007"),
 		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:5173"),

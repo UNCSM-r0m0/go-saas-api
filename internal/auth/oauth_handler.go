@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -56,7 +57,7 @@ func (h *OAuthHandler) GoogleCallback(c *gin.Context) {
 	pair, _, err := h.oauthService.HandleGoogleCallback(c.Request.Context(), code, state)
 	if err != nil {
 		h.log.Error("google callback failed", logger.Error(err))
-		response.Error(c, http.StatusUnauthorized, "oauth callback failed")
+		response.Error(c, http.StatusUnauthorized, fmt.Sprintf("oauth callback failed: %v", err))
 		return
 	}
 

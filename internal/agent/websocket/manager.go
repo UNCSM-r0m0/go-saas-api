@@ -215,7 +215,7 @@ func (c *Client) handleChat(msg Message) {
 	c.cancelGen = cancel
 	c.mu.Unlock()
 
-	streamCh, err := c.manager.orch.Chat(ctx, c.tenantID, c.userID, msg.ConversationID, msg.Content, msg.FileIDs)
+	streamCh, err := c.manager.orch.Chat(ctx, c.tenantID, c.userID, msg.ConversationID, msg.Content, msg.FileIDs, msg.Model)
 	if err != nil {
 		c.sendError(fmt.Sprintf("chat failed: %v", err))
 		c.clearCancel()

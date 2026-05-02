@@ -17,6 +17,7 @@ const (
 	ProviderKimi      ProviderType = "kimi"
 	ProviderLMStudio  ProviderType = "lmstudio"
 	ProviderAnthropic ProviderType = "anthropic"
+	ProviderOpenCode  ProviderType = "opencode"
 	ProviderCustom    ProviderType = "custom"
 )
 

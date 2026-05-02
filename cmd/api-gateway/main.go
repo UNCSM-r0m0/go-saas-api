@@ -234,10 +234,11 @@ func main() {
 		protected.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
 		protected.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
-			protected.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			protected.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			protected.Any("/files", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			protected.Any("/files/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		protected.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		protected.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		// Note: /files/upload is registered above in documents group
+		// protected.Any("/files", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		// protected.Any("/files/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			// r3-chat frontend billing routes — billing service registers these under /billing
 			protected.Any("/stripe/*path", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))

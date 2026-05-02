@@ -21,6 +21,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/document"
 	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
+	"github.com/r0lm0/go-saas-api/internal/platform/crypto"
 	"github.com/r0lm0/go-saas-api/internal/platform/health"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
@@ -279,7 +280,7 @@ func (s *Server) handleChatMessage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, req.FileIDs)
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, req.FileIDs, req.Model)
 	if err != nil {
 		s.log.Error("chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "chat failed")
@@ -398,7 +399,7 @@ func (s *Server) handleChatMessageStream(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, req.FileIDs)
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, req.FileIDs, req.Model)
 	if err != nil {
 		s.log.Error("chat stream failed", logger.Error(err))
 		c.Header("Content-Type", "text/event-stream")
@@ -467,6 +468,7 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 	var req struct {
 		ConversationID *uuid.UUID   `json:"conversation_id"`
 		Message        string       `json:"message" binding:"required"`
+		Model          string       `json:"model"`
 		FileIDs        []uuid.UUID  `json:"file_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -475,7 +477,7 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Message, req.FileIDs)
+	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Message, req.FileIDs, req.Model)
 	if err != nil {
 		s.log.Error("chat failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "chat failed"})
@@ -766,6 +768,13 @@ func main() {
 	log := logger.New(cfg.LogLevel)
 	defer log.Sync()
 
+	// Master encryption key
+	masterKey := cfg.MasterEncryptionKey
+	if masterKey == "" {
+		masterKey = "go-saas-api-dev-master-key-32!"
+		log.Warn("MASTER_ENCRYPTION_KEY not set, using default development key. THIS MUST BE CHANGED IN PRODUCTION!")
+	}
+
 	log.Info("starting agent-service",
 		logger.String("port", cfg.Port),
 		logger.String("env", cfg.Env),
@@ -796,63 +805,22 @@ func main() {
 
 	// Provider management
 	providerStore := provider.NewPostgresStore(pgPool)
-	providerLoader := NewProviderLoader(providerStore, multiClient)
+	providerLoader := NewProviderLoader(providerStore, multiClient, masterKey)
 
 	ctx = context.Background()
-	if err := providerLoader.LoadAll(ctx); err != nil {
-		log.Warn("failed to load providers from database, using env fallback", logger.Error(err))
+
+	// Migrate API keys from .env to database (encrypted) — idempotent
+	if err := migrateProviderKeysFromEnv(ctx, providerStore, masterKey, cfg, log); err != nil {
+		log.Warn("failed to migrate provider keys from env", logger.Error(err))
 	}
 
-	// Fallback: if no providers loaded from DB, register from env
+	if err := providerLoader.LoadAll(ctx); err != nil {
+		log.Warn("failed to load providers from database", logger.Error(err))
+	}
+
+	// Fallback: warn strongly if no providers are loaded. Never use .env keys here.
 	if len(multiClient.ListProviders()) == 0 {
-		// Register Ollama (local, always available if URL set)
-		multiClient.Register(llm.ProviderConfig{
-			Name:    "ollama",
-			Models:  []string{"qwen2.5-coder:7b", "deepseek-r1:7b", "llama3.2:3b"},
-			Client:  llm.NewOllamaClient(cfg.OllamaURL),
-			Enabled: cfg.OllamaURL != "",
-			Weight:  50,
-		})
-
-		if cfg.OpenAIAPIKey != "" {
-			multiClient.Register(llm.ProviderConfig{
-				Name:    "openai",
-				Models:  []string{"gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"},
-				Client:  llm.NewOpenAIClient(cfg.OpenAIAPIKey),
-				Enabled: true,
-				Weight:  100,
-			})
-		}
-
-		if cfg.GeminiAPIKey != "" {
-			multiClient.Register(llm.ProviderConfig{
-				Name:    "gemini",
-				Models:  []string{"gemini-1.5-flash", "gemini-1.5-pro"},
-				Client:  llm.NewGeminiClient(cfg.GeminiAPIKey),
-				Enabled: true,
-				Weight:  80,
-			})
-		}
-
-		if cfg.DeepSeekAPIKey != "" {
-			multiClient.Register(llm.ProviderConfig{
-				Name:    "deepseek",
-				Models:  []string{"deepseek-chat", "deepseek-coder"},
-				Client:  llm.NewDeepSeekClient(cfg.DeepSeekAPIKey),
-				Enabled: true,
-				Weight:  90,
-			})
-		}
-
-		if cfg.KimiAPIKey != "" {
-			multiClient.Register(llm.ProviderConfig{
-				Name:    "kimi",
-				Models:  []string{"kimi-k2-0711-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"},
-				Client:  llm.NewKimiClient(cfg.KimiAPIKey),
-				Enabled: true,
-				Weight:  95,
-			})
-		}
+		log.Warn("CRITICAL: No providers loaded from database. Chat will NOT work. Please configure providers via the admin API or database.")
 	}
 
 	multiClient.StartHealthChecks(ctx, 30*time.Second)
@@ -860,7 +828,7 @@ func main() {
 	llmClient := llm.Client(multiClient)
 
 	// Provider admin service
-	providerService := provider.NewService(providerStore)
+	providerService := provider.NewService(providerStore, masterKey)
 	providerHandler := provider.NewHandler(providerService, log)
 
 	convStore := store.NewConversationStore(pgPool)
@@ -929,4 +897,92 @@ func main() {
 	}
 
 	log.Info("agent-service exited")
+}
+
+// migrateProviderKeysFromEnv performs an idempotent migration:
+//   1. Encrypts any existing plaintext API keys in the database.
+//   2. Updates Kimi and OpenCode providers with keys from .env if the DB entry is empty.
+func migrateProviderKeysFromEnv(ctx context.Context, store provider.Store, masterKey string, cfg *config.Config, log logger.Logger) error {
+	providers, err := store.ListAllActiveProviders(ctx)
+	if err != nil {
+		return fmt.Errorf("list providers: %w", err)
+	}
+
+	for _, p := range providers {
+		if p.APIKeyEncrypted == nil || *p.APIKeyEncrypted == "" {
+			continue
+		}
+
+		// Try to decrypt. If it fails, the key is plaintext and needs encryption.
+		_, err := crypto.Decrypt(*p.APIKeyEncrypted, masterKey)
+		if err == nil {
+			// Already encrypted, nothing to do.
+			continue
+		}
+
+		// Plaintext detected — encrypt it.
+		encrypted, err := crypto.Encrypt(*p.APIKeyEncrypted, masterKey)
+		if err != nil {
+			log.Warn("failed to encrypt plaintext API key for provider", logger.String("provider", p.Name), logger.Error(err))
+			continue
+		}
+
+		p.APIKeyEncrypted = &encrypted
+		// tenantID is required by UpdateProvider; use the provider's own tenant.
+		if err := store.UpdateProvider(ctx, p.TenantID, &p); err != nil {
+			log.Warn("failed to update encrypted API key for provider", logger.String("provider", p.Name), logger.Error(err))
+			continue
+		}
+		log.Info("migrated plaintext API key to encrypted", logger.String("provider", p.Name))
+	}
+
+	// Update specific providers from .env if their DB key is still empty.
+	envKeys := map[string]struct {
+		key     string
+		baseURL string
+		models  []string
+	}{
+		"kimi": {
+			key:     cfg.KimiAPIKey,
+			baseURL: cfg.KimiBaseURL,
+			models:  []string{"kimi-k2-0711-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"},
+		},
+		"opencode": {
+			key:     cfg.OpenCodeAPIKey,
+			baseURL: cfg.OpenCodeBaseURL,
+			models:  []string{"glm-5.1", "glm-5", "kimi-k2.5", "kimi-k2.6", "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2.5-pro", "mimo-v2.5", "minimax-m2.7", "minimax-m2.5", "qwen3.6-plus", "qwen3.5-plus"},
+		},
+	}
+
+	for _, p := range providers {
+		spec, ok := envKeys[string(p.Type)]
+		if !ok || spec.key == "" {
+			continue
+		}
+
+		// Only update if the current key is empty or was plaintext (we already encrypted those above).
+		if p.APIKeyEncrypted != nil && *p.APIKeyEncrypted != "" {
+			// Verify it's actually encrypted
+			_, err := crypto.Decrypt(*p.APIKeyEncrypted, masterKey)
+			if err == nil {
+				continue // Already has valid encrypted key
+			}
+		}
+
+		encrypted, err := crypto.Encrypt(spec.key, masterKey)
+		if err != nil {
+			log.Warn("failed to encrypt env API key for provider", logger.String("provider", p.Name), logger.Error(err))
+			continue
+		}
+
+		p.APIKeyEncrypted = &encrypted
+		p.BaseURL = spec.baseURL
+		if err := store.UpdateProvider(ctx, p.TenantID, &p); err != nil {
+			log.Warn("failed to update provider from env", logger.String("provider", p.Name), logger.Error(err))
+			continue
+		}
+		log.Info("migrated API key from .env to database", logger.String("provider", p.Name))
+	}
+
+	return nil
 }

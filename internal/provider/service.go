@@ -9,16 +9,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/platform/crypto"
 )
 
 // Service provides business logic for AI provider management.
 type Service struct {
-	store Store
+	store     Store
+	masterKey string
 }
 
 // NewService creates a new provider service.
-func NewService(store Store) *Service {
-	return &Service{store: store}
+func NewService(store Store, masterKey string) *Service {
+	return &Service{store: store, masterKey: masterKey}
 }
 
 // CreateProvider creates a new AI provider.
@@ -37,7 +39,11 @@ func (s *Service) CreateProvider(ctx context.Context, tenantID uuid.UUID, name s
 		UpdatedAt: time.Now(),
 	}
 	if apiKey != "" {
-		p.APIKeyEncrypted = &apiKey // TODO: encrypt with AES-256
+		encrypted, err := crypto.EncryptAPIKey(apiKey, s.masterKey)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt api key: %w", err)
+		}
+		p.APIKeyEncrypted = &encrypted
 		hash := hashString(apiKey)
 		p.APIKeyHash = &hash
 	}
@@ -80,7 +86,11 @@ func (s *Service) UpdateProvider(ctx context.Context, tenantID uuid.UUID, id uui
 	p.IsPublic = isPublic
 	p.UpdatedAt = time.Now()
 	if apiKey != "" {
-		p.APIKeyEncrypted = &apiKey // TODO: encrypt with AES-256
+		encrypted, err := crypto.EncryptAPIKey(apiKey, s.masterKey)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt api key: %w", err)
+		}
+		p.APIKeyEncrypted = &encrypted
 		hash := hashString(apiKey)
 		p.APIKeyHash = &hash
 	}
