@@ -208,18 +208,20 @@ func TestOpenAICompatibleClient_Stream_ToolCall(t *testing.T) {
 	var result string
 	var toolCall *ToolCall
 	for chunk := range ch {
-		if chunk.Done && chunk.ToolCall != nil {
+		result += chunk.Content
+		if chunk.ToolCall != nil {
 			toolCall = chunk.ToolCall
+		}
+		if chunk.Done {
 			break
 		}
-		result += chunk.Content
 	}
 
 	if result != "I will " {
 		t.Fatalf("expected 'I will ', got %q", result)
 	}
 	if toolCall == nil {
-		t.Fatal("expected tool call in final chunk")
+		t.Fatal("expected tool call in stream")
 	}
 	if toolCall.Name != "echo" {
 		t.Fatalf("expected tool name echo, got %s", toolCall.Name)

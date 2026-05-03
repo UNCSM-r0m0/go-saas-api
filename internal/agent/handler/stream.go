@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
 func (h *Handler) handleChatMessageStream(c *gin.Context) {
@@ -42,17 +43,7 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 		conversationID = req.ConversationID.String()
 	}
 
-	for chunk := range streamCh {
-		data := fmt.Sprintf("data: {\"content\":%q,\"finished\":%v,\"conversationId\":%q}\n\n",
-			chunk.Content, chunk.Done, conversationID)
-		_, _ = c.Writer.Write([]byte(data))
-		if flusher, ok := c.Writer.(http.Flusher); ok {
-			flusher.Flush()
-		}
-		if chunk.Done {
-			break
-		}
-	}
+	writeSSEAgentLoop(c, streamCh, conversationID)
 
 	if conversationID == "" {
 		convs, err := h.convRepo.ListByUser(ctx, userID, 1, 0)
@@ -94,9 +85,37 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 
 	writeSSEHeaders(c)
 
+	var conversationID string
+	if req.ConversationID != nil {
+		conversationID = req.ConversationID.String()
+	}
+
+	writeSSEAgentLoop(c, streamCh, conversationID)
+}
+
+func writeSSEAgentLoop(c *gin.Context, streamCh <-chan llm.Chunk, conversationID string) {
 	for chunk := range streamCh {
-		data := fmt.Sprintf("data: {\"content\":%q,\"done\":%v}\n\n", chunk.Content, chunk.Done)
-		_, _ = c.Writer.Write([]byte(data))
+		switch chunk.Event {
+		case "tool_start":
+			data := fmt.Sprintf("data: {\"event\":\"tool_start\",\"toolName\":%q,\"toolCallId\":%q,\"conversationId\":%q}\n\n",
+				chunk.ToolName, chunk.ToolCall.ID, conversationID)
+			_, _ = c.Writer.Write([]byte(data))
+		case "tool_result":
+			data := fmt.Sprintf("data: {\"event\":\"tool_result\",\"toolName\":%q,\"content\":%q,\"conversationId\":%q}\n\n",
+				chunk.ToolName, chunk.Content, conversationID)
+			_, _ = c.Writer.Write([]byte(data))
+		case "error":
+			data := fmt.Sprintf("data: {\"event\":\"error\",\"content\":%q,\"conversationId\":%q}\n\n",
+				chunk.Content, conversationID)
+			_, _ = c.Writer.Write([]byte(data))
+		default:
+			// Regular content chunk
+			if chunk.Content != "" || chunk.Done {
+				data := fmt.Sprintf("data: {\"content\":%q,\"finished\":%v,\"conversationId\":%q}\n\n",
+					chunk.Content, chunk.Done, conversationID)
+				_, _ = c.Writer.Write([]byte(data))
+			}
+		}
 		if flusher, ok := c.Writer.(http.Flusher); ok {
 			flusher.Flush()
 		}

@@ -16,7 +16,6 @@ import (
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
-// Orchestrator routes messages through classification → LLM → tools → response.
 type Orchestrator struct {
 	llmClient  llm.Client
 	registry   *tools.Registry
@@ -27,7 +26,6 @@ type Orchestrator struct {
 	classifier *LLMClassifier
 }
 
-// NewOrchestrator creates a new chat orchestrator.
 func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, fileSvc *fileupload.Service, docClient *document.Client) *Orchestrator {
 	return &Orchestrator{
 		llmClient:  client,
@@ -40,9 +38,7 @@ func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *Sess
 	}
 }
 
-// Chat handles a single user turn and returns a stream of chunks.
 func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string) (<-chan llm.Chunk, error) {
-	// 1. Ensure conversation exists
 	var conversationID uuid.UUID
 	if convID != nil {
 		conversationID = *convID
@@ -54,7 +50,6 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		conversationID = conv.ID
 	}
 
-	// 2. Save user message
 	userMsg := &model.Message{
 		ID:             uuid.New(),
 		ConversationID: conversationID,
@@ -66,19 +61,15 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		return nil, fmt.Errorf("save user message: %w", err)
 	}
 
-	// 2b. Generate title asynchronously for new conversations
-	isNewConversation := convID == nil
-	if isNewConversation {
+	if convID == nil {
 		go o.generateAndSaveTitle(ctx, userID, conversationID, content)
 	}
 
-	// 3. Load history
 	history, err := o.sessions.GetHistory(ctx, conversationID, 50)
 	if err != nil {
 		return nil, fmt.Errorf("load history: %w", err)
 	}
 
-	// 4. Classify intent with LLM, fallback to keyword matching
 	var role model.AgentRole
 	if o.classifier != nil {
 		classifiedRole, err := o.classifier.Classify(ctx, content)
@@ -91,7 +82,6 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		role = ClassifyKeyword(content)
 	}
 
-	// 5. Resolve agent
 	agent, err := o.resolveAgent(ctx, role)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent: %w", err)
@@ -100,15 +90,14 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		agent.Model = selectedModel
 	}
 
-	// 6. Attach file contents if provided
+	userContent := content
 	if len(fileIDs) > 0 && o.fileSvc != nil {
 		fileContext, err := o.buildFileContext(ctx, fileIDs)
 		if err == nil && fileContext != "" {
-			content = fileContext + "\n\n" + content
+			userContent = fileContext + "\n\n" + content
 		}
 	}
 
-	// 7. Build request with tools
 	toolList := o.registry.List()
 	var toolInstances []tools.Tool
 	for _, name := range toolList {
@@ -116,88 +105,24 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 			toolInstances = append(toolInstances, t)
 		}
 	}
-	req := BuildRequest(agent, history, content, toolInstances)
 
-	// 7. Start LLM stream
-	llmCh, err := o.llmClient.Stream(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("start llm stream: %w", err)
-	}
+	messages := BuildMessages(agent, history, userContent)
+	toolDefs := BuildToolDefinitions(toolInstances)
 
-	// 8. Process stream in goroutine
 	outCh := make(chan llm.Chunk)
 	go func() {
 		defer close(outCh)
-		var assistantContent strings.Builder
-		var toolCall *llm.ToolCall
-		for chunk := range llmCh {
-			assistantContent.WriteString(chunk.Content)
-			if chunk.ToolCall != nil {
-				toolCall = chunk.ToolCall
-			}
-			select {
-			case outCh <- chunk:
-			case <-ctx.Done():
-				return
-			}
-			if chunk.Done {
-				break
-			}
-		}
-
-		// 9. Execute native tool call if present
-		if toolCall != nil {
-			// Inject tool context
-			toolCtx := context.WithValue(ctx, "conversation_id", conversationID)
-			res, err := o.registry.Execute(toolCtx, toolCall.Name, toolCall.Arguments)
-			if err != nil {
-				res.Error = err.Error()
-			}
-			resultChunk := llm.Chunk{
-				Content: fmt.Sprintf("\n[Tool %s result: %s]", toolCall.Name, res.Content),
-				Done:    true,
-			}
-			if res.Error != "" {
-				resultChunk.Content = fmt.Sprintf("\n[Tool %s error: %s]", toolCall.Name, res.Error)
-			}
-			select {
-			case outCh <- resultChunk:
-			case <-ctx.Done():
-				return
-			}
-			assistantContent.WriteString(resultChunk.Content)
-		}
-
-		// 10. Save assistant message
-		assistantMsg := &model.Message{
-			ID:             uuid.New(),
-			ConversationID: conversationID,
-			Role:           model.MessageRoleAssistant,
-			Content:        assistantContent.String(),
-			Model:          agent.Model,
-			CreatedAt:      time.Now(),
-		}
-		if toolCall != nil {
-			assistantMsg.ToolCalls = []model.ToolCall{{
-				ID:        uuid.New().String(),
-				Name:      toolCall.Name,
-				Arguments: toolCall.Arguments,
-			}}
-		}
-		_ = o.sessions.AddMessage(ctx, assistantMsg)
+		o.agentLoop(ctx, outCh, agent, messages, toolDefs, toolInstances, conversationID)
 	}()
 
 	return outCh, nil
 }
 
 func (o *Orchestrator) resolveAgent(ctx context.Context, role model.AgentRole) (*model.Agent, error) {
-	// Try to get specialized agent from DB
 	agent, err := o.agentRepo.GetByRole(ctx, role)
 	if err == nil && agent != nil {
 		return agent, nil
 	}
-
-	// Fallback to default agent
 	return o.createDefaultAgent(role), nil
 }
 
@@ -230,11 +155,8 @@ func (o *Orchestrator) buildFileContext(ctx context.Context, fileIDs []uuid.UUID
 		}
 
 		var text string
-
-		// Try to read as text first
 		text, err = o.fileSvc.ReadText(upload)
 		if err != nil {
-			// Not a text file - try document extraction service
 			if o.docClient != nil {
 				file, err := o.fileSvc.Open(upload)
 				if err != nil {
@@ -294,7 +216,7 @@ Message: %s`, truncate(firstMessage, 500))
 
 	resp, err := o.llmClient.Complete(titleCtx, req)
 	if err != nil {
-		return // Silently fail, keep fallback title
+		return
 	}
 
 	title := cleanTitle(resp)

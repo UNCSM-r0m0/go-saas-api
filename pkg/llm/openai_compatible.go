@@ -39,9 +39,10 @@ func NewOpenAICompatibleClient(baseURL, apiKey string) *OpenAICompatibleClient {
 
 // Stream sends a request and returns a channel of chunks.
 func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-chan Chunk, error) {
+	messages := messagesToOpenAI(req.Messages)
 	payload := map[string]any{
 		"model":       req.Model,
-		"messages":    req.Messages,
+		"messages":    messages,
 		"stream":      true,
 		"temperature": req.Temperature,
 		"max_tokens":  req.MaxTokens,
@@ -148,37 +149,32 @@ func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-cha
 }
 
 // emitFinal sends the final chunk(s) including any accumulated tool calls.
+// Tool calls are emitted as separate chunks before the final Done chunk,
+// so consumers can accumulate all tool calls before receiving Done.
 func emitFinal(ch chan Chunk, ctx context.Context, accumulated map[int]*accumulatedToolCall) {
-	if len(accumulated) == 0 {
-		select {
-		case ch <- Chunk{Done: true}:
-		case <-ctx.Done():
+	if len(accumulated) > 0 {
+		for _, acc := range accumulated {
+			var args map[string]any
+			_ = json.Unmarshal([]byte(acc.arguments.String()), &args)
+			select {
+			case ch <- Chunk{ToolCall: &ToolCall{ID: acc.id, Name: acc.name, Arguments: args}}:
+			case <-ctx.Done():
+				return
+			}
 		}
-		return
 	}
-	// Emit the first accumulated tool call as the final chunk
-	for _, acc := range accumulated {
-		var args map[string]any
-		_ = json.Unmarshal([]byte(acc.arguments.String()), &args)
-		select {
-		case ch <- Chunk{
-			Done: true,
-			ToolCall: &ToolCall{
-				Name:      acc.name,
-				Arguments: args,
-			},
-		}:
-		case <-ctx.Done():
-		}
-		return
+	select {
+	case ch <- Chunk{Done: true}:
+	case <-ctx.Done():
 	}
 }
 
 // Complete sends a non-streaming request and returns the full response text.
 func (c *OpenAICompatibleClient) Complete(ctx context.Context, req Request) (string, error) {
+	messages := messagesToOpenAI(req.Messages)
 	payload := map[string]any{
 		"model":       req.Model,
-		"messages":    req.Messages,
+		"messages":    messages,
 		"stream":      false,
 		"temperature": req.Temperature,
 		"max_tokens":  req.MaxTokens,
@@ -241,4 +237,53 @@ func (c *OpenAICompatibleClient) HealthCheck(ctx context.Context) error {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// messagesToOpenAI converts internal Message structs to OpenAI's wire format.
+// Assistant messages with tool calls use the function calling format,
+// and tool role messages include tool_call_id and name.
+func messagesToOpenAI(msgs []Message) []any {
+	result := make([]any, 0, len(msgs))
+	for _, m := range msgs {
+		switch m.Role {
+		case "tool":
+			result = append(result, map[string]any{
+				"role":         "tool",
+				"content":      m.Content,
+				"tool_call_id": m.ToolCallID,
+				"name":         m.Name,
+			})
+		case "assistant":
+			if len(m.ToolCalls) > 0 {
+				openaiToolCalls := make([]any, 0, len(m.ToolCalls))
+				for _, tc := range m.ToolCalls {
+					argsJSON, _ := json.Marshal(tc.Arguments)
+					openaiToolCalls = append(openaiToolCalls, map[string]any{
+						"id":   tc.ID,
+						"type": "function",
+						"function": map[string]any{
+							"name":      tc.Name,
+							"arguments": string(argsJSON),
+						},
+					})
+				}
+				result = append(result, map[string]any{
+					"role":       "assistant",
+					"content":    m.Content,
+					"tool_calls": openaiToolCalls,
+				})
+			} else {
+				result = append(result, map[string]any{
+					"role":    "assistant",
+					"content": m.Content,
+				})
+			}
+		default:
+			result = append(result, map[string]any{
+				"role":    m.Role,
+				"content": m.Content,
+			})
+		}
+	}
+	return result
 }

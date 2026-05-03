@@ -202,7 +202,7 @@ func (c *Client) handleChat(msg Message) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.mu.Lock()
 	if c.cancelGen != nil {
-		c.cancelGen() // cancel previous generation
+		c.cancelGen()
 	}
 	c.cancelGen = cancel
 	c.mu.Unlock()
@@ -217,22 +217,47 @@ func (c *Client) handleChat(msg Message) {
 	messageID := uuid.New().String()
 	var tokens int
 	for chunk := range streamCh {
-		tokens += len(chunk.Content) // rough estimate
-		resp := Message{
-			Type:      TypeChunk,
-			MessageID: messageID,
-			Content:   chunk.Content,
-			Done:      chunk.Done,
+		tokens += len(chunk.Content)
+
+		switch chunk.Event {
+		case "tool_start":
+			c.send(Message{
+				Type:       TypeToolStart,
+				MessageID:  messageID,
+				ToolName:   chunk.ToolName,
+				ToolCallID: chunk.ToolCall.ID,
+				ToolArgs:   chunk.ToolCall.Arguments,
+			})
+		case "tool_result":
+			c.send(Message{
+				Type:       TypeToolResult,
+				MessageID:  messageID,
+				ToolName:   chunk.ToolName,
+				Content:    chunk.Content,
+			})
+		case "error":
+			c.send(Message{
+				Type:      TypeError,
+				MessageID: messageID,
+				Error:     chunk.Content,
+			})
+		default:
+			resp := Message{
+				Type:      TypeChunk,
+				MessageID: messageID,
+				Content:   chunk.Content,
+				Done:      chunk.Done,
+			}
+			if !c.send(resp) {
+				break
+			}
 		}
-		if !c.send(resp) {
-			break
-		}
+
 		if chunk.Done {
 			break
 		}
 	}
 
-	// Send done message
 	c.send(Message{
 		Type:       TypeDone,
 		MessageID:  messageID,

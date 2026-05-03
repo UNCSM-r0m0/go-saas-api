@@ -27,7 +27,7 @@ func (m mockTool) Execute(_ context.Context, _ map[string]any) (tools.Result, er
 	return m.result, m.err
 }
 
-func TestBuildRequest(t *testing.T) {
+func TestBuildMessages(t *testing.T) {
 	agent := &model.Agent{
 		Name:         "TestAgent",
 		Role:         model.RoleCoder,
@@ -40,46 +40,74 @@ func TestBuildRequest(t *testing.T) {
 		{Role: model.MessageRoleAssistant, Content: "hello"},
 	}
 
-	toolList := []tools.Tool{
-		mockTool{name: "file_write", desc: "write files"},
-	}
+	messages := BuildMessages(agent, history, "create html page")
+	toolDefs := BuildToolDefinitions([]tools.Tool{mockTool{name: "file_write", desc: "write files"}})
 
-	req := BuildRequest(agent, history, "create html page", toolList)
-
-	if req.Model != "qwen2.5-coder:7b" {
-		t.Fatalf("expected model qwen2.5-coder:7b, got %s", req.Model)
+	if len(messages) != 4 {
+		t.Fatalf("expected 4 messages, got %d", len(messages))
 	}
-	if len(req.Messages) != 4 { // system + 2 history + user
-		t.Fatalf("expected 4 messages, got %d", len(req.Messages))
+	if messages[0].Role != "system" {
+		t.Fatalf("expected first message role system, got %s", messages[0].Role)
 	}
-	if req.Messages[0].Role != "system" {
-		t.Fatalf("expected first message role system, got %s", req.Messages[0].Role)
-	}
-	if contains(req.Messages[0].Content, "file_write") {
+	if contains(messages[0].Content, "file_write") {
 		t.Error("expected system prompt NOT to mention file_write tool (native tool calling)")
 	}
-	if len(req.Tools) != 1 {
-		t.Fatalf("expected 1 tool definition, got %d", len(req.Tools))
+	if messages[3].Content != "create html page" {
+		t.Fatalf("expected user message 'create html page', got %s", messages[3].Content)
 	}
-	if req.Tools[0].Function.Name != "file_write" {
-		t.Fatalf("expected tool name file_write, got %s", req.Tools[0].Function.Name)
+	if len(toolDefs) != 1 {
+		t.Fatalf("expected 1 tool definition, got %d", len(toolDefs))
 	}
-	if req.Messages[3].Content != "create html page" {
-		t.Fatalf("expected user message 'create html page', got %s", req.Messages[3].Content)
-	}
-	if !req.Stream {
-		t.Error("expected stream to be true")
+	if toolDefs[0].Function.Name != "file_write" {
+		t.Fatalf("expected tool name file_write, got %s", toolDefs[0].Function.Name)
 	}
 }
 
-func TestBuildRequest_NoTools(t *testing.T) {
-	agent := &model.Agent{Role: model.RoleAssistant, Model: "default"}
-	req := BuildRequest(agent, nil, "hello", nil)
-	if len(req.Messages) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(req.Messages))
+func TestBuildMessages_ToolRoleMessages(t *testing.T) {
+	agent := &model.Agent{
+		Role:         model.RoleAssistant,
+		SystemPrompt: "You are helpful.",
 	}
-	if len(req.Tools) != 0 {
-		t.Error("did not expect tools when no tools provided")
+
+	history := []model.Message{
+		{Role: model.MessageRoleUser, Content: "write hello.py"},
+		{Role: model.MessageRoleAssistant, Content: "Let me write that file.", ToolCalls: []model.ToolCall{{ID: "call_1", Name: "file_write", Arguments: map[string]any{"filename": "hello.py"}}}},
+		{Role: model.MessageRoleTool, Content: "File written successfully", ToolCallID: "call_1", ToolName: "file_write"},
+	}
+
+	messages := BuildMessages(agent, history, "now run it")
+
+	if len(messages) != 5 {
+		t.Fatalf("expected 5 messages (system + 3 history + user), got %d", len(messages))
+	}
+	if messages[1].Role != "user" {
+		t.Fatalf("expected user message, got %s", messages[1].Role)
+	}
+	if messages[2].Role != "assistant" {
+		t.Fatalf("expected assistant message, got %s", messages[2].Role)
+	}
+	if len(messages[2].ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call in assistant message, got %d", len(messages[2].ToolCalls))
+	}
+	if messages[2].ToolCalls[0].ID != "call_1" {
+		t.Fatalf("expected tool call ID call_1, got %s", messages[2].ToolCalls[0].ID)
+	}
+	if messages[3].Role != "tool" {
+		t.Fatalf("expected tool message, got %s", messages[3].Role)
+	}
+	if messages[3].ToolCallID != "call_1" {
+		t.Fatalf("expected tool_call_id call_1, got %s", messages[3].ToolCallID)
+	}
+	if messages[3].Name != "file_write" {
+		t.Fatalf("expected tool name file_write, got %s", messages[3].Name)
+	}
+}
+
+func TestBuildMessages_NoHistory(t *testing.T) {
+	agent := &model.Agent{Role: model.RoleAssistant, Model: "default"}
+	messages := BuildMessages(agent, nil, "hello")
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}
 }
 

@@ -237,20 +237,33 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 	}
 
 	var fullContent strings.Builder
+	var toolSteps []gin.H
 	for chunk := range streamCh {
-		fullContent.WriteString(chunk.Content)
+		switch chunk.Event {
+		case "tool_start":
+			toolSteps = append(toolSteps, gin.H{
+				"type":       "tool_start",
+				"toolName":   chunk.ToolName,
+				"toolCallId": chunk.ToolCall.ID,
+			})
+		case "tool_result":
+			toolSteps = append(toolSteps, gin.H{
+				"type":     "tool_result",
+				"toolName": chunk.ToolName,
+				"content":  chunk.Content,
+			})
+		default:
+			fullContent.WriteString(chunk.Content)
+		}
 		if chunk.Done {
 			break
 		}
 	}
 
-	// The orchestrator already saved the assistant message.
-	// Fetch the conversation to return it.
 	var convID uuid.UUID
 	if req.ConversationID != nil {
 		convID = *req.ConversationID
 	} else {
-		// Find the most recent conversation for this user
 		convs, err := h.convRepo.ListByUser(ctx, userID, 1, 0)
 		if err != nil || len(convs) == 0 {
 			response.Error(c, http.StatusInternalServerError, "failed to retrieve conversation")
@@ -274,7 +287,6 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 	}
 	conv.Messages = msgs
 
-	// Find the last assistant message
 	var assistantMsg *model.Message
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == model.MessageRoleAssistant {
@@ -294,11 +306,15 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 		usage["totalTokens"] = assistantMsg.TokensInput + assistantMsg.TokensOutput
 	}
 
-	response.OK(c, gin.H{
+	result := gin.H{
 		"message": assistantMsg,
 		"chat":    conv,
 		"usage":   usage,
-	}, "message sent")
+	}
+	if len(toolSteps) > 0 {
+		result["toolSteps"] = toolSteps
+	}
+	response.OK(c, result, "message sent")
 }
 
 

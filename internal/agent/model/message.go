@@ -30,6 +30,8 @@ type Message struct {
 	Role           MessageRole `json:"role"`
 	Content        string      `json:"content"`
 	ToolCalls      []ToolCall  `json:"tool_calls,omitempty"`
+	ToolCallID     string      `json:"tool_call_id,omitempty"`
+	ToolName       string      `json:"tool_name,omitempty"`
 	Model          string      `json:"model,omitempty"`
 	TokensInput    int         `json:"tokens_input,omitempty"`
 	TokensOutput   int         `json:"tokens_output,omitempty"`

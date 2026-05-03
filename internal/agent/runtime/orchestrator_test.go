@@ -14,15 +14,26 @@ import (
 // ---- mocks ----
 
 type mockLLM struct {
-	chunks []llm.Chunk
-	err    error
+	chunks  []llm.Chunk
+	chunks2 []llm.Chunk
+	err     error
+	calls   int
 }
 
 func (m *mockLLM) Stream(_ context.Context, _ llm.Request) (<-chan llm.Chunk, error) {
+	m.calls++
+	var chunks []llm.Chunk
+	if m.calls == 1 && m.chunks != nil {
+		chunks = m.chunks
+	} else if m.calls > 1 && m.chunks2 != nil {
+		chunks = m.chunks2
+	} else {
+		chunks = m.chunks
+	}
 	ch := make(chan llm.Chunk)
 	go func() {
 		defer close(ch)
-		for _, c := range m.chunks {
+		for _, c := range chunks {
 			ch <- c
 		}
 	}()
@@ -79,7 +90,7 @@ var _ repository.MessageRepo = (*memMessageRepo)(nil)
 
 type memAgentRepo struct{}
 
-func (m *memAgentRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error)  { return nil, nil }
+func (m *memAgentRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error)    { return nil, nil }
 func (m *memAgentRepo) GetByRole(_ context.Context, _ model.AgentRole) (*model.Agent, error) { return nil, nil }
 func (m *memAgentRepo) GetDefault(_ context.Context) (*model.Agent, error) { return nil, nil }
 
@@ -89,7 +100,7 @@ type mockAgentRepoWithRole struct {
 	agent *model.Agent
 }
 
-func (m *mockAgentRepoWithRole) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error)  { return nil, nil }
+func (m *mockAgentRepoWithRole) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error)    { return nil, nil }
 func (m *mockAgentRepoWithRole) GetByRole(_ context.Context, _ model.AgentRole) (*model.Agent, error) { return m.agent, nil }
 func (m *mockAgentRepoWithRole) GetDefault(_ context.Context) (*model.Agent, error) { return nil, nil }
 
@@ -128,7 +139,6 @@ func TestOrchestrator_Chat(t *testing.T) {
 		t.Fatalf("unexpected result: %q", result)
 	}
 
-	// Assert messages saved
 	if len(msgRepo.msgs) != 2 {
 		t.Fatalf("expected 2 messages (user+assistant), got %d", len(msgRepo.msgs))
 	}
@@ -148,10 +158,16 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 	_ = registry.Register(&mockTool{name: "echo", desc: "echo tool", result: tools.Result{Content: "pong"}})
 	agentRepo := &memAgentRepo{}
 
+	// First LLM call returns a tool call, second call returns final text
 	llmMock := &mockLLM{
 		chunks: []llm.Chunk{
 			{Content: "I will echo that."},
-			{Done: true, ToolCall: &llm.ToolCall{Name: "echo", Arguments: map[string]any{"msg": "ping"}}},
+			{ToolCall: &llm.ToolCall{ID: "call_1", Name: "echo", Arguments: map[string]any{"msg": "ping"}}},
+			{Done: true},
+		},
+		chunks2: []llm.Chunk{
+			{Content: "The echo result is: pong"},
+			{Done: true},
 		},
 	}
 
@@ -164,24 +180,42 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 	}
 
 	var result string
+	var gotToolStart, gotToolResult bool
 	for chunk := range ch {
+		if chunk.Event == "tool_start" {
+			gotToolStart = true
+			if chunk.ToolName != "echo" {
+				t.Fatalf("expected tool name echo, got %s", chunk.ToolName)
+			}
+		}
+		if chunk.Event == "tool_result" {
+			gotToolResult = true
+		}
 		result += chunk.Content
 	}
 
+	if !gotToolStart {
+		t.Error("expected tool_start event")
+	}
+	if !gotToolResult {
+		t.Error("expected tool_result event")
+	}
 	if !contains(result, "pong") {
 		t.Fatalf("expected tool result pong in output, got: %q", result)
 	}
+	if !contains(result, "The echo result is") {
+		t.Fatalf("expected second LLM response in output, got: %q", result)
+	}
 
-	// Assistant message should have tool call recorded
-	if len(msgRepo.msgs) < 2 {
-		t.Fatalf("expected messages saved")
+	// Should have: user msg, assistant msg (with tool call), tool msg, final assistant msg
+	var assistantCount int
+	for _, m := range msgRepo.msgs {
+		if m.Role == model.MessageRoleAssistant {
+			assistantCount++
+		}
 	}
-	assistantMsg := msgRepo.msgs[len(msgRepo.msgs)-1]
-	if len(assistantMsg.ToolCalls) != 1 {
-		t.Fatalf("expected 1 tool call, got %d", len(assistantMsg.ToolCalls))
-	}
-	if assistantMsg.ToolCalls[0].Name != "echo" {
-		t.Fatalf("expected tool name echo, got %s", assistantMsg.ToolCalls[0].Name)
+	if assistantCount < 2 {
+		t.Fatalf("expected at least 2 assistant messages, got %d", assistantCount)
 	}
 }
 
@@ -195,9 +229,13 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 
 	llmMock := &mockLLM{
 		chunks: []llm.Chunk{
-			{Content: "I will echo that."},
-			{Content: " "},
-			{Done: true, ToolCall: &llm.ToolCall{Name: "echo", Arguments: map[string]any{"msg": "ping"}}},
+			{Content: "I will echo that. "},
+			{ToolCall: &llm.ToolCall{ID: "call_1", Name: "echo", Arguments: map[string]any{"msg": "ping"}}},
+			{Done: true},
+		},
+		chunks2: []llm.Chunk{
+			{Content: "Done!"},
+			{Done: true},
 		},
 	}
 
@@ -217,17 +255,8 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 	if !contains(result, "pong") {
 		t.Fatalf("expected tool result pong in output, got: %q", result)
 	}
-
-	// Assistant message should have tool call recorded
-	if len(msgRepo.msgs) < 2 {
-		t.Fatalf("expected messages saved")
-	}
-	assistantMsg := msgRepo.msgs[len(msgRepo.msgs)-1]
-	if len(assistantMsg.ToolCalls) != 1 {
-		t.Fatalf("expected 1 tool call, got %d", len(assistantMsg.ToolCalls))
-	}
-	if assistantMsg.ToolCalls[0].Name != "echo" {
-		t.Fatalf("expected tool name echo, got %s", assistantMsg.ToolCalls[0].Name)
+	if !contains(result, "Done") {
+		t.Fatalf("expected final response in output, got: %q", result)
 	}
 }
 

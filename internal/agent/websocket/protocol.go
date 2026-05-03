@@ -2,7 +2,6 @@
 
 import "github.com/google/uuid"
 
-// MessageType defines the kind of WebSocket message.
 type MessageType string
 
 const (
@@ -12,13 +11,14 @@ const (
 	TypeStop  MessageType = "stop"
 
 	// Server -> Client
-	TypeChunk MessageType = "chunk"
-	TypeDone  MessageType = "done"
-	TypeError MessageType = "error"
-	TypePong  MessageType = "pong"
+	TypeChunk      MessageType = "chunk"
+	TypeToolStart  MessageType = "tool_start"
+	TypeToolResult MessageType = "tool_result"
+	TypeDone       MessageType = "done"
+	TypeError      MessageType = "error"
+	TypePong       MessageType = "pong"
 )
 
-// Message is the envelope for all WebSocket communications.
 type Message struct {
 	Type           MessageType    `json:"type"`
 	MessageID      string         `json:"message_id,omitempty"`
@@ -29,4 +29,7 @@ type Message struct {
 	Done           bool           `json:"done,omitempty"`
 	TokensUsed     int            `json:"tokens_used,omitempty"`
 	Error          string         `json:"error,omitempty"`
+	ToolName       string         `json:"tool_name,omitempty"`
+	ToolCallID     string         `json:"tool_call_id,omitempty"`
+	ToolArgs       map[string]any `json:"tool_args,omitempty"`
 }
