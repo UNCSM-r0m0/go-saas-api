@@ -21,33 +21,33 @@ type mockStoreForSync struct {
 }
 
 func (m *mockStoreForSync) CreateProvider(ctx context.Context, p *AIProvider) error { return nil }
-func (m *mockStoreForSync) GetProvider(ctx context.Context, tenantID, id uuid.UUID) (*AIProvider, error) {
+func (m *mockStoreForSync) GetProvider(ctx context.Context, id uuid.UUID) (*AIProvider, error) {
 	if m.provider == nil {
 		return nil, fmt.Errorf("not found")
 	}
 	return m.provider, nil
 }
-func (m *mockStoreForSync) ListProviders(ctx context.Context, tenantID uuid.UUID) ([]AIProvider, error) { return nil, nil }
-func (m *mockStoreForSync) ListActiveProviders(ctx context.Context, tenantID uuid.UUID) ([]AIProvider, error) { return nil, nil }
+func (m *mockStoreForSync) ListProviders(ctx context.Context) ([]AIProvider, error) { return nil, nil }
+func (m *mockStoreForSync) ListActiveProviders(ctx context.Context) ([]AIProvider, error) { return nil, nil }
 func (m *mockStoreForSync) ListAllActiveProviders(ctx context.Context) ([]AIProvider, error) { return nil, nil }
-func (m *mockStoreForSync) UpdateProvider(ctx context.Context, tenantID uuid.UUID, p *AIProvider) error { return nil }
-func (m *mockStoreForSync) DeleteProvider(ctx context.Context, tenantID, id uuid.UUID) error { return nil }
+func (m *mockStoreForSync) UpdateProvider(ctx context.Context, p *AIProvider) error { return nil }
+func (m *mockStoreForSync) DeleteProvider(ctx context.Context, id uuid.UUID) error { return nil }
 
 func (m *mockStoreForSync) CreateModel(ctx context.Context, model *AIModel) error {
 	m.created = append(m.created, *model)
 	return nil
 }
-func (m *mockStoreForSync) GetModel(ctx context.Context, tenantID, id uuid.UUID) (*AIModel, error) { return nil, nil }
-func (m *mockStoreForSync) ListModelsByProvider(ctx context.Context, tenantID, providerID uuid.UUID) ([]AIModel, error) {
+func (m *mockStoreForSync) GetModel(ctx context.Context, id uuid.UUID) (*AIModel, error) { return nil, nil }
+func (m *mockStoreForSync) ListModelsByProvider(ctx context.Context, providerID uuid.UUID) ([]AIModel, error) {
 	return m.models, nil
 }
 func (m *mockStoreForSync) ListAllModelsByProvider(ctx context.Context, providerID uuid.UUID) ([]AIModel, error) { return nil, nil }
-func (m *mockStoreForSync) ListActiveModels(ctx context.Context, tenantID uuid.UUID, isPublicOnly bool) ([]AIModel, error) { return nil, nil }
-func (m *mockStoreForSync) UpdateModel(ctx context.Context, tenantID uuid.UUID, model *AIModel) error {
+func (m *mockStoreForSync) ListActiveModels(ctx context.Context, isPublicOnly bool) ([]AIModel, error) { return nil, nil }
+func (m *mockStoreForSync) UpdateModel(ctx context.Context, model *AIModel) error {
 	m.updated = append(m.updated, *model)
 	return nil
 }
-func (m *mockStoreForSync) DeleteModel(ctx context.Context, tenantID, id uuid.UUID) error { return nil }
+func (m *mockStoreForSync) DeleteModel(ctx context.Context, id uuid.UUID) error { return nil }
 
 func TestSyncModels_Ollama(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +61,6 @@ func TestSyncModels_Ollama(t *testing.T) {
 	store := &mockStoreForSync{
 		provider: &AIProvider{
 			ID:      uuid.New(),
-			TenantID: uuid.New(),
 			Name:    "Ollama Test",
 			Type:    ProviderOllama,
 			BaseURL: server.URL,
@@ -70,7 +69,7 @@ func TestSyncModels_Ollama(t *testing.T) {
 	}
 
 	svc := NewService(store, "test-master-key-32-bytes-long!!")
-	result, err := svc.SyncModels(context.Background(), store.provider.TenantID, store.provider.ID)
+	result, err := svc.SyncModels(context.Background(), store.provider.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Added)
 	assert.Equal(t, 0, result.Removed)
@@ -90,7 +89,6 @@ func TestSyncModels_LMStudio(t *testing.T) {
 	store := &mockStoreForSync{
 		provider: &AIProvider{
 			ID:      uuid.New(),
-			TenantID: uuid.New(),
 			Name:    "LM Studio Test",
 			Type:    ProviderLMStudio,
 			BaseURL: server.URL,
@@ -99,7 +97,7 @@ func TestSyncModels_LMStudio(t *testing.T) {
 	}
 
 	svc := NewService(store, "test-master-key-32-bytes-long!!")
-	result, err := svc.SyncModels(context.Background(), store.provider.TenantID, store.provider.ID)
+	result, err := svc.SyncModels(context.Background(), store.provider.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.Added)
 	assert.Equal(t, 0, result.Removed)
@@ -134,7 +132,6 @@ func TestSyncModels_DeactivatesMissing(t *testing.T) {
 	store := &mockStoreForSync{
 		provider: &AIProvider{
 			ID:      uuid.New(),
-			TenantID: uuid.New(),
 			Name:    "Ollama Test",
 			Type:    ProviderOllama,
 			BaseURL: server.URL,
@@ -145,7 +142,7 @@ func TestSyncModels_DeactivatesMissing(t *testing.T) {
 	}
 
 	svc := NewService(store, "test-master-key-32-bytes-long!!")
-	result, err := svc.SyncModels(context.Background(), store.provider.TenantID, store.provider.ID)
+	result, err := svc.SyncModels(context.Background(), store.provider.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Added)
 	assert.Equal(t, 1, result.Removed)

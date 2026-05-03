@@ -18,13 +18,13 @@ import (
 
 // Orchestrator routes messages through classification → LLM → tools → response.
 type Orchestrator struct {
-	llmClient     llm.Client
-	registry      *tools.Registry
-	sessions      *SessionManager
-	agentRepo     repository.AgentRepo
-	fileSvc       *fileupload.Service
-	docClient     *document.Client
-	classifier    *LLMClassifier
+	llmClient  llm.Client
+	registry   *tools.Registry
+	sessions   *SessionManager
+	agentRepo  repository.AgentRepo
+	fileSvc    *fileupload.Service
+	docClient  *document.Client
+	classifier *LLMClassifier
 }
 
 // NewOrchestrator creates a new chat orchestrator.
@@ -41,13 +41,13 @@ func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *Sess
 }
 
 // Chat handles a single user turn and returns a stream of chunks.
-func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string) (<-chan llm.Chunk, error) {
+func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string) (<-chan llm.Chunk, error) {
 	// 1. Ensure conversation exists
 	var conversationID uuid.UUID
 	if convID != nil {
 		conversationID = *convID
 	} else {
-		conv, err := o.sessions.CreateConversation(ctx, tenantID, userID, content[:min(50, len(content))], nil)
+		conv, err := o.sessions.CreateConversation(ctx, userID, content[:min(50, len(content))], nil)
 		if err != nil {
 			return nil, fmt.Errorf("create conversation: %w", err)
 		}
@@ -57,7 +57,6 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 	// 2. Save user message
 	userMsg := &model.Message{
 		ID:             uuid.New(),
-		TenantID:       tenantID,
 		ConversationID: conversationID,
 		Role:           model.MessageRoleUser,
 		Content:        content,
@@ -68,7 +67,7 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 	}
 
 	// 3. Load history
-	history, err := o.sessions.GetHistory(ctx, tenantID, conversationID, 50)
+	history, err := o.sessions.GetHistory(ctx, conversationID, 50)
 	if err != nil {
 		return nil, fmt.Errorf("load history: %w", err)
 	}
@@ -87,7 +86,7 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 	}
 
 	// 5. Resolve agent
-	agent, err := o.resolveAgent(ctx, tenantID, role)
+	agent, err := o.resolveAgent(ctx, role)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent: %w", err)
 	}
@@ -97,7 +96,7 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 
 	// 6. Attach file contents if provided
 	if len(fileIDs) > 0 && o.fileSvc != nil {
-		fileContext, err := o.buildFileContext(ctx, tenantID, fileIDs)
+		fileContext, err := o.buildFileContext(ctx, fileIDs)
 		if err == nil && fileContext != "" {
 			content = fileContext + "\n\n" + content
 		}
@@ -143,8 +142,7 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 		// 9. Execute native tool call if present
 		if toolCall != nil {
 			// Inject tool context
-			toolCtx := context.WithValue(ctx, "tenant_id", tenantID)
-			toolCtx = context.WithValue(toolCtx, "conversation_id", conversationID)
+			toolCtx := context.WithValue(ctx, "conversation_id", conversationID)
 			res, err := o.registry.Execute(toolCtx, toolCall.Name, toolCall.Arguments)
 			if err != nil {
 				res.Error = err.Error()
@@ -167,7 +165,6 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 		// 10. Save assistant message
 		assistantMsg := &model.Message{
 			ID:             uuid.New(),
-			TenantID:       tenantID,
 			ConversationID: conversationID,
 			Role:           model.MessageRoleAssistant,
 			Content:        assistantContent.String(),
@@ -187,9 +184,9 @@ func (o *Orchestrator) Chat(ctx context.Context, tenantID, userID uuid.UUID, con
 	return outCh, nil
 }
 
-func (o *Orchestrator) resolveAgent(ctx context.Context, tenantID uuid.UUID, role model.AgentRole) (*model.Agent, error) {
+func (o *Orchestrator) resolveAgent(ctx context.Context, role model.AgentRole) (*model.Agent, error) {
 	// Try to get specialized agent from DB
-	agent, err := o.agentRepo.GetByRole(ctx, tenantID, role)
+	agent, err := o.agentRepo.GetByRole(ctx, role)
 	if err == nil && agent != nil {
 		return agent, nil
 	}
@@ -218,16 +215,16 @@ func (o *Orchestrator) createDefaultAgent(role model.AgentRole) *model.Agent {
 	return agent
 }
 
-func (o *Orchestrator) buildFileContext(ctx context.Context, tenantID uuid.UUID, fileIDs []uuid.UUID) (string, error) {
+func (o *Orchestrator) buildFileContext(ctx context.Context, fileIDs []uuid.UUID) (string, error) {
 	var parts []string
 	for _, id := range fileIDs {
-		upload, err := o.fileSvc.Get(ctx, tenantID, id)
+		upload, err := o.fileSvc.Get(ctx, id)
 		if err != nil {
 			continue
 		}
-		
+
 		var text string
-		
+
 		// Try to read as text first
 		text, err = o.fileSvc.ReadText(upload)
 		if err != nil {
@@ -238,7 +235,7 @@ func (o *Orchestrator) buildFileContext(ctx context.Context, tenantID uuid.UUID,
 					continue
 				}
 				defer file.Close()
-				
+
 				var result *document.ExtractResponse
 				switch upload.ContentType {
 				case "application/pdf":
@@ -252,7 +249,7 @@ func (o *Orchestrator) buildFileContext(ctx context.Context, tenantID uuid.UUID,
 				default:
 					continue
 				}
-				
+
 				if err != nil {
 					parts = append(parts, fmt.Sprintf("--- File: %s ---\n[Error extracting content: %v]", upload.OriginalName, err))
 					continue
@@ -262,7 +259,7 @@ func (o *Orchestrator) buildFileContext(ctx context.Context, tenantID uuid.UUID,
 				continue
 			}
 		}
-		
+
 		if len(text) > 10000 {
 			text = text[:10000] + "\n...[truncated]"
 		}

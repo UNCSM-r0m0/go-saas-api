@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
+	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 )
 
 // mockReadFileRepo extends mockArtifactRepo with GetByName support.
@@ -19,22 +20,21 @@ func (m *mockReadFileRepo) Create(_ context.Context, _ *model.Artifact) error {
 	return nil
 }
 
-func (m *mockReadFileRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*model.Artifact, error) {
+func (m *mockReadFileRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.Artifact, error) {
 	return nil, nil
 }
 
-func (m *mockReadFileRepo) GetByName(_ context.Context, _, _ uuid.UUID, _ string) (*model.Artifact, error) {
+func (m *mockReadFileRepo) GetByName(_ context.Context, _ uuid.UUID, _ string) (*model.Artifact, error) {
 	return m.artifact, m.err
 }
 
-func (m *mockReadFileRepo) ListByConversation(_ context.Context, _, _ uuid.UUID) ([]model.Artifact, error) {
+func (m *mockReadFileRepo) ListByConversation(_ context.Context, _ uuid.UUID) ([]model.Artifact, error) {
 	return nil, nil
 }
 
 func TestReadFileTool_Execute(t *testing.T) {
 	expected := &model.Artifact{
 		ID:             uuid.New(),
-		TenantID:       uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 		ConversationID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		Name:           "index.html",
 		Content:        "<h1>Hello</h1>",
@@ -42,8 +42,7 @@ func TestReadFileTool_Execute(t *testing.T) {
 	repo := &mockReadFileRepo{artifact: expected}
 	tool := NewReadFileTool(repo)
 
-	ctx := context.WithValue(context.Background(), "tenant_id", expected.TenantID)
-	ctx = context.WithValue(ctx, "conversation_id", expected.ConversationID)
+	ctx := context.WithValue(context.Background(), "conversation_id", expected.ConversationID)
 
 	res, err := tool.Execute(ctx, map[string]any{"name": "index.html"})
 	if err != nil {
@@ -61,8 +60,7 @@ func TestReadFileTool_NotFound(t *testing.T) {
 	repo := &mockReadFileRepo{err: errors.New("artifact not found")}
 	tool := NewReadFileTool(repo)
 
-	ctx := context.WithValue(context.Background(), "tenant_id", uuid.MustParse("11111111-1111-1111-1111-111111111111"))
-	ctx = context.WithValue(ctx, "conversation_id", uuid.MustParse("22222222-2222-2222-2222-222222222222"))
+	ctx := context.WithValue(context.Background(), "conversation_id", uuid.MustParse("22222222-2222-2222-2222-222222222222"))
 
 	res, err := tool.Execute(ctx, map[string]any{"name": "missing.html"})
 	if err == nil {
@@ -82,3 +80,5 @@ func TestReadFileTool_MissingName(t *testing.T) {
 		t.Fatal("expected error for missing name")
 	}
 }
+
+var _ repository.ArtifactRepo = (*mockReadFileRepo)(nil)

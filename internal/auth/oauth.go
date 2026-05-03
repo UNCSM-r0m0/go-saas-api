@@ -23,14 +23,14 @@ type OAuthStateStore interface {
 
 // OAuthService handles OAuth 2.0 flows
 type OAuthService struct {
-	users       UserRepository
-	refresh     RefreshTokenStore
-	jwtManager  *jwt.Manager
-	stateStore  OAuthStateStore
-	googleCfg   *oauth2.Config
-	githubCfg   *oauth2.Config
-	accessTTL   time.Duration
-	refreshTTL  time.Duration
+	users      UserRepository
+	refresh    RefreshTokenStore
+	jwtManager *jwt.Manager
+	stateStore OAuthStateStore
+	googleCfg  *oauth2.Config
+	githubCfg  *oauth2.Config
+	accessTTL  time.Duration
+	refreshTTL time.Duration
 }
 
 // NewOAuthService creates a new OAuth service
@@ -139,15 +139,16 @@ func (s *OAuthService) findOrCreateOAuthUser(ctx context.Context, provider, subj
 		// Create new user
 		now := time.Now().UTC()
 		user = &User{
-			ID:            uuid.New(),
-			TenantID:      uuid.MustParse("00000000-0000-0000-0000-000000000001"),
-			Email:         email,
-			Name:          name,
-			Role:          "member",
-			OAuthProvider: provider,
-			OAuthSubject:  subject,
-			CreatedAt:     now,
-			UpdatedAt:     now,
+			ID:                    uuid.New(),
+			Email:                 email,
+			Name:                  name,
+			Role:                  "member",
+			IsAdmin:               false,
+			MessagesUsedThisMonth: 0,
+			OAuthProvider:         provider,
+			OAuthSubject:          subject,
+			CreatedAt:             now,
+			UpdatedAt:             now,
 		}
 		if err := s.users.Create(ctx, user); err != nil {
 			return nil, nil, fmt.Errorf("create user: %w", err)
@@ -163,7 +164,7 @@ func (s *OAuthService) findOrCreateOAuthUser(ctx context.Context, provider, subj
 }
 
 func (s *OAuthService) generateOAuthTokenPair(ctx context.Context, user *User) (*TokenPair, error) {
-	accessToken, err := s.jwtManager.GenerateToken(user.ID.String(), user.TenantID.String(), user.Role, s.accessTTL)
+	accessToken, err := s.jwtManager.GenerateToken(user.ID.String(), user.Role, s.accessTTL)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}

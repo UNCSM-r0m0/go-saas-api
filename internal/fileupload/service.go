@@ -34,9 +34,9 @@ var AllowedContentTypes = map[string]bool{
 
 // Service provides business logic for file uploads.
 type Service struct {
-	store     Store
-	basePath  string
-	maxSize   int64
+	store    Store
+	basePath string
+	maxSize  int64
 }
 
 // NewService creates a new file upload service.
@@ -45,7 +45,7 @@ func NewService(store Store, basePath string, maxSize int64) *Service {
 }
 
 // Save stores a file on disk and persists metadata.
-func (s *Service) Save(ctx context.Context, tenantID, userID uuid.UUID, originalName string, contentType string, size int64, reader io.Reader) (*Upload, error) {
+func (s *Service) Save(ctx context.Context, userID uuid.UUID, originalName string, contentType string, size int64, reader io.Reader) (*Upload, error) {
 	if size > s.maxSize {
 		return nil, fmt.Errorf("file too large: %d bytes (max %d)", size, s.maxSize)
 	}
@@ -56,12 +56,11 @@ func (s *Service) Save(ctx context.Context, tenantID, userID uuid.UUID, original
 	}
 
 	id := uuid.New()
-	tenantDir := filepath.Join(s.basePath, tenantID.String())
-	if err := os.MkdirAll(tenantDir, 0755); err != nil {
+	if err := os.MkdirAll(s.basePath, 0755); err != nil {
 		return nil, fmt.Errorf("create upload dir: %w", err)
 	}
 
-	storagePath := filepath.Join(tenantDir, id.String())
+	storagePath := filepath.Join(s.basePath, id.String())
 	file, err := os.Create(storagePath)
 	if err != nil {
 		return nil, fmt.Errorf("create file: %w", err)
@@ -76,7 +75,6 @@ func (s *Service) Save(ctx context.Context, tenantID, userID uuid.UUID, original
 
 	upload := &Upload{
 		ID:           id,
-		TenantID:     tenantID,
 		UserID:       userID,
 		Name:         id.String(),
 		OriginalName: originalName,
@@ -95,31 +93,31 @@ func (s *Service) Save(ctx context.Context, tenantID, userID uuid.UUID, original
 	return upload, nil
 }
 
-// Get retrieves an upload and validates ownership.
-func (s *Service) Get(ctx context.Context, tenantID, id uuid.UUID) (*Upload, error) {
-	return s.store.GetByID(ctx, tenantID, id)
+// Get retrieves an upload.
+func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Upload, error) {
+	return s.store.GetByID(ctx, id)
 }
 
 // ListByUser lists uploads for a user.
-func (s *Service) ListByUser(ctx context.Context, tenantID, userID uuid.UUID, limit, offset int) ([]Upload, error) {
-	return s.store.ListByUser(ctx, tenantID, userID, limit, offset)
+func (s *Service) ListByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Upload, error) {
+	return s.store.ListByUser(ctx, userID, limit, offset)
 }
 
 // ListByConversation lists uploads for a conversation.
-func (s *Service) ListByConversation(ctx context.Context, tenantID, conversationID uuid.UUID) ([]Upload, error) {
-	return s.store.ListByConversation(ctx, tenantID, conversationID)
+func (s *Service) ListByConversation(ctx context.Context, conversationID uuid.UUID) ([]Upload, error) {
+	return s.store.ListByConversation(ctx, conversationID)
 }
 
 // Delete removes an upload from disk and database.
-func (s *Service) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	upload, err := s.store.GetByID(ctx, tenantID, id)
+func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+	upload, err := s.store.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 	if err := os.Remove(upload.StoragePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove file: %w", err)
 	}
-	return s.store.Delete(ctx, tenantID, id)
+	return s.store.Delete(ctx, id)
 }
 
 // Open returns a ReadCloser for the upload content.

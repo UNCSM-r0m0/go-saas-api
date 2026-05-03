@@ -25,20 +25,19 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a single WebSocket connection.
 type Client struct {
-	conn     *websocket.Conn
-	userID   uuid.UUID
-	tenantID uuid.UUID
-	sendCh   chan []byte
-	manager  *Manager
+	conn    *websocket.Conn
+	userID  uuid.UUID
+	sendCh  chan []byte
+	manager *Manager
 
 	// active generation cancellation
-	mu         sync.Mutex
-	cancelGen  context.CancelFunc
+	mu        sync.Mutex
+	cancelGen context.CancelFunc
 }
 
 // Manager manages WebSocket clients.
 type Manager struct {
-	clients    map[string]*Client // key: tenantID:userID
+	clients    map[string]*Client // key: userID
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
@@ -62,8 +61,8 @@ func NewManager(orch *runtime.Orchestrator, log logger.Logger) *Manager {
 func (m *Manager) run() {
 	for {
 		select {
-		case client := <-m.register:
-			key := clientKey(client.tenantID, client.userID)
+		case client := <- m.register:
+			key := clientKey(client.userID)
 			m.mu.Lock()
 			// Close existing connection for same user
 			if old, ok := m.clients[key]; ok {
@@ -74,8 +73,8 @@ func (m *Manager) run() {
 			m.mu.Unlock()
 			m.log.Info("websocket client connected", logger.String("user", client.userID.String()))
 
-		case client := <-m.unregister:
-			key := clientKey(client.tenantID, client.userID)
+		case client := <- m.unregister:
+			key := clientKey(client.userID)
 			m.mu.Lock()
 			if _, ok := m.clients[key]; ok {
 				delete(m.clients, key)
@@ -88,24 +87,18 @@ func (m *Manager) run() {
 	}
 }
 
-func clientKey(tenantID, userID uuid.UUID) string {
-	return tenantID.String() + ":" + userID.String()
+func clientKey(userID uuid.UUID) string {
+	return userID.String()
 }
 
 // HandleUpgrade upgrades an HTTP connection to WebSocket.
 func (m *Manager) HandleUpgrade(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID or X-User-ID"})
+	if userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-User-ID"})
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
@@ -119,11 +112,10 @@ func (m *Manager) HandleUpgrade(c *gin.Context) {
 	}
 
 	client := &Client{
-		conn:     conn,
-		userID:   userID,
-		tenantID: tenantID,
-		sendCh:   make(chan []byte, 256),
-		manager:  m,
+		conn:    conn,
+		userID:  userID,
+		sendCh:  make(chan []byte, 256),
+		manager: m,
 	}
 
 	m.register <- client
@@ -184,7 +176,7 @@ func (c *Client) writePump() {
 
 	for {
 		select {
-		case message, ok := <-c.sendCh:
+		case message, ok := <- c.sendCh:
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -192,7 +184,7 @@ func (c *Client) writePump() {
 			}
 			c.conn.WriteMessage(websocket.TextMessage, message)
 
-		case <-ticker.C:
+		case <- ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
@@ -215,7 +207,7 @@ func (c *Client) handleChat(msg Message) {
 	c.cancelGen = cancel
 	c.mu.Unlock()
 
-	streamCh, err := c.manager.orch.Chat(ctx, c.tenantID, c.userID, msg.ConversationID, msg.Content, msg.FileIDs, msg.Model)
+	streamCh, err := c.manager.orch.Chat(ctx, c.userID, msg.ConversationID, msg.Content, msg.FileIDs, msg.Model)
 	if err != nil {
 		c.sendError(fmt.Sprintf("chat failed: %v", err))
 		c.clearCancel()

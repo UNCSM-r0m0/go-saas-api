@@ -18,8 +18,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	_ "github.com/r0lm0/go-saas-api/docs"
-	ginSwagger "github.com/swaggo/gin-swagger"
-	swaggerFiles "github.com/swaggo/files"
 	"github.com/r0lm0/go-saas-api/internal/apikey"
 	"github.com/r0lm0/go-saas-api/internal/billing"
 	"github.com/r0lm0/go-saas-api/internal/platform/cache"
@@ -33,6 +31,8 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/redis"
 	"github.com/r0lm0/go-saas-api/pkg/jwt"
 	natsio "github.com/nats-io/nats.go"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	swaggerFiles "github.com/swaggo/files"
 )
 
 func main() {
@@ -97,28 +97,26 @@ func main() {
 		} else {
 			defer nc.Close()
 			// Subscribe to usage.recorded and subscription.changed
-		_, _ = nc.Subscribe("usage.recorded", func(msg *natsio.Msg) {
-			var event struct {
-				TenantID string `json:"tenant_id"`
-				UserID   string `json:"user_id"`
-			}
-			if err := json.Unmarshal(msg.Data, &event); err == nil {
-				key := fmt.Sprintf("tier:%s:%s", event.TenantID, event.UserID)
-				_ = redisClient.Del(context.Background(), key).Err()
-				log.Info("nats: invalidated cache", logger.String("key", key))
-			}
-		})
-		_, _ = nc.Subscribe("subscription.changed", func(msg *natsio.Msg) {
-			var event struct {
-				TenantID string `json:"tenant_id"`
-				UserID   string `json:"user_id"`
-			}
-			if err := json.Unmarshal(msg.Data, &event); err == nil {
-				key := fmt.Sprintf("tier:%s:%s", event.TenantID, event.UserID)
-				_ = redisClient.Del(context.Background(), key).Err()
-				log.Info("nats: invalidated cache", logger.String("key", key))
-			}
-		})
+			_, _ = nc.Subscribe("usage.recorded", func(msg *natsio.Msg) {
+				var event struct {
+					UserID string `json:"user_id"`
+				}
+				if err := json.Unmarshal(msg.Data, &event); err == nil {
+					key := fmt.Sprintf("tier:%s", event.UserID)
+					_ = redisClient.Del(context.Background(), key).Err()
+					log.Info("nats: invalidated cache", logger.String("key", key))
+				}
+			})
+			_, _ = nc.Subscribe("subscription.changed", func(msg *natsio.Msg) {
+				var event struct {
+					UserID string `json:"user_id"`
+				}
+				if err := json.Unmarshal(msg.Data, &event); err == nil {
+					key := fmt.Sprintf("tier:%s", event.UserID)
+					_ = redisClient.Del(context.Background(), key).Err()
+					log.Info("nats: invalidated cache", logger.String("key", key))
+				}
+			})
 			log.Info("nats cache invalidation consumer started")
 		}
 	}
@@ -173,7 +171,6 @@ func main() {
 		v1.GET("/models/public", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 
 		// Agent routes: require auth (JWT or API key) + rate limit
-		// The agent-service requires X-Tenant-ID / X-User-ID on all chat endpoints.
 		agent := v1.Group("")
 		agent.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
 		agent.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
@@ -234,11 +231,8 @@ func main() {
 		protected.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
 		protected.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
-		protected.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-		protected.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-		// Note: /files/upload is registered above in documents group
-		// protected.Any("/files", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-		// protected.Any("/files/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			// r3-chat frontend billing routes — billing service registers these under /billing
 			protected.Any("/stripe/*path", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
@@ -264,7 +258,7 @@ func main() {
 
 	log.Info("api-gateway running", logger.String("addr", srv.Addr))
 
-	<-quit
+	<- quit
 	log.Info("shutting down api-gateway")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -306,15 +300,12 @@ func proxyToWithPrefix(targetURL, stripPrefix, addPrefix string) gin.HandlerFunc
 	}
 
 	// Inject auth context from Gin into outgoing request headers
-	// so downstream services receive X-User-ID / X-Tenant-ID even
+	// so downstream services receive X-User-ID even
 	// when the client only sent an Authorization header.
 	// For unauthenticated requests, inject X-Anonymous-ID (anonymousId from body or ClientIP).
 	injectAuth := func(c *gin.Context) {
 		if uid, ok := c.Get("user_id"); ok && uid != "" {
 			c.Request.Header.Set("X-User-ID", fmt.Sprintf("%v", uid))
-		}
-		if tid, ok := c.Get("tenant_id"); ok && tid != "" {
-			c.Request.Header.Set("X-Tenant-ID", fmt.Sprintf("%v", tid))
 		}
 		if role, ok := c.Get("role"); ok && role != "" {
 			c.Request.Header.Set("X-User-Role", fmt.Sprintf("%v", role))
@@ -393,17 +384,13 @@ type dbTierResolver struct {
 	store billing.SubscriptionRepository
 }
 
-func (r *dbTierResolver) ResolveTier(ctx context.Context, tenantID, userID string) (string, error) {
-	tid, err := uuid.Parse(tenantID)
-	if err != nil {
-		return "", err
-	}
+func (r *dbTierResolver) ResolveTier(ctx context.Context, userID string) (string, error) {
 	uid, err := uuid.Parse(userID)
 	if err != nil {
 		return "", err
 	}
 
-	sub, err := r.store.GetSubscriptionByUser(ctx, tid, uid)
+	sub, err := r.store.GetSubscriptionByUser(ctx, uid)
 	if err != nil {
 		return "", err
 	}
@@ -428,14 +415,14 @@ type cachedTierResolver struct {
 	ttl      time.Duration
 }
 
-func (c *cachedTierResolver) ResolveTier(ctx context.Context, tenantID, userID string) (string, error) {
-	cacheKey := fmt.Sprintf("tier:%s:%s", tenantID, userID)
+func (c *cachedTierResolver) ResolveTier(ctx context.Context, userID string) (string, error) {
+	cacheKey := fmt.Sprintf("tier:%s", userID)
 	var tier string
 	if err := c.cache.Get(ctx, cacheKey, &tier); err == nil {
 		return tier, nil
 	}
 
-	tier, err := c.fallback.ResolveTier(ctx, tenantID, userID)
+	tier, err := c.fallback.ResolveTier(ctx, userID)
 	if err != nil {
 		return "", err
 	}

@@ -165,15 +165,9 @@ func (s *Server) handleListModelsPublic(c *gin.Context) {
 }
 
 func (s *Server) handleCreateChat(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
-		response.Error(c, http.StatusUnauthorized, "missing X-Tenant-ID or X-User-ID")
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
+	if userIDStr == "" {
+		response.Error(c, http.StatusUnauthorized, "missing X-User-ID")
 		return
 	}
 	userID, err := uuid.Parse(userIDStr)
@@ -193,7 +187,6 @@ func (s *Server) handleCreateChat(c *gin.Context) {
 
 	conv := &model.Conversation{
 		ID:        uuid.New(),
-		TenantID:  tenantID,
 		UserID:    userID,
 		Title:     req.Title,
 		Status:    model.ConversationActive,
@@ -214,31 +207,20 @@ func (s *Server) handleCreateChat(c *gin.Context) {
 }
 
 func (s *Server) handleGetChatWithMessages(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		response.Error(c, http.StatusUnauthorized, "missing X-Tenant-ID")
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
-		return
-	}
-
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid id")
 		return
 	}
 
-	conv, err := s.convRepo.GetByID(c.Request.Context(), tenantID, id)
+	conv, err := s.convRepo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		s.log.Error("get chat failed", logger.Error(err))
 		response.Error(c, http.StatusNotFound, "chat not found")
 		return
 	}
 
-	msgs, err := s.msgRepo.ListByConversation(c.Request.Context(), tenantID, id, 100)
+	msgs, err := s.msgRepo.ListByConversation(c.Request.Context(), id, 100)
 	if err != nil {
 		s.log.Error("list messages failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "failed to load messages")
@@ -250,15 +232,9 @@ func (s *Server) handleGetChatWithMessages(c *gin.Context) {
 }
 
 func (s *Server) handleChatMessage(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
-		response.Error(c, http.StatusUnauthorized, "missing X-Tenant-ID or X-User-ID")
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
+	if userIDStr == "" {
+		response.Error(c, http.StatusUnauthorized, "missing X-User-ID")
 		return
 	}
 	userID, err := uuid.Parse(userIDStr)
@@ -280,7 +256,7 @@ func (s *Server) handleChatMessage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, req.FileIDs, req.Model)
+	streamCh, err := s.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model)
 	if err != nil {
 		s.log.Error("chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "chat failed")
@@ -302,7 +278,7 @@ func (s *Server) handleChatMessage(c *gin.Context) {
 		convID = *req.ConversationID
 	} else {
 		// Find the most recent conversation for this user
-		convs, err := s.convRepo.ListByUser(ctx, tenantID, userID, 1, 0)
+		convs, err := s.convRepo.ListByUser(ctx, userID, 1, 0)
 		if err != nil || len(convs) == 0 {
 			response.Error(c, http.StatusInternalServerError, "failed to retrieve conversation")
 			return
@@ -310,14 +286,14 @@ func (s *Server) handleChatMessage(c *gin.Context) {
 		convID = convs[0].ID
 	}
 
-	conv, err := s.convRepo.GetByID(ctx, tenantID, convID)
+	conv, err := s.convRepo.GetByID(ctx, convID)
 	if err != nil {
 		s.log.Error("get conversation after chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "failed to retrieve conversation")
 		return
 	}
 
-	msgs, err := s.msgRepo.ListByConversation(ctx, tenantID, convID, 100)
+	msgs, err := s.msgRepo.ListByConversation(ctx, convID, 100)
 	if err != nil {
 		s.log.Error("list messages after chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "failed to retrieve messages")
@@ -353,23 +329,13 @@ func (s *Server) handleChatMessage(c *gin.Context) {
 }
 
 func (s *Server) handleChatMessageStream(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
 		c.Writer.WriteHeader(http.StatusUnauthorized)
 		c.Writer.Write([]byte("data: {\"error\":\"AUTH_ERROR\",\"message\":\"missing auth\"}\n\n"))
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-		c.Writer.WriteHeader(http.StatusBadRequest)
-		c.Writer.Write([]byte("data: {\"error\":\"STREAM_ERROR\",\"message\":\"invalid tenant\"}\n\n"))
 		return
 	}
 	userID, err := uuid.Parse(userIDStr)
@@ -399,7 +365,7 @@ func (s *Server) handleChatMessageStream(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Content, req.FileIDs, req.Model)
+	streamCh, err := s.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model)
 	if err != nil {
 		s.log.Error("chat stream failed", logger.Error(err))
 		c.Header("Content-Type", "text/event-stream")
@@ -435,7 +401,7 @@ func (s *Server) handleChatMessageStream(c *gin.Context) {
 	// Send final done event with conversation ID
 	if conversationID == "" {
 		// Find the most recent conversation
-		convs, err := s.convRepo.ListByUser(ctx, tenantID, userID, 1, 0)
+		convs, err := s.convRepo.ListByUser(ctx, userID, 1, 0)
 		if err == nil && len(convs) > 0 {
 			conversationID = convs[0].ID.String()
 		}
@@ -448,15 +414,9 @@ func (s *Server) handleChatMessageStream(c *gin.Context) {
 }
 
 func (s *Server) handleAgentChat(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID or X-User-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+	if userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-User-ID"})
 		return
 	}
 	userID, err := uuid.Parse(userIDStr)
@@ -466,7 +426,7 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 	}
 
 	var req struct {
-		ConversationID *uuid.UUID   `json:"conversation_id"`
+		ConversationID *uuid.UUID  `json:"conversation_id"`
 		Message        string       `json:"message" binding:"required"`
 		Model          string       `json:"model"`
 		FileIDs        []uuid.UUID  `json:"file_ids"`
@@ -477,7 +437,7 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := s.orch.Chat(ctx, tenantID, userID, req.ConversationID, req.Message, req.FileIDs, req.Model)
+	streamCh, err := s.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model)
 	if err != nil {
 		s.log.Error("chat failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "chat failed"})
@@ -502,17 +462,6 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 }
 
 func (s *Server) handleCreateArtifact(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	var req struct {
 		ConversationID uuid.UUID `json:"conversation_id" binding:"required"`
 		Name           string    `json:"name" binding:"required"`
@@ -527,7 +476,6 @@ func (s *Server) handleCreateArtifact(c *gin.Context) {
 
 	art := &model.Artifact{
 		ID:             uuid.New(),
-		TenantID:       tenantID,
 		ConversationID: req.ConversationID,
 		Name:           req.Name,
 		Type:           req.Type,
@@ -548,24 +496,13 @@ func (s *Server) handleCreateArtifact(c *gin.Context) {
 }
 
 func (s *Server) handlePreviewArtifact(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	art, err := s.artRepo.GetByID(c.Request.Context(), tenantID, id)
+	art, err := s.artRepo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		s.log.Error("get artifact failed", logger.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "artifact not found"})
@@ -577,15 +514,9 @@ func (s *Server) handlePreviewArtifact(c *gin.Context) {
 }
 
 func (s *Server) handleListConversations(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID or X-User-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+	if userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-User-ID"})
 		return
 	}
 	userID, err := uuid.Parse(userIDStr)
@@ -606,7 +537,7 @@ func (s *Server) handleListConversations(c *gin.Context) {
 		limit = 100
 	}
 
-	convs, err := s.convRepo.ListByUser(c.Request.Context(), tenantID, userID, limit, offset)
+	convs, err := s.convRepo.ListByUser(c.Request.Context(), userID, limit, offset)
 	if err != nil {
 		s.log.Error("list conversations failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list conversations"})
@@ -617,24 +548,13 @@ func (s *Server) handleListConversations(c *gin.Context) {
 }
 
 func (s *Server) handleGetConversation(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	conv, err := s.convRepo.GetByID(c.Request.Context(), tenantID, id)
+	conv, err := s.convRepo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		s.log.Error("get conversation failed", logger.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
@@ -645,24 +565,13 @@ func (s *Server) handleGetConversation(c *gin.Context) {
 }
 
 func (s *Server) handleUpdateConversation(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	conv, err := s.convRepo.GetByID(c.Request.Context(), tenantID, id)
+	conv, err := s.convRepo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		s.log.Error("get conversation for update failed", logger.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
@@ -696,24 +605,13 @@ func (s *Server) handleUpdateConversation(c *gin.Context) {
 }
 
 func (s *Server) handleDeleteConversation(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	if err := s.convRepo.Delete(c.Request.Context(), tenantID, id); err != nil {
+	if err := s.convRepo.Delete(c.Request.Context(), id); err != nil {
 		s.log.Error("delete conversation failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete conversation"})
 		return
@@ -723,17 +621,6 @@ func (s *Server) handleDeleteConversation(c *gin.Context) {
 }
 
 func (s *Server) handleListMessages(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	conversationID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
@@ -748,7 +635,7 @@ func (s *Server) handleListMessages(c *gin.Context) {
 		limit = 100
 	}
 
-	msgs, err := s.msgRepo.ListByConversation(c.Request.Context(), tenantID, conversationID, limit)
+	msgs, err := s.msgRepo.ListByConversation(c.Request.Context(), conversationID, limit)
 	if err != nil {
 		s.log.Error("list messages failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list messages"})
@@ -816,6 +703,18 @@ func main() {
 
 	if err := providerLoader.LoadAll(ctx); err != nil {
 		log.Warn("failed to load providers from database", logger.Error(err))
+	}
+
+	// Fallback: register Kimi from env if no providers loaded or env key is set.
+	if cfg.KimiAPIKey != "" {
+		multiClient.Register(llm.ProviderConfig{
+			Name:    "kimi",
+			Models:  []string{"kimi-for-coding"},
+			Client:  llm.NewKimiAnthropicClient(cfg.KimiAPIKey),
+			Enabled: true,
+			Weight:  1,
+		})
+		log.Info("registered Kimi provider from env fallback")
 	}
 
 	// Fallback: warn strongly if no providers are loaded. Never use .env keys here.
@@ -886,7 +785,7 @@ func main() {
 
 	log.Info("agent-service running", logger.String("addr", httpSrv.Addr))
 
-	<-quit
+	<- quit
 	log.Info("shutting down agent-service")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -928,8 +827,7 @@ func migrateProviderKeysFromEnv(ctx context.Context, store provider.Store, maste
 		}
 
 		p.APIKeyEncrypted = &encrypted
-		// tenantID is required by UpdateProvider; use the provider's own tenant.
-		if err := store.UpdateProvider(ctx, p.TenantID, &p); err != nil {
+		if err := store.UpdateProvider(ctx, &p); err != nil {
 			log.Warn("failed to update encrypted API key for provider", logger.String("provider", p.Name), logger.Error(err))
 			continue
 		}
@@ -977,7 +875,7 @@ func migrateProviderKeysFromEnv(ctx context.Context, store provider.Store, maste
 
 		p.APIKeyEncrypted = &encrypted
 		p.BaseURL = spec.baseURL
-		if err := store.UpdateProvider(ctx, p.TenantID, &p); err != nil {
+		if err := store.UpdateProvider(ctx, &p); err != nil {
 			log.Warn("failed to update provider from env", logger.String("provider", p.Name), logger.Error(err))
 			continue
 		}

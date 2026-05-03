@@ -34,7 +34,7 @@ func TestWSAuth_ValidCookie(t *testing.T) {
 		c.Status(http.StatusSwitchingProtocols)
 	})
 
-	token, _ := mgr.GenerateToken("user-123", "tenant-456", "admin", time.Hour)
+	token, _ := mgr.GenerateToken("user-123", "admin", time.Hour)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/agent/ws", nil)
@@ -104,7 +104,7 @@ func TestWSAuth_FallbackToHeader(t *testing.T) {
 		c.Status(http.StatusSwitchingProtocols)
 	})
 
-	token, _ := mgr.GenerateToken("user-123", "tenant-456", "admin", time.Hour)
+	token, _ := mgr.GenerateToken("user-123", "admin", time.Hour)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/agent/ws", nil)
@@ -143,7 +143,7 @@ func TestWSAuth_QueryParam(t *testing.T) {
 		c.Status(http.StatusSwitchingProtocols)
 	})
 
-	token, _ := mgr.GenerateToken("user-123", "tenant-456", "admin", time.Hour)
+	token, _ := mgr.GenerateToken("user-123", "admin", time.Hour)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/agent/ws?token="+token, nil)

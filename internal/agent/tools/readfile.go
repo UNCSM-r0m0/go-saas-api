@@ -47,10 +47,9 @@ func (r *ReadFileTool) Execute(ctx context.Context, args map[string]any) (Result
 		return Result{Error: "missing or invalid 'name' argument"}, fmt.Errorf("missing name")
 	}
 
-	tenantID, _ := ctx.Value("tenant_id").(uuid.UUID)
 	convID, _ := ctx.Value("conversation_id").(uuid.UUID)
 
-	artifact, err := r.repo.GetByName(ctx, tenantID, convID, name)
+	artifact, err := r.repo.GetByName(ctx, convID, name)
 	if err != nil {
 		return Result{Error: err.Error()}, err
 	}

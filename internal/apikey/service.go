@@ -21,13 +21,12 @@ func NewService(store Store) *Service {
 }
 
 // GenerateKey creates a new API key, returns the plain key (once) and the persisted record.
-func (s *Service) GenerateKey(ctx context.Context, tenantID, userID uuid.UUID, name string, expiresAt *time.Time) (plainKey string, key *APIKey, err error) {
+func (s *Service) GenerateKey(ctx context.Context, userID uuid.UUID, name string, expiresAt *time.Time) (plainKey string, key *APIKey, err error) {
 	plainKey = generatePlainKey()
 	hash := hashKey(plainKey)
 
 	key = &APIKey{
 		ID:        uuid.New(),
-		TenantID:  tenantID,
 		UserID:    userID,
 		Name:      name,
 		KeyHash:   hash,
@@ -43,8 +42,8 @@ func (s *Service) GenerateKey(ctx context.Context, tenantID, userID uuid.UUID, n
 }
 
 // ListKeys returns all active API keys for a user.
-func (s *Service) ListKeys(ctx context.Context, tenantID, userID uuid.UUID) ([]APIKey, error) {
-	keys, err := s.store.ListByUser(ctx, tenantID, userID)
+func (s *Service) ListKeys(ctx context.Context, userID uuid.UUID) ([]APIKey, error) {
+	keys, err := s.store.ListByUser(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
@@ -52,8 +51,8 @@ func (s *Service) ListKeys(ctx context.Context, tenantID, userID uuid.UUID) ([]A
 }
 
 // RevokeKey revokes an API key.
-func (s *Service) RevokeKey(ctx context.Context, tenantID, id uuid.UUID) error {
-	if err := s.store.Revoke(ctx, tenantID, id); err != nil {
+func (s *Service) RevokeKey(ctx context.Context, id uuid.UUID) error {
+	if err := s.store.Revoke(ctx, id); err != nil {
 		return fmt.Errorf("revoke api key: %w", err)
 	}
 	return nil

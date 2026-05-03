@@ -51,13 +51,11 @@ func (f *FileWriteTool) Execute(ctx context.Context, args map[string]any) (Resul
 	fileType, _ := args["type"].(string)
 	language, _ := args["language"].(string)
 
-	// Extract tenant_id and conversation_id from context (injected by runtime)
-	tenantID, _ := ctx.Value("tenant_id").(uuid.UUID)
+	// Extract conversation_id from context (injected by runtime)
 	convID, _ := ctx.Value("conversation_id").(uuid.UUID)
 
 	art := &model.Artifact{
 		ID:             uuid.New(),
-		TenantID:       tenantID,
 		ConversationID: convID,
 		Name:           name,
 		Type:           fileType,

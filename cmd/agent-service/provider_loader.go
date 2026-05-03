@@ -89,7 +89,7 @@ func (pl *ProviderLoader) createClient(p provider.AIProvider) (llm.Client, error
 	case provider.ProviderDeepSeek:
 		return llm.NewDeepSeekClient(apiKey), nil
 	case provider.ProviderKimi:
-		return llm.NewKimiClient(apiKey), nil
+		return llm.NewKimiAnthropicClient(apiKey), nil
 	case provider.ProviderLMStudio:
 		return llm.NewLMStudioClient(p.BaseURL, apiKey), nil
 	case provider.ProviderOpenCode:

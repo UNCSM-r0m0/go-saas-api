@@ -24,11 +24,11 @@ func (m *mockAPIKeyStore) GetByKeyHash(_ context.Context, hash string) (*apikey.
 	return m.keys[hash], nil
 }
 
-func (m *mockAPIKeyStore) ListByUser(_ context.Context, _, _ uuid.UUID) ([]apikey.APIKey, error) {
+func (m *mockAPIKeyStore) ListByUser(_ context.Context, _ uuid.UUID) ([]apikey.APIKey, error) {
 	return nil, nil
 }
 
-func (m *mockAPIKeyStore) Revoke(_ context.Context, _, _ uuid.UUID) error {
+func (m *mockAPIKeyStore) Revoke(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
 
@@ -39,9 +39,8 @@ func TestAPIKeyAuth_Success(t *testing.T) {
 	store := &mockAPIKeyStore{keys: make(map[string]*apikey.APIKey)}
 	svc := apikey.NewService(store)
 
-	tenantID := uuid.New()
 	userID := uuid.New()
-	plainKey, _, err := svc.GenerateKey(context.Background(), tenantID, userID, "test", nil)
+	plainKey, _, err := svc.GenerateKey(context.Background(), userID, "test", nil)
 	if err != nil {
 		t.Fatalf("generate key failed: %v", err)
 	}
@@ -50,8 +49,7 @@ func TestAPIKeyAuth_Success(t *testing.T) {
 	r.Use(APIKeyAuth(svc))
 	r.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"user_id":   c.GetString("user_id"),
-			"tenant_id": c.GetString("tenant_id"),
+			"user_id": c.GetString("user_id"),
 		})
 	})
 

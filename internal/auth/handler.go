@@ -24,12 +24,6 @@ func NewHandler(service *Service, log logger.Logger) *Handler {
 }
 
 // cookieConfig returns the appropriate cookie settings based on environment.
-// When PUBLIC_URL uses HTTPS (e.g. Cloudflare Tunnel), we need SameSite=None + Secure
-// so cookies work across different domains (frontend vs API).
-// In local development (localhost/127.0.0.1), frontend and API run on different
-// ports (cross-origin). SameSite=Lax blocks cookies on AJAX/fetch cross-origin
-// requests, so we also use None+Secure for localhost. Chrome/Edge allow Secure
-// cookies over http://localhost; Firefox may need about:config exception.
 func cookieConfig() (secure bool, sameSite string) {
 	publicURL := os.Getenv("PUBLIC_URL")
 	if strings.HasPrefix(publicURL, "https://") {
@@ -81,7 +75,6 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		auth.POST("/logout", h.Logout)
 		auth.POST("/forgot-password", h.ForgotPassword)
 		auth.POST("/reset-password", h.ResetPassword)
-		// /me and /profile are registered separately with JWT middleware in main.go
 	}
 }
 
@@ -93,10 +86,7 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	// For now, use a default tenant; in production this comes from signup context
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
-	user, err := h.service.Register(c.Request.Context(), tenantID, &req)
+	user, err := h.service.Register(c.Request.Context(), &req)
 	if err != nil {
 		if err == ErrUserExists {
 			response.Error(c, http.StatusConflict, "user already exists")
@@ -108,7 +98,7 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 
 	// Generate token pair and set cookies
-	pair, _, err := h.service.Login(c.Request.Context(), tenantID, &LoginRequest{Email: req.Email, Password: req.Password})
+	pair, _, err := h.service.Login(c.Request.Context(), &LoginRequest{Email: req.Email, Password: req.Password})
 	if err != nil {
 		h.log.Error("auto-login after register failed", logger.Error(err))
 		response.OK(c, gin.H{"user": user}, "registered successfully")
@@ -127,9 +117,7 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
-	pair, user, err := h.service.Login(c.Request.Context(), tenantID, &req)
+	pair, user, err := h.service.Login(c.Request.Context(), &req)
 	if err != nil {
 		if err == ErrInvalidCredentials {
 			response.Error(c, http.StatusUnauthorized, "invalid credentials")
@@ -195,10 +183,8 @@ func (h *Handler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
 	// Always return the same response to avoid user enumeration
-	_ = h.service.RequestPasswordReset(c.Request.Context(), tenantID, req.Email)
+	_ = h.service.RequestPasswordReset(c.Request.Context(), req.Email)
 
 	response.OK(c, nil, "if the email exists, a reset link has been sent")
 }

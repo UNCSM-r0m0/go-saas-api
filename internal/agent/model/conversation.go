@@ -18,7 +18,6 @@ const (
 // Conversation is a chat thread between a user and an agent.
 type Conversation struct {
 	ID        uuid.UUID          `json:"id"`
-	TenantID  uuid.UUID          `json:"tenant_id"`
 	UserID    uuid.UUID          `json:"user_id"`
 	Title     string             `json:"title"`
 	AgentID   *uuid.UUID         `json:"agent_id,omitempty"`

@@ -18,7 +18,7 @@ import (
 
 // TierResolver resolves the rate-limit tier for an authenticated user.
 type TierResolver interface {
-	ResolveTier(ctx context.Context, tenantID, userID string) (tier string, err error)
+	ResolveTier(ctx context.Context, userID string) (tier string, err error)
 }
 
 // RateLimit creates a middleware that enforces rate limits per tier.
@@ -61,10 +61,9 @@ func RateLimit(limiter *ratelimit.Limiter, cfg *config.Config, log logger.Logger
 func resolveLimit(c *gin.Context, cfg *config.Config, resolver TierResolver) (string, int) {
 	// Authenticated users: use user_id as key
 	if uid, exists := c.Get("user_id"); exists && uid != "" {
-		tenantID, _ := c.Get("tenant_id")
 		tier := "registered" // default
 		if resolver != nil {
-			resolvedTier, err := resolver.ResolveTier(c.Request.Context(), fmt.Sprintf("%v", tenantID), fmt.Sprintf("%v", uid))
+			resolvedTier, err := resolver.ResolveTier(c.Request.Context(), fmt.Sprintf("%v", uid))
 			if err == nil && resolvedTier != "" {
 				tier = resolvedTier
 			}

@@ -31,7 +31,8 @@ if ($nodeProcs) {
 
 Start-Sleep -Milliseconds 500
 
-# Cargar variables de entorno desde .env
+# Cargar variables de entorno desde .env en un hashtable para pasar a procesos hijos
+$envVars = @{}
 $envFile = "$root\.env"
 if (Test-Path $envFile) {
     Get-Content $envFile | ForEach-Object {
@@ -41,11 +42,12 @@ if (Test-Path $envFile) {
             if ($parts.Length -eq 2) {
                 $key = $parts[0].Trim()
                 $val = $parts[1].Trim()
+                $envVars[$key] = $val
                 [Environment]::SetEnvironmentVariable($key, $val, "Process")
             }
         }
     }
-    Write-Host "Variables cargadas desde .env"
+    Write-Host "Variables cargadas desde .env ($($envVars.Count) vars)"
 } else {
     Write-Host "WARN: .env no encontrado en $envFile"
 }
@@ -97,16 +99,17 @@ try {
     Start-Sleep -Seconds 5
 }
 
-# Funcion para lanzar servicio Go con PORT especifico
+# Funcion para lanzar servicio Go con PORT especifico y env vars
 function Start-GoService($name, $port) {
     $exe = "$root\tmp\$name.exe"
     $log = "$logDir\$name.log"
     if (Test-Path $exe) {
         Write-Host "  START $name (port $port)"
         $errLog = "$logDir\$name.err.log"
-        $env:PORT = $port
-        Start-Process -FilePath $exe -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $errLog
-        Remove-Item Env:\PORT -ErrorAction SilentlyContinue
+        # Crear copia del hashtable de env vars y agregar PORT
+        $procEnv = $envVars.Clone()
+        $procEnv["PORT"] = "$port"
+        Start-Process -FilePath $exe -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $errLog -Environment $procEnv
     } else {
         Write-Host "  ERROR $exe no encontrado"
     }

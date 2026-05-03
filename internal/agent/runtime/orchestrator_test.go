@@ -52,14 +52,14 @@ func (m *memConversationRepo) Create(_ context.Context, conv *model.Conversation
 	m.convs[conv.ID] = conv
 	return nil
 }
-func (m *memConversationRepo) GetByID(_ context.Context, _, id uuid.UUID) (*model.Conversation, error) {
+func (m *memConversationRepo) GetByID(_ context.Context, id uuid.UUID) (*model.Conversation, error) {
 	return m.convs[id], nil
 }
-func (m *memConversationRepo) ListByUser(_ context.Context, _, _ uuid.UUID, _, _ int) ([]model.Conversation, error) {
+func (m *memConversationRepo) ListByUser(_ context.Context, _ uuid.UUID, _, _ int) ([]model.Conversation, error) {
 	return nil, nil
 }
 func (m *memConversationRepo) Update(_ context.Context, _ *model.Conversation) error { return nil }
-func (m *memConversationRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
+func (m *memConversationRepo) Delete(_ context.Context, _ uuid.UUID) error { return nil }
 
 var _ repository.ConversationRepo = (*memConversationRepo)(nil)
 
@@ -71,7 +71,7 @@ func (m *memMessageRepo) Create(_ context.Context, msg *model.Message) error {
 	m.msgs = append(m.msgs, *msg)
 	return nil
 }
-func (m *memMessageRepo) ListByConversation(_ context.Context, _, _ uuid.UUID, _ int) ([]model.Message, error) {
+func (m *memMessageRepo) ListByConversation(_ context.Context, _ uuid.UUID, _ int) ([]model.Message, error) {
 	return m.msgs, nil
 }
 
@@ -79,9 +79,9 @@ var _ repository.MessageRepo = (*memMessageRepo)(nil)
 
 type memAgentRepo struct{}
 
-func (m *memAgentRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*model.Agent, error)  { return nil, nil }
-func (m *memAgentRepo) GetByRole(_ context.Context, _ uuid.UUID, _ model.AgentRole) (*model.Agent, error) { return nil, nil }
-func (m *memAgentRepo) GetDefault(_ context.Context, _ uuid.UUID) (*model.Agent, error) { return nil, nil }
+func (m *memAgentRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error)  { return nil, nil }
+func (m *memAgentRepo) GetByRole(_ context.Context, _ model.AgentRole) (*model.Agent, error) { return nil, nil }
+func (m *memAgentRepo) GetDefault(_ context.Context) (*model.Agent, error) { return nil, nil }
 
 var _ repository.AgentRepo = (*memAgentRepo)(nil)
 
@@ -89,9 +89,9 @@ type mockAgentRepoWithRole struct {
 	agent *model.Agent
 }
 
-func (m *mockAgentRepoWithRole) GetByID(_ context.Context, _, _ uuid.UUID) (*model.Agent, error)  { return nil, nil }
-func (m *mockAgentRepoWithRole) GetByRole(_ context.Context, _ uuid.UUID, _ model.AgentRole) (*model.Agent, error) { return m.agent, nil }
-func (m *mockAgentRepoWithRole) GetDefault(_ context.Context, _ uuid.UUID) (*model.Agent, error) { return nil, nil }
+func (m *mockAgentRepoWithRole) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error)  { return nil, nil }
+func (m *mockAgentRepoWithRole) GetByRole(_ context.Context, _ model.AgentRole) (*model.Agent, error) { return m.agent, nil }
+func (m *mockAgentRepoWithRole) GetDefault(_ context.Context) (*model.Agent, error) { return nil, nil }
 
 var _ repository.AgentRepo = (*mockAgentRepoWithRole)(nil)
 
@@ -112,10 +112,9 @@ func TestOrchestrator_Chat(t *testing.T) {
 
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
 	ctx := context.Background()
-	tenantID := uuid.New()
 	userID := uuid.New()
 
-	ch, err := orch.Chat(ctx, tenantID, userID, nil, "hi there", nil, "")
+	ch, err := orch.Chat(ctx, userID, nil, "hi there", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,7 +158,7 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), uuid.New(), nil, "ping", nil, "")
+	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -205,7 +204,7 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), uuid.New(), nil, "ping", nil, "")
+	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -243,9 +242,8 @@ func TestOrchestrator_resolveAgent_DBLookup(t *testing.T) {
 	agentRepo := &mockAgentRepoWithRole{agent: expectedAgent}
 	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil)
 	ctx := context.Background()
-	tenantID := uuid.New()
 
-	agent, err := orch.resolveAgent(ctx, tenantID, model.RoleCoder)
+	agent, err := orch.resolveAgent(ctx, model.RoleCoder)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -264,9 +262,8 @@ func TestOrchestrator_resolveAgent_FallbackToDefault(t *testing.T) {
 	agentRepo := &memAgentRepo{}
 	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil)
 	ctx := context.Background()
-	tenantID := uuid.New()
 
-	agent, err := orch.resolveAgent(ctx, tenantID, model.RoleCoder)
+	agent, err := orch.resolveAgent(ctx, model.RoleCoder)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -283,4 +280,3 @@ func TestOrchestrator_resolveAgent_FallbackToDefault(t *testing.T) {
 		t.Fatal("expected non-empty system prompt for coder role")
 	}
 }
-

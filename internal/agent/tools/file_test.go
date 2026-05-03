@@ -19,15 +19,15 @@ func (m *mockArtifactRepo) Create(_ context.Context, art *model.Artifact) error 
 	return m.err
 }
 
-func (m *mockArtifactRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*model.Artifact, error) {
+func (m *mockArtifactRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.Artifact, error) {
 	return nil, nil
 }
 
-func (m *mockArtifactRepo) GetByName(_ context.Context, _, _ uuid.UUID, _ string) (*model.Artifact, error) {
+func (m *mockArtifactRepo) GetByName(_ context.Context, _ uuid.UUID, _ string) (*model.Artifact, error) {
 	return nil, nil
 }
 
-func (m *mockArtifactRepo) ListByConversation(_ context.Context, _, _ uuid.UUID) ([]model.Artifact, error) {
+func (m *mockArtifactRepo) ListByConversation(_ context.Context, _ uuid.UUID) ([]model.Artifact, error) {
 	return nil, nil
 }
 
@@ -38,8 +38,7 @@ func TestFileWriteTool_Execute(t *testing.T) {
 	repo := &mockArtifactRepo{}
 	tool := NewFileWriteTool(repo)
 
-	ctx := context.WithValue(context.Background(), "tenant_id", uuid.MustParse("11111111-1111-1111-1111-111111111111"))
-	ctx = context.WithValue(ctx, "conversation_id", uuid.MustParse("22222222-2222-2222-2222-222222222222"))
+	ctx := context.WithValue(context.Background(), "conversation_id", uuid.MustParse("22222222-2222-2222-2222-222222222222"))
 
 	res, err := tool.Execute(ctx, map[string]any{
 		"name":     "index.html",

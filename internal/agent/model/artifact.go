@@ -9,7 +9,6 @@ import (
 // Artifact is a generated file attached to a conversation.
 type Artifact struct {
 	ID             uuid.UUID  `json:"id"`
-	TenantID       uuid.UUID  `json:"tenant_id"`
 	ConversationID uuid.UUID  `json:"conversation_id"`
 	MessageID      *uuid.UUID `json:"message_id,omitempty"`
 	Name           string     `json:"name"`

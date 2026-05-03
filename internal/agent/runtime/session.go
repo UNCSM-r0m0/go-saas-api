@@ -21,14 +21,13 @@ func NewSessionManager(convRepo repository.ConversationRepo, msgRepo repository.
 }
 
 // CreateConversation starts a new conversation.
-func (s *SessionManager) CreateConversation(ctx context.Context, tenantID, userID uuid.UUID, title string, agentID *uuid.UUID) (*model.Conversation, error) {
+func (s *SessionManager) CreateConversation(ctx context.Context, userID uuid.UUID, title string, agentID *uuid.UUID) (*model.Conversation, error) {
 	conv := &model.Conversation{
-		ID:       uuid.New(),
-		TenantID: tenantID,
-		UserID:   userID,
-		Title:    title,
-		AgentID:  agentID,
-		Status:   model.ConversationActive,
+		ID:      uuid.New(),
+		UserID:  userID,
+		Title:   title,
+		AgentID: agentID,
+		Status:  model.ConversationActive,
 	}
 	if err := s.convRepo.Create(ctx, conv); err != nil {
 		return nil, fmt.Errorf("create conversation: %w", err)
@@ -45,9 +44,9 @@ func (s *SessionManager) AddMessage(ctx context.Context, msg *model.Message) err
 }
 
 // GetHistory retrieves messages for a conversation.
-func (s *SessionManager) GetHistory(ctx context.Context, tenantID, conversationID uuid.UUID, limit int) ([]model.Message, error) {
+func (s *SessionManager) GetHistory(ctx context.Context, conversationID uuid.UUID, limit int) ([]model.Message, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	return s.msgRepo.ListByConversation(ctx, tenantID, conversationID, limit)
+	return s.msgRepo.ListByConversation(ctx, conversationID, limit)
 }

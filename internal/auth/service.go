@@ -29,15 +29,15 @@ type RefreshTokenStore interface {
 
 // Service handles authentication business logic
 type Service struct {
-	users            UserRepository
-	refreshTokens    RefreshTokenStore
-	resetTokens      PasswordResetTokenStore
-	emailSender      EmailSender
-	frontendURL      string
-	jwtManager       *jwt.Manager
-	accessTTL        time.Duration
-	refreshTTL       time.Duration
-	resetTokenTTL    time.Duration
+	users         UserRepository
+	refreshTokens RefreshTokenStore
+	resetTokens   PasswordResetTokenStore
+	emailSender   EmailSender
+	frontendURL   string
+	jwtManager    *jwt.Manager
+	accessTTL     time.Duration
+	refreshTTL    time.Duration
+	resetTokenTTL time.Duration
 }
 
 // NewService creates a new auth service
@@ -56,9 +56,9 @@ func NewService(users UserRepository, refresh RefreshTokenStore, reset PasswordR
 }
 
 // Register creates a new user with a hashed password
-func (s *Service) Register(ctx context.Context, tenantID uuid.UUID, req *RegisterRequest) (*User, error) {
+func (s *Service) Register(ctx context.Context, req *RegisterRequest) (*User, error) {
 	// Check if user already exists
-	existing, err := s.users.GetByEmail(ctx, tenantID, req.Email)
+	existing, err := s.users.GetByEmail(ctx, req.Email)
 	if err == nil && existing != nil {
 		return nil, ErrUserExists
 	}
@@ -70,14 +70,15 @@ func (s *Service) Register(ctx context.Context, tenantID uuid.UUID, req *Registe
 
 	now := time.Now().UTC()
 	user := &User{
-		ID:           uuid.New(),
-		TenantID:     tenantID,
-		Email:        req.Email,
-		PasswordHash: string(hash),
-		Name:         req.Name,
-		Role:         "member",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:                    uuid.New(),
+		Email:                 req.Email,
+		PasswordHash:          string(hash),
+		Name:                  req.Name,
+		Role:                  "member",
+		IsAdmin:               false,
+		MessagesUsedThisMonth: 0,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
 
 	if err := s.users.Create(ctx, user); err != nil {
@@ -88,8 +89,8 @@ func (s *Service) Register(ctx context.Context, tenantID uuid.UUID, req *Registe
 }
 
 // Login validates credentials and returns a token pair
-func (s *Service) Login(ctx context.Context, tenantID uuid.UUID, req *LoginRequest) (*TokenPair, *User, error) {
-	user, err := s.users.GetByEmail(ctx, tenantID, req.Email)
+func (s *Service) Login(ctx context.Context, req *LoginRequest) (*TokenPair, *User, error) {
+	user, err := s.users.GetByEmail(ctx, req.Email)
 	if err != nil {
 		return nil, nil, ErrInvalidCredentials
 	}
@@ -145,8 +146,8 @@ func (s *Service) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) 
 }
 
 // RequestPasswordReset generates a reset token and sends an email to the user
-func (s *Service) RequestPasswordReset(ctx context.Context, tenantID uuid.UUID, email string) error {
-	user, err := s.users.GetByEmail(ctx, tenantID, email)
+func (s *Service) RequestPasswordReset(ctx context.Context, email string) error {
+	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		// Do not reveal whether the email exists for security
 		return nil
@@ -203,7 +204,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 }
 
 func (s *Service) generateTokenPair(ctx context.Context, user *User) (*TokenPair, error) {
-	accessToken, err := s.jwtManager.GenerateToken(user.ID.String(), user.TenantID.String(), user.Role, s.accessTTL)
+	accessToken, err := s.jwtManager.GenerateToken(user.ID.String(), user.Role, s.accessTTL)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}

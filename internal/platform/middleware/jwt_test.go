@@ -22,13 +22,12 @@ func TestJWTAuth_ValidToken(t *testing.T) {
 	r, mgr := setupJWTRouter()
 	r.GET("/protected", JWTAuth(mgr), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"user_id":   c.GetString("user_id"),
-			"tenant_id": c.GetString("tenant_id"),
-			"role":      c.GetString("role"),
+			"user_id": c.GetString("user_id"),
+			"role":    c.GetString("role"),
 		})
 	})
 
-	token, _ := mgr.GenerateToken("user-123", "tenant-456", "admin", time.Hour)
+	token, _ := mgr.GenerateToken("user-123", "admin", time.Hour)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/protected", nil)
@@ -37,7 +36,6 @@ func TestJWTAuth_ValidToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "user-123")
-	assert.Contains(t, w.Body.String(), "tenant-456")
 	assert.Contains(t, w.Body.String(), "admin")
 }
 
@@ -76,7 +74,7 @@ func TestJWTAuth_ExpiredToken(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{})
 	})
 
-	token, _ := mgr.GenerateToken("user-123", "tenant-456", "admin", -time.Hour)
+	token, _ := mgr.GenerateToken("user-123", "admin", -time.Hour)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/protected", nil)
@@ -94,7 +92,7 @@ func TestJWTAuthOptional_ValidToken(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{"user_id": uid})
 	})
 
-	token, _ := mgr.GenerateToken("user-789", "tenant-000", "member", time.Hour)
+	token, _ := mgr.GenerateToken("user-789", "member", time.Hour)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/optional", nil)
@@ -126,7 +124,7 @@ func TestExtractToken_WebSocketQueryParam(t *testing.T) {
 		c.Status(http.StatusSwitchingProtocols)
 	})
 
-	token, _ := mgr.GenerateToken("user-ws", "tenant-ws", "member", time.Hour)
+	token, _ := mgr.GenerateToken("user-ws", "member", time.Hour)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/ws?token="+token, nil)
@@ -142,7 +140,7 @@ func TestExtractToken_QueryParamWithoutUpgradeHeader(t *testing.T) {
 		c.Status(http.StatusSwitchingProtocols)
 	})
 
-	token, _ := mgr.GenerateToken("user-ws", "tenant-ws", "member", time.Hour)
+	token, _ := mgr.GenerateToken("user-ws", "member", time.Hour)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/ws?token="+token, nil)

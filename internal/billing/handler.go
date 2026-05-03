@@ -46,18 +46,12 @@ func (h *Handler) handleListPlans(c *gin.Context) {
 }
 
 func (h *Handler) handleSubscribe(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		response.Error(c, http.StatusUnauthorized, "missing headers")
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid user_id")
@@ -73,7 +67,7 @@ func (h *Handler) handleSubscribe(c *gin.Context) {
 		return
 	}
 
-	url, err := h.service.CreateCheckoutSession(c.Request.Context(), tenantID, userID, req.Email, req.PlanSlug)
+	url, err := h.service.CreateCheckoutSession(c.Request.Context(), userID, req.Email, req.PlanSlug)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -83,25 +77,19 @@ func (h *Handler) handleSubscribe(c *gin.Context) {
 }
 
 func (h *Handler) handleGetSubscription(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		response.Error(c, http.StatusUnauthorized, "missing headers")
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid user_id")
 		return
 	}
 
-	sub, plan, err := h.service.GetSubscription(c.Request.Context(), tenantID, userID)
+	sub, plan, err := h.service.GetSubscription(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -114,25 +102,19 @@ func (h *Handler) handleGetSubscription(c *gin.Context) {
 }
 
 func (h *Handler) handleCancel(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		response.Error(c, http.StatusUnauthorized, "missing headers")
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid user_id")
 		return
 	}
 
-	if err := h.service.CancelSubscription(c.Request.Context(), tenantID, userID); err != nil {
+	if err := h.service.CancelSubscription(c.Request.Context(), userID); err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -167,25 +149,19 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 // --- r3-chat frontend compatible handlers ---
 
 func (h *Handler) handleStripeSubscription(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		response.Error(c, http.StatusUnauthorized, "missing headers")
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid user_id")
 		return
 	}
 
-	sub, plan, err := h.service.GetSubscription(c.Request.Context(), tenantID, userID)
+	sub, plan, err := h.service.GetSubscription(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -198,18 +174,12 @@ func (h *Handler) handleStripeSubscription(c *gin.Context) {
 }
 
 func (h *Handler) handleStripeCreateCheckout(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		response.Error(c, http.StatusUnauthorized, "missing headers")
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid user_id")
@@ -225,7 +195,7 @@ func (h *Handler) handleStripeCreateCheckout(c *gin.Context) {
 	}
 
 	// Map priceId to plan slug. For now, treat any priceId as "premium".
-	url, err := h.service.CreateCheckoutSession(c.Request.Context(), tenantID, userID, "", req.PriceID)
+	url, err := h.service.CreateCheckoutSession(c.Request.Context(), userID, "", req.PriceID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -235,18 +205,12 @@ func (h *Handler) handleStripeCreateCheckout(c *gin.Context) {
 }
 
 func (h *Handler) handleStripeCreatePortal(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		response.Error(c, http.StatusUnauthorized, "missing headers")
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid user_id")
@@ -254,7 +218,7 @@ func (h *Handler) handleStripeCreatePortal(c *gin.Context) {
 	}
 
 	// Get subscription to find stripe customer ID
-	sub, _, err := h.service.GetSubscription(c.Request.Context(), tenantID, userID)
+	sub, _, err := h.service.GetSubscription(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -290,18 +254,12 @@ func (h *Handler) handleStripeConfirmSession(c *gin.Context) {
 }
 
 func (h *Handler) handleCreateSubscription(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		response.Error(c, http.StatusUnauthorized, "missing headers")
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid tenant_id")
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid user_id")
@@ -317,7 +275,7 @@ func (h *Handler) handleCreateSubscription(c *gin.Context) {
 	}
 
 	// Create a checkout session for the requested plan
-	url, err := h.service.CreateCheckoutSession(c.Request.Context(), tenantID, userID, "", req.Plan)
+	url, err := h.service.CreateCheckoutSession(c.Request.Context(), userID, "", req.Plan)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return

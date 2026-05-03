@@ -58,10 +58,8 @@ func debugAuthLog(c *gin.Context, msg string) {
 // setAuthContext stores JWT claims in the Gin context and response headers.
 func setAuthContext(c *gin.Context, claims *jwt.Claims) {
 	c.Set("user_id", claims.UserID)
-	c.Set("tenant_id", claims.TenantID)
 	c.Set("role", claims.Role)
 	c.Header("X-User-ID", claims.UserID)
-	c.Header("X-Tenant-ID", claims.TenantID)
 }
 
 // JWTAuth creates a middleware that validates JWT tokens from cookies or headers.
