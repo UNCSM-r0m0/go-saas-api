@@ -3229,7 +3229,7 @@ const docTemplate = `{
                 "max_tokens_per_request": {
                     "type": "integer"
                 },
-                "messages_per_day": {
+                "messages_per_month": {
                     "type": "integer"
                 }
             }

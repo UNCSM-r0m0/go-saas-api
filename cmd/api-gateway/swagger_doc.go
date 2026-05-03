@@ -167,7 +167,7 @@ type usageLimitsResp struct {
 }
 
 type limitInfo struct {
-	MessagesPerDay      int            `json:"messages_per_day"`
+	MessagesPerMonth    int            `json:"messages_per_month"`
 	MaxTokensPerRequest int            `json:"max_tokens_per_request"`
 	Features            map[string]any `json:"features"`
 }
