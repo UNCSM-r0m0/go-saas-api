@@ -1,4 +1,4 @@
-﻿package billing
+package billing
 
 import (
 	"context"
@@ -105,21 +105,21 @@ func (m *mockSubRepo) CancelSubscription(ctx context.Context, id uuid.UUID, canc
 
 func setupService() (*BillingService, *mockPlanRepo, *mockSubRepo) {
 	plans := &mockPlanRepo{plans: map[string]*Plan{
-		"free": {
-			ID:                uuid.New(),
-			Slug:              "free",
-			Name:              "Free",
-			StripePriceID:     nil,
-			AmountCents:       0,
-			MessagesPerMonth:  100,
+		"registered": {
+			ID:               uuid.New(),
+			Slug:             "registered",
+			Name:             "Registered",
+			StripePriceID:    nil,
+			AmountCents:      0,
+			MessagesPerMonth: 100,
 		},
 		"premium": {
-			ID:                uuid.New(),
-			Slug:              "premium",
-			Name:              "Premium",
-			StripePriceID:     strPtr("price_premium"),
-			AmountCents:       999,
-			MessagesPerMonth:  10000,
+			ID:               uuid.New(),
+			Slug:             "premium",
+			Name:             "Premium",
+			StripePriceID:    strPtr("price_premium"),
+			AmountCents:      999,
+			MessagesPerMonth: 10000,
 		},
 	}}
 	subs := &mockSubRepo{subs: make(map[uuid.UUID]*Subscription)}
@@ -135,7 +135,7 @@ func TestBillingService_GetSubscription_NoSub(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, sub)
 	assert.NotNil(t, plan)
-	assert.Equal(t, "free", plan.Slug)
+	assert.Equal(t, "registered", plan.Slug)
 }
 
 func TestBillingService_GetSubscription_Active(t *testing.T) {

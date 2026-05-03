@@ -14,19 +14,21 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/health"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/internal/platform/response"
+	"github.com/r0lm0/go-saas-api/internal/provider"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
 // Handler provides HTTP handlers for the agent service.
 type Handler struct {
-	orch       *runtime.Orchestrator
-	convRepo   repository.ConversationRepo
-	msgRepo    repository.MessageRepo
-	artRepo    repository.ArtifactRepo
-	log        logger.Logger
-	llmManager *llm.MultiClient
-	wsManager  *websocket.Manager
-	hc         *health.Checker
+	orch          *runtime.Orchestrator
+	convRepo      repository.ConversationRepo
+	msgRepo       repository.MessageRepo
+	artRepo       repository.ArtifactRepo
+	log           logger.Logger
+	llmManager    *llm.MultiClient
+	providerStore provider.Store
+	wsManager     *websocket.Manager
+	hc            *health.Checker
 }
 
 // NewHandler creates a new agent handler.
@@ -37,18 +39,20 @@ func NewHandler(
 	artRepo repository.ArtifactRepo,
 	log logger.Logger,
 	llmManager *llm.MultiClient,
+	providerStore provider.Store,
 	wsManager *websocket.Manager,
 	hc *health.Checker,
 ) *Handler {
 	return &Handler{
-		orch:       orch,
-		convRepo:   convRepo,
-		msgRepo:    msgRepo,
-		artRepo:    artRepo,
-		log:        log,
-		llmManager: llmManager,
-		wsManager:  wsManager,
-		hc:         hc,
+		orch:          orch,
+		convRepo:      convRepo,
+		msgRepo:       msgRepo,
+		artRepo:       artRepo,
+		log:           log,
+		llmManager:    llmManager,
+		providerStore: providerStore,
+		wsManager:     wsManager,
+		hc:            hc,
 	}
 }
 
@@ -124,6 +128,62 @@ func (h *Handler) handleListModels(c *gin.Context) {
 }
 
 func (h *Handler) handleListModelsPublic(c *gin.Context) {
+	tier := strings.ToLower(c.GetHeader("X-User-Tier"))
+	if tier == "" {
+		tier = strings.ToLower(c.GetHeader("X-User-Role"))
+	}
+	isPremiumTier := tier == "premium" || tier == "admin"
+
+	loadedProviders := h.llmManager.ListProviders()
+	loadedModels := make(map[string]bool)
+	for _, p := range loadedProviders {
+		if !p.Enabled {
+			continue
+		}
+		for _, name := range p.Models {
+			loadedModels[name] = true
+		}
+	}
+
+	if h.providerStore != nil {
+		dbProviders, perr := h.providerStore.ListActiveProviders(c.Request.Context())
+		dbModels, merr := h.providerStore.ListActiveModels(c.Request.Context(), true)
+		if perr == nil && merr == nil {
+			providerNameByID := make(map[string]string, len(dbProviders))
+			for _, p := range dbProviders {
+				providerNameByID[p.ID.String()] = p.Name
+			}
+
+			models := make([]gin.H, 0, len(dbModels))
+			for _, m := range dbModels {
+				if !loadedModels[m.Name] {
+					continue
+				}
+				available := !m.IsPremium || isPremiumTier
+				features := []string{}
+				if m.SupportsImages {
+					features = append(features, "multimodal")
+				}
+				models = append(models, gin.H{
+					"id":                m.Name,
+					"name":              m.Name,
+					"provider":          providerNameByID[m.ProviderID.String()],
+					"description":       firstNonEmptyString(m.Description, "Model "+m.Name),
+					"maxTokens":         m.MaxTokens,
+					"supportsImages":    m.SupportsImages,
+					"supportsReasoning": false,
+					"isPremium":         m.IsPremium,
+					"is_premium":        m.IsPremium,
+					"isAvailable":       available,
+					"available":         available,
+					"features":          features,
+				})
+			}
+			response.OK(c, models, "models retrieved")
+			return
+		}
+	}
+
 	providers := h.llmManager.ListProviders()
 	models := make([]gin.H, 0)
 	for _, p := range providers {
@@ -131,6 +191,8 @@ func (h *Handler) handleListModelsPublic(c *gin.Context) {
 			continue
 		}
 		for _, m := range p.Models {
+			isPremium := !strings.Contains(strings.ToLower(p.Name), "ollama")
+			available := !isPremium || isPremiumTier
 			models = append(models, gin.H{
 				"id":                m,
 				"name":              m,
@@ -139,14 +201,22 @@ func (h *Handler) handleListModelsPublic(c *gin.Context) {
 				"maxTokens":         4096,
 				"supportsImages":    false,
 				"supportsReasoning": false,
-				"isPremium":         p.Name != "ollama",
-				"isAvailable":       true,
-				"available":         true,
+				"isPremium":         isPremium,
+				"is_premium":        isPremium,
+				"isAvailable":       available,
+				"available":         available,
 				"features":          []string{},
 			})
 		}
 	}
 	response.OK(c, models, "models retrieved")
+}
+
+func firstNonEmptyString(value *string, fallback string) string {
+	if value != nil && strings.TrimSpace(*value) != "" {
+		return *value
+	}
+	return fallback
 }
 
 func (h *Handler) handleCreateChat(c *gin.Context) {
@@ -316,5 +386,3 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 	}
 	response.OK(c, result, "message sent")
 }
-
-

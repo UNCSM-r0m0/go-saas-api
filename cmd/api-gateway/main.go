@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	natsio "github.com/nats-io/nats.go"
 	_ "github.com/r0lm0/go-saas-api/docs"
 	"github.com/r0lm0/go-saas-api/internal/apikey"
 	"github.com/r0lm0/go-saas-api/internal/billing"
@@ -28,9 +29,8 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/platform/ratelimit"
 	"github.com/r0lm0/go-saas-api/internal/platform/redis"
 	"github.com/r0lm0/go-saas-api/pkg/jwt"
-	natsio "github.com/nats-io/nats.go"
-	ginSwagger "github.com/swaggo/gin-swagger"
 	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -165,30 +165,29 @@ func main() {
 		v1.PUT("/users/profile", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
 		// Models require auth (registered+)
-		v1.GET("/chat/models", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AgentServiceURL, "/api/v1"))
-		v1.GET("/models/public", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		v1.GET("/chat/models", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+		v1.GET("/models/public", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
 
-		// Agent routes: require auth (JWT or API key) + rate limit
+		// Agent routes: require auth (JWT or API key).
+		// Only message-generating endpoints consume the monthly message limit.
 		agent := v1.Group("")
 		agent.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
-		agent.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
 			// WebSocket upgrade at v1 level (avoids Gin wildcard conflict with /agent/*path)
 			v1.GET("/agent/ws",
 				middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService),
-				middleware.RateLimit(rateLimiter, cfg, log, tierResolver),
-				proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.POST("/agent/chat", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.Any("/artifacts", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.Any("/artifacts/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+				proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.POST("/agent/chat", middleware.RateLimit(rateLimiter, cfg, log, tierResolver), proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.Any("/artifacts", proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.Any("/artifacts/*path", proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
 			// r3-chat frontend chat routes (explicit to avoid conflict with /chat/models)
-			agent.POST("/chat", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.GET("/chat/sessions", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.GET("/chat/:id", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.PATCH("/chat/sessions/:id", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.DELETE("/chat/sessions/:id", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.POST("/chat/message", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			agent.POST("/chat/message/stream", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			agent.POST("/chat", middleware.RateLimit(rateLimiter, cfg, log, tierResolver), proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.GET("/chat/sessions", proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.GET("/chat/:id", proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.PATCH("/chat/sessions/:id", proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.DELETE("/chat/sessions/:id", proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.POST("/chat/message", middleware.RateLimit(rateLimiter, cfg, log, tierResolver), proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			agent.POST("/chat/message/stream", middleware.RateLimit(rateLimiter, cfg, log, tierResolver), proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
 		}
 
 		// Admin routes (JWT + admin role required)
@@ -198,6 +197,9 @@ func main() {
 		{
 			admin.Any("/api-keys", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 			admin.Any("/api-keys/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+			admin.Any("/admin/providers", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			admin.Any("/admin/providers/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			admin.Any("/admin/models/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 		}
 
 		// Sandbox routes (JWT or API key + strict sandbox rate limit + 15s timeout)
@@ -209,10 +211,9 @@ func main() {
 			sandbox.Any("/*path", proxyToWithPrefix(cfg.SandboxServiceURL, "/api/v1/sandbox", "/sandbox"))
 		}
 
-		// Document routes (JWT or API key + rate limit)
+		// Document routes (JWT or API key)
 		documents := v1.Group("")
 		documents.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
-		documents.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
 			documents.POST("/files/upload", uploadSizeCheck(cfg.MaxUploadSize), proxyTo(cfg.DocumentServiceURL, "/api/v1"))
 			documents.GET("/documents/:id", proxyTo(cfg.DocumentServiceURL, "/api/v1"))
@@ -224,13 +225,12 @@ func main() {
 			middleware.RateLimit(rateLimiter, cfg, log, tierResolver),
 			proxyToWithPrefix(cfg.UsageServiceURL, "/api/v1", "/usage"))
 
-		// Protected service routes (JWT or API key required + rate limit)
+		// Protected service routes (JWT or API key required)
 		protected := v1.Group("")
 		protected.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
-		protected.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
 		{
-			protected.Any("/conversations", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			protected.Any("/conversations/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+			protected.Any("/conversations", proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
+			protected.Any("/conversations/*path", proxyToWithTier(cfg.AgentServiceURL, "/api/v1", tierResolver))
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			// r3-chat frontend billing routes — billing service registers these under /billing
 			protected.Any("/stripe/*path", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
@@ -256,7 +256,7 @@ func main() {
 
 	log.Info("api-gateway running", logger.String("addr", srv.Addr))
 
-	<- quit
+	<-quit
 	log.Info("shutting down api-gateway")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -274,8 +274,16 @@ func proxyTo(targetURL, stripPrefix string) gin.HandlerFunc {
 	return proxyToWithPrefix(targetURL, stripPrefix, "")
 }
 
+func proxyToWithTier(targetURL, stripPrefix string, tierResolver middleware.TierResolver) gin.HandlerFunc {
+	return proxyToWithPrefixAndTier(targetURL, stripPrefix, "", tierResolver)
+}
+
 // proxyToWithPrefix creates a reverse proxy that strips a prefix and adds another prefix.
 func proxyToWithPrefix(targetURL, stripPrefix, addPrefix string) gin.HandlerFunc {
+	return proxyToWithPrefixAndTier(targetURL, stripPrefix, addPrefix, nil)
+}
+
+func proxyToWithPrefixAndTier(targetURL, stripPrefix, addPrefix string, tierResolver middleware.TierResolver) gin.HandlerFunc {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		panic(fmt.Sprintf("invalid target URL %s: %v", targetURL, err))
@@ -303,6 +311,13 @@ func proxyToWithPrefix(targetURL, stripPrefix, addPrefix string) gin.HandlerFunc
 		}
 		if role, ok := c.Get("role"); ok && role != "" {
 			c.Request.Header.Set("X-User-Role", fmt.Sprintf("%v", role))
+		}
+		if tierResolver != nil {
+			if uid, ok := c.Get("user_id"); ok && uid != "" {
+				if tier, err := tierResolver.ResolveTier(c.Request.Context(), fmt.Sprintf("%v", uid)); err == nil && tier != "" {
+					c.Request.Header.Set("X-User-Tier", tier)
+				}
+			}
 		}
 	}
 

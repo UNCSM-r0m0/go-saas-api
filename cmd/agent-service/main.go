@@ -1,13 +1,8 @@
-﻿package main
+package main
 
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 	"github.com/gin-gonic/gin"
 	"github.com/r0lm0/go-saas-api/internal/agent/handler"
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
@@ -26,6 +21,11 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/provider"
 	"github.com/r0lm0/go-saas-api/pkg/jwt"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -100,7 +100,7 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.RequestID(), middleware.Logger(log), middleware.CORS())
-	agentHandler := handler.NewHandler(orchestrator, convStore, msgStore, artStore, log, multiClient, wsManager, hc)
+	agentHandler := handler.NewHandler(orchestrator, convStore, msgStore, artStore, log, multiClient, providerStore, wsManager, hc)
 	agentHandler.RegisterRoutes(r)
 	fileHandler.RegisterRoutes(r)
 	providerHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))

@@ -133,14 +133,14 @@ func (m *mockResetTokenStore) Delete(ctx context.Context, token string) error {
 // mockEmailSender is an in-memory EmailSender for testing
 type mockEmailSender struct {
 	sent []struct {
-		Email   string
+		Email    string
 		ResetURL string
 	}
 }
 
 func (m *mockEmailSender) SendPasswordReset(email, resetURL string) error {
 	m.sent = append(m.sent, struct {
-		Email   string
+		Email    string
 		ResetURL string
 	}{Email: email, ResetURL: resetURL})
 	return nil
@@ -168,7 +168,7 @@ func TestService_Register(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test@example.com", user.Email)
 	assert.Equal(t, "Test User", user.Name)
-	assert.Equal(t, "member", user.Role)
+	assert.Equal(t, "registered", user.Role)
 	assert.NotEqual(t, uuid.Nil, user.ID)
 }
 

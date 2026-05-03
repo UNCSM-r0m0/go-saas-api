@@ -142,7 +142,7 @@ func (s *OAuthService) findOrCreateOAuthUser(ctx context.Context, provider, subj
 			ID:                    uuid.New(),
 			Email:                 email,
 			Name:                  name,
-			Role:                  "member",
+			Role:                  "registered",
 			IsAdmin:               false,
 			MessagesUsedThisMonth: 0,
 			OAuthProvider:         provider,

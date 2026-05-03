@@ -1,4 +1,4 @@
-﻿package billing
+package billing
 
 import (
 	"context"
@@ -109,8 +109,8 @@ func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) 
 		return nil, nil, err
 	}
 	if sub == nil {
-		// Return free plan as default
-		plan, err := s.plans.GetPlanBySlug(ctx, "free")
+		// Registered is the baseline authenticated plan.
+		plan, err := s.plans.GetPlanBySlug(ctx, "registered")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -285,7 +285,7 @@ func (s *BillingService) handleSubscriptionDeleted(ctx context.Context, event st
 	if err := s.subs.CancelSubscription(ctx, sub.ID, now, false); err != nil {
 		return err
 	}
-	s.publishSubscriptionChanged(sub.UserID, "free", "cancelled")
+	s.publishSubscriptionChanged(sub.UserID, "registered", "cancelled")
 	return nil
 }
 

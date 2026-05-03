@@ -25,6 +25,9 @@ func NewHandler(service *Service, log logger.Logger) *Handler {
 
 // cookieConfig returns the appropriate cookie settings based on environment.
 func cookieConfig() (secure bool, sameSite string) {
+	if os.Getenv("ENV") != "production" {
+		return false, "lax"
+	}
 	publicURL := os.Getenv("PUBLIC_URL")
 	if strings.HasPrefix(publicURL, "https://") {
 		return true, "none"

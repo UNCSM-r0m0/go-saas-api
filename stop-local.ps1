@@ -29,4 +29,12 @@ if ($nodeProcs) {
     Write-Host "  Parado frontend (node/vite)"
 }
 
+$pythonDocProcs = Get-CimInstance Win32_Process -Filter "name = 'python.exe'" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -like "*uvicorn*" -and $_.CommandLine -like "*3007*"
+}
+foreach ($proc in $pythonDocProcs) {
+    Stop-Process -Id $proc.ProcessId -Force
+    Write-Host "  Parado document-service (python/uvicorn)"
+}
+
 Write-Host "Todo detenido" -ForegroundColor Green

@@ -1,4 +1,4 @@
-﻿package websocket
+package websocket
 
 import (
 	"context"
@@ -61,7 +61,7 @@ func NewManager(orch *runtime.Orchestrator, log logger.Logger) *Manager {
 func (m *Manager) run() {
 	for {
 		select {
-		case client := <- m.register:
+		case client := <-m.register:
 			key := clientKey(client.userID)
 			m.mu.Lock()
 			// Close existing connection for same user
@@ -73,10 +73,10 @@ func (m *Manager) run() {
 			m.mu.Unlock()
 			m.log.Info("websocket client connected", logger.String("user", client.userID.String()))
 
-		case client := <- m.unregister:
+		case client := <-m.unregister:
 			key := clientKey(client.userID)
 			m.mu.Lock()
-			if _, ok := m.clients[key]; ok {
+			if current, ok := m.clients[key]; ok && current == client {
 				delete(m.clients, key)
 				close(client.sendCh)
 				client.conn.Close()
@@ -176,7 +176,7 @@ func (c *Client) writePump() {
 
 	for {
 		select {
-		case message, ok := <- c.sendCh:
+		case message, ok := <-c.sendCh:
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -184,7 +184,7 @@ func (c *Client) writePump() {
 			}
 			c.conn.WriteMessage(websocket.TextMessage, message)
 
-		case <- ticker.C:
+		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
@@ -230,10 +230,10 @@ func (c *Client) handleChat(msg Message) {
 			})
 		case "tool_result":
 			c.send(Message{
-				Type:       TypeToolResult,
-				MessageID:  messageID,
-				ToolName:   chunk.ToolName,
-				Content:    chunk.Content,
+				Type:      TypeToolResult,
+				MessageID: messageID,
+				ToolName:  chunk.ToolName,
+				Content:   chunk.Content,
 			})
 		case "error":
 			c.send(Message{

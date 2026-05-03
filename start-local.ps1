@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Levanta todo el stack go-saas-api + r3-chat frontend en localhost
-# Puertos: gateway 3000, auth 3001, agent 3002, billing 3003, usage 3004, sandbox 3006
+# Puertos: gateway 3000, auth 3001, agent 3002, billing 3003, usage 3004, sandbox 3006, document 3007
 
 $ErrorActionPreference = "Stop"
 $root = "D:\WORKSPACES\GO\go-saas-api"
@@ -26,6 +26,14 @@ $nodeProcs = Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Obje
 if ($nodeProcs) {
     $nodeProcs | Stop-Process -Force
     Write-Host "  Parado frontend (node/vite)"
+}
+
+$pythonDocProcs = Get-CimInstance Win32_Process -Filter "name = 'python.exe'" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -like "*uvicorn*" -and $_.CommandLine -like "*3007*"
+}
+foreach ($proc in $pythonDocProcs) {
+    Stop-Process -Id $proc.ProcessId -Force
+    Write-Host "  Parado document-service (python/uvicorn)"
 }
 
 Start-Sleep -Milliseconds 500
@@ -149,6 +157,20 @@ Start-GoService "sandbox-service" 3006
 Start-Sleep -Milliseconds 300
 Start-GoService "api-gateway"     3000
 
+# ===================================================================
+# DOCUMENT SERVICE (Python/FastAPI)
+# ===================================================================
+Write-Host "`nLevantando document-service (port 3007)..." -ForegroundColor Cyan
+$documentService = "$root\cmd\document-service"
+if (Test-Path "$documentService\main.py") {
+    $docLog = "$logDir\document-service.log"
+    $docErr = "$logDir\document-service.err.log"
+    Start-Process -FilePath "python" -ArgumentList "-m","uvicorn","main:app","--host","0.0.0.0","--port","3007" -WorkingDirectory $documentService -WindowStyle Hidden -RedirectStandardOutput $docLog -RedirectStandardError $docErr
+    Write-Host "  Document-service iniciando en http://localhost:3007" -ForegroundColor Green
+} else {
+    Write-Host "  WARN: document-service no encontrado en $documentService" -ForegroundColor Yellow
+}
+
 Write-Host "`nEsperando 4 segundos a que el gateway inicie..." -ForegroundColor Cyan
 Start-Sleep -Seconds 4
 
@@ -185,6 +207,7 @@ Write-Host "  Agent:    http://localhost:3002"
 Write-Host "  Billing:  http://localhost:3003"
 Write-Host "  Usage:    http://localhost:3004"
 Write-Host "  Sandbox:  http://localhost:3006"
+Write-Host "  Document: http://localhost:3007"
 Write-Host ""
 Write-Host "  Logs en: $logDir"
 Write-Host "  Para detener: .\stop-local.ps1"

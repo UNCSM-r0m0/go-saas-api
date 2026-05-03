@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
 )
 
 // Handler provides HTTP handlers for AI provider management.
@@ -22,7 +23,7 @@ func NewHandler(service *Service, log logger.Logger) *Handler {
 // RegisterRoutes registers provider admin endpoints.
 func (h *Handler) RegisterRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc) {
 	admin := r.Group("/admin/providers")
-	admin.Use(authMiddleware)
+	admin.Use(authMiddleware, middleware.AdminOnly())
 	{
 		admin.POST("", h.CreateProvider)
 		admin.GET("", h.ListProviders)
@@ -36,7 +37,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc) 
 	}
 
 	models := r.Group("/admin/models")
-	models.Use(authMiddleware)
+	models.Use(authMiddleware, middleware.AdminOnly())
 	{
 		models.GET("/:id", h.GetModel)
 		models.PATCH("/:id", h.UpdateModel)
