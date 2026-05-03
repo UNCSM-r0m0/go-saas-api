@@ -1,4 +1,4 @@
-﻿package billing
+package billing
 
 import (
 	"context"
@@ -186,11 +186,9 @@ func (s *PostgresBillingStore) CancelSubscription(ctx context.Context, id uuid.U
 // LogUsage records a single usage event.
 func (s *PostgresBillingStore) LogUsage(ctx context.Context, log *UsageLog) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO usage_logs (id, user_id, conversation_id, model, provider,
-			tokens_input, tokens_output, latency_ms, cost_usd, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, log.ID, log.UserID, log.ConversationID, log.Model, log.Provider,
-		log.TokensInput, log.TokensOutput, log.LatencyMs, log.CostUSD, log.CreatedAt)
+		INSERT INTO usage_logs (id, user_id, conversation_id, model, tokens_input, tokens_output, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, log.ID, log.UserID, log.ConversationID, log.Model, log.TokensInput, log.TokensOutput, log.CreatedAt)
 	return err
 }
 
@@ -198,7 +196,7 @@ func (s *PostgresBillingStore) LogUsage(ctx context.Context, log *UsageLog) erro
 func (s *PostgresBillingStore) GetDailyUsage(ctx context.Context, userID uuid.UUID, date time.Time) (*DailyUsage, error) {
 	var du DailyUsage
 	err := s.pool.QueryRow(ctx, `
-		SELECT user_id, date, requests, tokens_input, tokens_output, cost_usd
+		SELECT user_id, date, message_count, tokens_input, tokens_output, 0::float8
 		FROM usage_daily WHERE user_id = $1 AND date = $2
 	`, userID, date).Scan(&du.UserID, &du.Date, &du.Requests, &du.TokensInput, &du.TokensOutput, &du.CostUSD)
 	if err == pgx.ErrNoRows {
@@ -212,16 +210,16 @@ func (s *PostgresBillingStore) GetDailyUsage(ctx context.Context, userID uuid.UU
 
 // IncrementDailyUsage upserts daily usage counters.
 func (s *PostgresBillingStore) IncrementDailyUsage(ctx context.Context, userID uuid.UUID, date time.Time, tokensIn, tokensOut int, costUSD float64) error {
+	_ = costUSD
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO usage_daily (user_id, date, requests, tokens_input, tokens_output, cost_usd)
-		VALUES ($1, $2, 1, $3, $4, $5)
+		INSERT INTO usage_daily (user_id, date, message_count, tokens_input, tokens_output)
+		VALUES ($1, $2, 1, $3, $4)
 		ON CONFLICT (user_id, date)
 		DO UPDATE SET
-			requests = usage_daily.requests + 1,
+			message_count = usage_daily.message_count + 1,
 			tokens_input = usage_daily.tokens_input + $3,
-			tokens_output = usage_daily.tokens_output + $4,
-			cost_usd = usage_daily.cost_usd + $5
-	`, userID, date, tokensIn, tokensOut, costUSD)
+			tokens_output = usage_daily.tokens_output + $4
+	`, userID, date, tokensIn, tokensOut)
 	return err
 }
 
@@ -229,8 +227,8 @@ func (s *PostgresBillingStore) IncrementDailyUsage(ctx context.Context, userID u
 func (s *PostgresBillingStore) GetUsageStats(ctx context.Context, userID uuid.UUID, from, to time.Time) (*UsageStats, error) {
 	var stats UsageStats
 	err := s.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(requests), 0), COALESCE(SUM(tokens_input), 0),
-		       COALESCE(SUM(tokens_output), 0), COALESCE(SUM(cost_usd), 0)
+		SELECT COALESCE(SUM(message_count), 0), COALESCE(SUM(tokens_input), 0),
+		       COALESCE(SUM(tokens_output), 0), 0::float8
 		FROM usage_daily
 		WHERE user_id = $1 AND date >= $2 AND date <= $3
 	`, userID, from, to).Scan(&stats.TotalRequests, &stats.TokensInput, &stats.TokensOutput, &stats.TotalCostUSD)

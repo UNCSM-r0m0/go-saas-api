@@ -364,6 +364,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 		IsActive:          req.IsActive,
 		IsPublic:          req.IsPublic,
 		IsPremium:         req.IsPremium,
+		Config:            map[string]any{},
 	}
 
 	if err := h.service.UpdateModel(c.Request.Context(), m); err != nil {
