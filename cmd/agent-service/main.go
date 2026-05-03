@@ -61,21 +61,11 @@ func main() {
 	multiClient := llm.NewMultiClient()
 	providerStore := provider.NewPostgresStore(pgPool)
 	providerLoader := provider.NewProviderLoader(providerStore, multiClient, masterKey)
-	if err := provider.MigrateKeysFromEnv(ctx, providerStore, masterKey, cfg, log); err != nil {
-		log.Warn("failed to migrate provider keys from env", logger.Error(err))
+	if err := provider.MigrateKeys(ctx, providerStore, masterKey, log); err != nil {
+		log.Warn("failed to migrate provider keys", logger.Error(err))
 	}
 	if err := providerLoader.LoadAll(ctx); err != nil {
 		log.Warn("failed to load providers from database", logger.Error(err))
-	}
-	if cfg.KimiAPIKey != "" {
-		multiClient.Register(llm.ProviderConfig{
-			Name:    "kimi",
-			Models:  []string{"kimi-for-coding"},
-			Client:  llm.NewKimiAnthropicClient(cfg.KimiAPIKey),
-			Enabled: true,
-			Weight:  1,
-		})
-		log.Info("registered Kimi provider from env fallback")
 	}
 	if len(multiClient.ListProviders()) == 0 {
 		log.Warn("CRITICAL: No providers loaded from database. Chat will NOT work. Please configure providers via the admin API or database.")

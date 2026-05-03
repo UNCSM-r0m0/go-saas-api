@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -76,7 +74,7 @@ func main() {
 	billingStore := billing.NewPostgresBillingStore(pgPool)
 	appCache := cache.NewCache(redisClient, "saas")
 	baseResolver := &dbTierResolver{store: billingStore}
-	tierResolver := &cachedTierResolver{
+	tierResolver := &roleAwareTierResolver{
 		cache:    appCache,
 		fallback: baseResolver,
 		ttl:      5 * time.Minute,
@@ -166,9 +164,9 @@ func main() {
 		// Protected user routes
 		v1.PUT("/users/profile", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
-		// Public agent routes (no auth required)
-		v1.GET("/chat/models", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-		v1.GET("/models/public", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		// Models require auth (registered+)
+		v1.GET("/chat/models", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		v1.GET("/models/public", middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService), proxyTo(cfg.AgentServiceURL, "/api/v1"))
 
 		// Agent routes: require auth (JWT or API key) + rate limit
 		agent := v1.Group("")
@@ -193,13 +191,13 @@ func main() {
 			agent.POST("/chat/message/stream", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 		}
 
-		// API key management routes (JWT required)
-		apiKeys := v1.Group("")
-		apiKeys.Use(middleware.JWTAuth(jwtMgr))
-		apiKeys.Use(middleware.RateLimit(rateLimiter, cfg, log, tierResolver))
+		// Admin routes (JWT + admin role required)
+		admin := v1.Group("")
+		admin.Use(middleware.JWTAuth(jwtMgr))
+		admin.Use(middleware.AdminOnly())
 		{
-			apiKeys.Any("/api-keys", proxyTo(cfg.AuthServiceURL, "/api/v1"))
-			apiKeys.Any("/api-keys/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+			admin.Any("/api-keys", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+			admin.Any("/api-keys/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 		}
 
 		// Sandbox routes (JWT or API key + strict sandbox rate limit + 15s timeout)
@@ -299,23 +297,12 @@ func proxyToWithPrefix(targetURL, stripPrefix, addPrefix string) gin.HandlerFunc
 		}
 	}
 
-	// Inject auth context from Gin into outgoing request headers
-	// so downstream services receive X-User-ID even
-	// when the client only sent an Authorization header.
-	// For unauthenticated requests, inject X-Anonymous-ID (anonymousId from body or ClientIP).
 	injectAuth := func(c *gin.Context) {
 		if uid, ok := c.Get("user_id"); ok && uid != "" {
 			c.Request.Header.Set("X-User-ID", fmt.Sprintf("%v", uid))
 		}
 		if role, ok := c.Get("role"); ok && role != "" {
 			c.Request.Header.Set("X-User-Role", fmt.Sprintf("%v", role))
-		}
-		// Anonymous identification for unauthenticated requests
-		if _, ok := c.Get("user_id"); !ok {
-			anonID := extractAnonymousID(c)
-			if anonID != "" {
-				c.Request.Header.Set("X-Anonymous-ID", anonID)
-			}
 		}
 	}
 
@@ -343,29 +330,6 @@ func proxyToWithPrefix(targetURL, stripPrefix, addPrefix string) gin.HandlerFunc
 	}
 }
 
-// extractAnonymousID extracts an anonymous identifier from the request body or falls back to ClientIP.
-func extractAnonymousID(c *gin.Context) string {
-	// Try to read anonymousId from JSON body (best effort)
-	if c.Request.Body != nil && c.Request.ContentLength > 0 {
-		body, err := io.ReadAll(c.Request.Body)
-		if err == nil && len(body) > 0 {
-			var payload struct {
-				AnonymousID string `json:"anonymousId"`
-			}
-			if json.Unmarshal(body, &payload) == nil && payload.AnonymousID != "" {
-				// Restore body so downstream handlers can read it again
-				c.Request.Body = io.NopCloser(bytes.NewReader(body))
-				return payload.AnonymousID
-			}
-			// Restore body even if parsing failed
-			c.Request.Body = io.NopCloser(bytes.NewReader(body))
-		}
-	}
-	return c.ClientIP()
-}
-
-// uploadSizeCheck returns a middleware that validates Content-Length against max size.
-// It returns 413 before proxying if the upload exceeds the limit.
 func uploadSizeCheck(maxSize int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.ContentLength > maxSize {
@@ -398,35 +362,30 @@ func (r *dbTierResolver) ResolveTier(ctx context.Context, userID string) (string
 		return "registered", nil
 	}
 
-	// Map plan IDs to tiers. For simplicity we look at the plan slug via a separate query,
-	// but here we infer from amount or just return premium for any active paid sub.
-	// A more robust solution would cache plan slugs.
-	// For now: if there's an active subscription with a stripe sub ID, treat as premium.
 	if sub.StripeSubscriptionID != "" {
 		return "premium", nil
 	}
 	return "registered", nil
 }
 
-// cachedTierResolver wraps a TierResolver with Redis caching.
-type cachedTierResolver struct {
+type roleAwareTierResolver struct {
 	cache    *cache.Cache
 	fallback middleware.TierResolver
 	ttl      time.Duration
 }
 
-func (c *cachedTierResolver) ResolveTier(ctx context.Context, userID string) (string, error) {
+func (r *roleAwareTierResolver) ResolveTier(ctx context.Context, userID string) (string, error) {
 	cacheKey := fmt.Sprintf("tier:%s", userID)
 	var tier string
-	if err := c.cache.Get(ctx, cacheKey, &tier); err == nil {
+	if err := r.cache.Get(ctx, cacheKey, &tier); err == nil {
 		return tier, nil
 	}
 
-	tier, err := c.fallback.ResolveTier(ctx, userID)
+	tier, err := r.fallback.ResolveTier(ctx, userID)
 	if err != nil {
 		return "", err
 	}
 
-	_ = c.cache.Set(ctx, cacheKey, tier, c.ttl)
+	_ = r.cache.Set(ctx, cacheKey, tier, r.ttl)
 	return tier, nil
 }
