@@ -206,7 +206,7 @@ func main() {
 		sandbox.Use(middleware.SandboxRateLimit(rateLimiter, cfg, log))
 		sandbox.Use(middleware.RequestTimeout(15 * time.Second))
 		{
-			sandbox.Any("/*path", proxyTo(cfg.SandboxServiceURL, "/api/v1/sandbox"))
+			sandbox.Any("/*path", proxyToWithPrefix(cfg.SandboxServiceURL, "/api/v1/sandbox", "/sandbox"))
 		}
 
 		// Document routes (JWT or API key + rate limit)

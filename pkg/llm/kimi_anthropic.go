@@ -102,10 +102,10 @@ func (c *KimiAnthropicClient) Stream(ctx context.Context, req Request) (<-chan C
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
 			line := scanner.Text()
-			if !strings.HasPrefix(line, "data: ") {
+			if !strings.HasPrefix(line, "data:") {
 				continue
 			}
-			data := strings.TrimPrefix(line, "data: ")
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 
 			var parsed struct {
 				Type  string `json:"type"`

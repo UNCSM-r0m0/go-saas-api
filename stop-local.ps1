@@ -1,22 +1,32 @@
 #!/usr/bin/env pwsh
 # Detiene todos los servicios go-saas-api y el frontend
 
-Write-Host "🛑 Deteniendo servicios Go..." -ForegroundColor Yellow
+Write-Host "Deteniendo servicios Go..." -ForegroundColor Yellow
 
-$nombres = @(
-    "api-gateway.exe",
-    "auth-service.exe",
-    "agent-service.exe",
-    "billing-service.exe",
-    "usage-service.exe",
-    "sandbox-service.exe"
+$processNames = @(
+    "api-gateway",
+    "auth-service",
+    "agent-service",
+    "billing-service",
+    "usage-service",
+    "sandbox-service"
 )
 
-foreach ($n in $nombres) {
-    Get-Process | Where-Object { $_.ProcessName -eq $n.Replace(".exe","") } | Stop-Process -Force -ErrorAction SilentlyContinue
+foreach ($name in $processNames) {
+    $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
+    if ($procs) {
+        $procs | Stop-Process -Force
+        Write-Host "  Parado $name"
+    }
 }
 
 # Detener proceso npm (frontend)
-Get-Process | Where-Object { $_.ProcessName -eq "node" -and $_.CommandLine -like "*r3-chat*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+$nodeProcs = Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -like "*r3-chat*" -or $_.CommandLine -like "*vite*"
+}
+if ($nodeProcs) {
+    $nodeProcs | Stop-Process -Force
+    Write-Host "  Parado frontend (node/vite)"
+}
 
-Write-Host "✅ Todo detenido" -ForegroundColor Green
+Write-Host "Todo detenido" -ForegroundColor Green

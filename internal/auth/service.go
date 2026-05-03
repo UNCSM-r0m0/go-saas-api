@@ -74,7 +74,7 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest) (*User, er
 		Email:                 req.Email,
 		PasswordHash:          string(hash),
 		Name:                  req.Name,
-		Role:                  "member",
+		Role:                  "registered",
 		IsAdmin:               false,
 		MessagesUsedThisMonth: 0,
 		CreatedAt:             now,

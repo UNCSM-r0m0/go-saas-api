@@ -6,9 +6,46 @@
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
-		{ "key": "base_url", "value": "http://localhost:3000" },
-		{ "key": "jwt_token", "value": "" },
-		{ "key": "api_key", "value": "" }
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000"
+		},
+		{
+			"key": "jwt_token",
+			"value": ""
+		},
+		{
+			"key": "api_key",
+			"value": ""
+		},
+		{
+			"key": "refresh_token",
+			"value": ""
+		},
+		{
+			"key": "chat_id",
+			"value": ""
+		},
+		{
+			"key": "conv_id",
+			"value": ""
+		},
+		{
+			"key": "opencode_model",
+			"value": "glm-5.1"
+		},
+		{
+			"key": "kimi_model",
+			"value": "kimi-for-coding"
+		},
+		{
+			"key": "ollama_model",
+			"value": "qwen2.5-coder:3b"
+		},
+		{
+			"key": "chat_model",
+			"value": "{{opencode_model}}"
+		}
 	],
 	"item": [
 		{
@@ -16,14 +53,44 @@
 			"item": [
 				{
 					"name": "Register",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const res = pm.response.json();",
+									"const token = res?.data?.token;",
+									"if (token?.access_token) pm.collectionVariables.set('jwt_token', token.access_token);",
+									"if (token?.refresh_token) pm.collectionVariables.set('refresh_token', token.refresh_token);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Test123456!\"\n}"
 						},
-						"url": { "raw": "{{base_url}}/api/v1/auth/register", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "register"] }
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						}
 					}
 				},
 				{
@@ -31,26 +98,83 @@
 					"event": [
 						{
 							"listen": "test",
-							"script": { "exec": ["const res = pm.response.json();", "if (res.access_token) pm.collectionVariables.set('jwt_token', res.access_token);"], "type": "text/javascript" }
+							"script": {
+								"exec": [
+									"const res = pm.response.json();",
+									"const token = res?.data?.token;",
+									"if (token?.access_token) pm.collectionVariables.set('jwt_token', token.access_token);",
+									"if (token?.refresh_token) pm.collectionVariables.set('refresh_token', token.refresh_token);"
+								],
+								"type": "text/javascript"
+							}
 						}
 					],
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Test123456!\"\n}"
 						},
-						"url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
 					}
 				},
 				{
 					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const res = pm.response.json();",
+									"const token = res?.data?.token;",
+									"if (token?.access_token) pm.collectionVariables.set('jwt_token', token.access_token);",
+									"if (token?.refresh_token) pm.collectionVariables.set('refresh_token', token.refresh_token);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
-						"body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" },
-						"url": { "raw": "{{base_url}}/api/v1/auth/refresh", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "refresh"] }
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/refresh",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"refresh"
+							]
+						}
 					}
 				},
 				{
@@ -58,17 +182,47 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
 						],
-						"url": { "raw": "{{base_url}}/api/v1/auth/logout", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "logout"] }
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"logout"
+							]
+						}
 					}
 				},
 				{
 					"name": "Get Profile",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/auth/profile", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "profile"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"profile"
+							]
+						}
 					}
 				}
 			]
@@ -80,16 +234,48 @@
 					"name": "List Models",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/chat/models", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "models"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/models",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat",
+								"models"
+							]
+						}
 					}
 				},
 				{
 					"name": "List Public Models",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/models/public", "host": ["{{base_url}}"], "path": ["api", "v1", "models", "public"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/models/public",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"models",
+								"public"
+							]
+						}
 					}
 				},
 				{
@@ -97,30 +283,78 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"title\": \"New conversation\",\n  \"model\": \"glm-5.1\"\n}"
+							"raw": "{\n  \"title\": \"New conversation\",\n  \"model\": \"{{chat_model}}\"\n}"
 						},
-						"url": { "raw": "{{base_url}}/api/v1/chat", "host": ["{{base_url}}"], "path": ["api", "v1", "chat"] }
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat"
+							]
+						}
 					}
 				},
 				{
 					"name": "List Chat Sessions",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/chat/sessions", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/sessions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat",
+								"sessions"
+							]
+						}
 					}
 				},
 				{
 					"name": "Get Chat with Messages",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/chat/{{chat_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "{{chat_id}}"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/{{chat_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat",
+								"{{chat_id}}"
+							]
+						}
 					}
 				},
 				{
@@ -128,14 +362,31 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"content\": \"Hello, what model are you?\",\n  \"model\": \"glm-5.1\"\n}"
+							"raw": "{\n  \"content\": \"Hello, what model are you?\",\n  \"model\": \"{{chat_model}}\"\n}"
 						},
-						"url": { "raw": "{{base_url}}/api/v1/chat/message", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "message"] }
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/message",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat",
+								"message"
+							]
+						}
 					}
 				},
 				{
@@ -143,15 +394,36 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Accept", "value": "text/event-stream" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "text/event-stream"
+							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"content\": \"Hello, what model are you?\",\n  \"model\": \"glm-5.1\"\n}"
+							"raw": "{\n  \"content\": \"Hello, what model are you?\",\n  \"model\": \"{{chat_model}}\"\n}"
 						},
-						"url": { "raw": "{{base_url}}/api/v1/chat/message/stream", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "message", "stream"] }
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/message/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat",
+								"message",
+								"stream"
+							]
+						}
 					}
 				},
 				{
@@ -159,35 +431,413 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Accept", "value": "text/event-stream" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "text/event-stream"
+							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"message\": \"Hello, what model are you?\",\n  \"model\": \"glm-5.1\"\n}"
+							"raw": "{\n  \"message\": \"Hello, what model are you?\",\n  \"model\": \"{{chat_model}}\"\n}"
 						},
-						"url": { "raw": "{{base_url}}/api/v1/agent/chat", "host": ["{{base_url}}"], "path": ["api", "v1", "agent", "chat"] }
+						"url": {
+							"raw": "{{base_url}}/api/v1/agent/chat",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"agent",
+								"chat"
+							]
+						}
 					}
+				},
+				{
+					"name": "Provider Model Smoke Tests",
+					"item": [
+						{
+							"name": "Send Message - OpenCode Go",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"content\": \"Respond only with OK. Provider test: OpenCode Go.\",\n  \"model\": \"{{opencode_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/chat/message",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"chat",
+										"message"
+									]
+								}
+							}
+						},
+						{
+							"name": "Send Message SSE - OpenCode Go",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "text/event-stream"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"content\": \"Respond only with OK. Provider SSE test: OpenCode Go.\",\n  \"model\": \"{{opencode_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/chat/message/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"chat",
+										"message",
+										"stream"
+									]
+								}
+							}
+						},
+						{
+							"name": "Agent Chat SSE - OpenCode Go",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "text/event-stream"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"message\": \"Respond only with OK. Legacy agent test: OpenCode Go.\",\n  \"model\": \"{{opencode_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/agent/chat",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"agent",
+										"chat"
+									]
+								}
+							}
+						},
+						{
+							"name": "Send Message - Kimi Code",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"content\": \"Respond only with OK. Provider test: Kimi Code.\",\n  \"model\": \"{{kimi_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/chat/message",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"chat",
+										"message"
+									]
+								}
+							}
+						},
+						{
+							"name": "Send Message SSE - Kimi Code",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "text/event-stream"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"content\": \"Respond only with OK. Provider SSE test: Kimi Code.\",\n  \"model\": \"{{kimi_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/chat/message/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"chat",
+										"message",
+										"stream"
+									]
+								}
+							}
+						},
+						{
+							"name": "Agent Chat SSE - Kimi Code",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "text/event-stream"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"message\": \"Respond only with OK. Legacy agent test: Kimi Code.\",\n  \"model\": \"{{kimi_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/agent/chat",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"agent",
+										"chat"
+									]
+								}
+							}
+						},
+						{
+							"name": "Send Message - Ollama Local",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"content\": \"Respond only with OK. Provider test: Ollama Local.\",\n  \"model\": \"{{ollama_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/chat/message",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"chat",
+										"message"
+									]
+								}
+							}
+						},
+						{
+							"name": "Send Message SSE - Ollama Local",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "text/event-stream"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"content\": \"Respond only with OK. Provider SSE test: Ollama Local.\",\n  \"model\": \"{{ollama_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/chat/message/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"chat",
+										"message",
+										"stream"
+									]
+								}
+							}
+						},
+						{
+							"name": "Agent Chat SSE - Ollama Local",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{jwt_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "text/event-stream"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"message\": \"Respond only with OK. Legacy agent test: Ollama Local.\",\n  \"model\": \"{{ollama_model}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/agent/chat",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"agent",
+										"chat"
+									]
+								}
+							}
+						}
+					]
 				},
 				{
 					"name": "Update Chat Session",
 					"request": {
 						"method": "PATCH",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
-						"body": { "mode": "raw", "raw": "{\n  \"title\": \"Updated title\"\n}" },
-						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{chat_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{chat_id}}"] }
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Updated title\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/sessions/{{chat_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat",
+								"sessions",
+								"{{chat_id}}"
+							]
+						}
 					}
 				},
 				{
 					"name": "Delete Chat Session",
 					"request": {
 						"method": "DELETE",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{chat_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{chat_id}}"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/sessions/{{chat_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat",
+								"sessions",
+								"{{chat_id}}"
+							]
+						}
 					}
 				}
 			]
@@ -199,24 +849,72 @@
 					"name": "List Conversations",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/conversations", "host": ["{{base_url}}"], "path": ["api", "v1", "conversations"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/conversations",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"conversations"
+							]
+						}
 					}
 				},
 				{
 					"name": "Get Conversation",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/conversations/{{conv_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "conversations", "{{conv_id}}"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/conversations/{{conv_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"conversations",
+								"{{conv_id}}"
+							]
+						}
 					}
 				},
 				{
 					"name": "Get Messages",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/conversations/{{conv_id}}/messages", "host": ["{{base_url}}"], "path": ["api", "v1", "conversations", "{{conv_id}}", "messages"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/conversations/{{conv_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"conversations",
+								"{{conv_id}}",
+								"messages"
+							]
+						}
 					}
 				}
 			]
@@ -228,17 +926,58 @@
 					"name": "Upload File",
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] },
-						"url": { "raw": "{{base_url}}/api/v1/files/upload", "host": ["{{base_url}}"], "path": ["api", "v1", "files", "upload"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/files/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"files",
+								"upload"
+							]
+						}
 					}
 				},
 				{
 					"name": "Get Document",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{doc_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"documents",
+								"{{doc_id}}"
+							]
+						}
 					}
 				}
 			]
@@ -251,14 +990,31 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"language\": \"python\",\n  \"code\": \"print('hello world')\"\n}"
 						},
-						"url": { "raw": "{{base_url}}/api/v1/sandbox/execute", "host": ["{{base_url}}"], "path": ["api", "v1", "sandbox", "execute"] }
+						"url": {
+							"raw": "{{base_url}}/api/v1/sandbox/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sandbox",
+								"execute"
+							]
+						}
 					}
 				}
 			]
@@ -270,8 +1026,23 @@
 					"name": "Get Subscription",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/subscriptions", "host": ["{{base_url}}"], "path": ["api", "v1", "subscriptions"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/subscriptions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"subscriptions"
+							]
+						}
 					}
 				},
 				{
@@ -279,20 +1050,59 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
-						"body": { "mode": "raw", "raw": "{\n  \"price_id\": \"{{stripe_price_id}}\"\n}" },
-						"url": { "raw": "{{base_url}}/api/v1/billing/checkout", "host": ["{{base_url}}"], "path": ["api", "v1", "billing", "checkout"] }
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"price_id\": \"{{stripe_price_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/billing/checkout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"billing",
+								"checkout"
+							]
+						}
 					}
 				},
 				{
 					"name": "Stripe Webhook",
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
-						"body": { "mode": "raw", "raw": "{}" },
-						"url": { "raw": "{{base_url}}/api/v1/billing/webhook", "host": ["{{base_url}}"], "path": ["api", "v1", "billing", "webhook"] }
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/billing/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"billing",
+								"webhook"
+							]
+						}
 					}
 				}
 			]
@@ -304,8 +1114,25 @@
 					"name": "Get Usage Stats",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/chat/usage/stats", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "usage", "stats"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/usage/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chat",
+								"usage",
+								"stats"
+							]
+						}
 					}
 				}
 			]
@@ -317,8 +1144,22 @@
 					"name": "List Providers",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/admin/providers", "host": ["{{base_url}}"], "path": ["admin", "providers"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/providers",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers"
+							]
+						}
 					}
 				},
 				{
@@ -326,22 +1167,52 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"Ollama Local\",\n  \"type\": \"ollama\",\n  \"base_url\": \"http://localhost:11434\",\n  \"priority\": 1,\n  \"is_public\": true\n}"
 						},
-						"url": { "raw": "{{base_url}}/admin/providers", "host": ["{{base_url}}"], "path": ["admin", "providers"] }
+						"url": {
+							"raw": "{{base_url}}/admin/providers",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers"
+							]
+						}
 					}
 				},
 				{
 					"name": "Get Provider",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/admin/providers/{{provider_id}}", "host": ["{{base_url}}"], "path": ["admin", "providers", "{{provider_id}}"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/providers/{{provider_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers",
+								"{{provider_id}}"
+							]
+						}
 					}
 				},
 				{
@@ -349,38 +1220,101 @@
 					"request": {
 						"method": "PATCH",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"OpenCode Zen\",\n  \"type\": \"opencode\",\n  \"base_url\": \"https://opencode.ai/zen/go/v1\",\n  \"api_key\": \"sk-xxx\",\n  \"priority\": 2,\n  \"is_active\": true,\n  \"is_public\": true\n}"
 						},
-						"url": { "raw": "{{base_url}}/admin/providers/{{provider_id}}", "host": ["{{base_url}}"], "path": ["admin", "providers", "{{provider_id}}"] }
+						"url": {
+							"raw": "{{base_url}}/admin/providers/{{provider_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers",
+								"{{provider_id}}"
+							]
+						}
 					}
 				},
 				{
 					"name": "Test Provider Connection",
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/admin/providers/{{provider_id}}/test", "host": ["{{base_url}}"], "path": ["admin", "providers", "{{provider_id}}", "test"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/providers/{{provider_id}}/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers",
+								"{{provider_id}}",
+								"test"
+							]
+						}
 					}
 				},
 				{
 					"name": "Sync Provider Models",
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/admin/providers/{{provider_id}}/sync-models", "host": ["{{base_url}}"], "path": ["admin", "providers", "{{provider_id}}", "sync-models"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/providers/{{provider_id}}/sync-models",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers",
+								"{{provider_id}}",
+								"sync-models"
+							]
+						}
 					}
 				},
 				{
 					"name": "Delete Provider",
 					"request": {
 						"method": "DELETE",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/admin/providers/{{provider_id}}", "host": ["{{base_url}}"], "path": ["admin", "providers", "{{provider_id}}"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/providers/{{provider_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers",
+								"{{provider_id}}"
+							]
+						}
 					}
 				},
 				{
@@ -388,30 +1322,78 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"glm-5.1\",\n  \"display_name\": \"GLM 5.1\",\n  \"max_tokens\": 8192,\n  \"context_window\": 128000,\n  \"supports_streaming\": true,\n  \"supports_images\": false,\n  \"is_public\": true,\n  \"is_premium\": false\n}"
 						},
-						"url": { "raw": "{{base_url}}/admin/providers/{{provider_id}}/models", "host": ["{{base_url}}"], "path": ["admin", "providers", "{{provider_id}}", "models"] }
+						"url": {
+							"raw": "{{base_url}}/admin/providers/{{provider_id}}/models",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers",
+								"{{provider_id}}",
+								"models"
+							]
+						}
 					}
 				},
 				{
 					"name": "List Provider Models",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/admin/providers/{{provider_id}}/models", "host": ["{{base_url}}"], "path": ["admin", "providers", "{{provider_id}}", "models"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/providers/{{provider_id}}/models",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"providers",
+								"{{provider_id}}",
+								"models"
+							]
+						}
 					}
 				},
 				{
 					"name": "Get Model",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/admin/models/{{model_id}}", "host": ["{{base_url}}"], "path": ["admin", "models", "{{model_id}}"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/models/{{model_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"models",
+								"{{model_id}}"
+							]
+						}
 					}
 				},
 				{
@@ -419,30 +1401,76 @@
 					"request": {
 						"method": "PATCH",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"glm-5.1\",\n  \"display_name\": \"GLM 5.1\",\n  \"max_tokens\": 8192,\n  \"context_window\": 128000,\n  \"supports_streaming\": true,\n  \"supports_images\": false,\n  \"is_active\": true,\n  \"is_public\": true,\n  \"is_premium\": false\n}"
 						},
-						"url": { "raw": "{{base_url}}/admin/models/{{model_id}}", "host": ["{{base_url}}"], "path": ["admin", "models", "{{model_id}}"] }
+						"url": {
+							"raw": "{{base_url}}/admin/models/{{model_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"models",
+								"{{model_id}}"
+							]
+						}
 					}
 				},
 				{
 					"name": "Delete Model",
 					"request": {
 						"method": "DELETE",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/admin/models/{{model_id}}", "host": ["{{base_url}}"], "path": ["admin", "models", "{{model_id}}"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/models/{{model_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"models",
+								"{{model_id}}"
+							]
+						}
 					}
 				},
 				{
 					"name": "List API Keys",
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
-						"url": { "raw": "{{base_url}}/api/v1/api-keys", "host": ["{{base_url}}"], "path": ["api", "v1", "api-keys"] }
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"api-keys"
+							]
+						}
 					}
 				},
 				{
@@ -450,11 +1478,30 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
-						"body": { "mode": "raw", "raw": "{\n  \"name\": \"My API Key\",\n  \"rate_limit\": 60\n}" },
-						"url": { "raw": "{{base_url}}/api/v1/api-keys", "host": ["{{base_url}}"], "path": ["api", "v1", "api-keys"] }
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"My API Key\",\n  \"rate_limit\": 60\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"api-keys"
+							]
+						}
 					}
 				}
 			]
@@ -467,7 +1514,15 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						}
 					}
 				},
 				{
@@ -475,7 +1530,16 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "http://localhost:3002/health", "host": ["localhost"], "port": "3002", "path": ["health"] }
+						"url": {
+							"raw": "http://localhost:3002/health",
+							"host": [
+								"localhost"
+							],
+							"port": "3002",
+							"path": [
+								"health"
+							]
+						}
 					}
 				}
 			]
