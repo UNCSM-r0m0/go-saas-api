@@ -199,8 +199,10 @@ func main() {
 			admin.Any("/api-keys/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 			admin.Any("/admin/providers", proxyTo(cfg.AgentServiceURL, "/api/v1"))
 			admin.Any("/admin/providers/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-			admin.Any("/admin/models/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
-		}
+		admin.Any("/admin/models/*path", proxyTo(cfg.AgentServiceURL, "/api/v1"))
+		admin.Any("/admin/users", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		admin.Any("/admin/users/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+	}
 
 		// Sandbox routes (JWT or API key + strict sandbox rate limit + 15s timeout)
 		sandbox := v1.Group("/sandbox")
@@ -219,12 +221,6 @@ func main() {
 			documents.GET("/documents/:id", proxyTo(cfg.DocumentServiceURL, "/api/v1"))
 		}
 
-		// Usage stats route (JWT or API key + rate limit)
-		v1.GET("/chat/usage/stats",
-			middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService),
-			middleware.RateLimit(rateLimiter, cfg, log, tierResolver),
-			proxyToWithPrefix(cfg.UsageServiceURL, "/api/v1", "/usage"))
-
 		// Protected service routes (JWT or API key required)
 		protected := v1.Group("")
 		protected.Use(middleware.JWTOrAPIKeyAuth(jwtMgr, apiKeyService))
@@ -234,9 +230,17 @@ func main() {
 			protected.Any("/billing/*path", proxyTo(cfg.BillingServiceURL, "/api/v1"))
 			// r3-chat frontend billing routes — billing service registers these under /billing
 			protected.Any("/stripe/*path", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
-			protected.Any("/subscriptions", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
-			protected.Any("/subscriptions/*path", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
-			protected.Any("/usage/*path", proxyTo(cfg.UsageServiceURL, "/api/v1"))
+		protected.Any("/subscriptions", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
+		protected.Any("/subscriptions/*path", proxyToWithPrefix(cfg.BillingServiceURL, "/api/v1", "/billing"))
+		protected.Any("/users/preferences", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+		protected.Any("/users/preferences/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
+
+			// Usage routes (JWT or API key + rate limit)
+			protected.GET("/usage/stats",
+				middleware.RateLimit(rateLimiter, cfg, log, tierResolver),
+				proxyTo(cfg.UsageServiceURL, "/api/v1"))
+			protected.GET("/usage/limits", proxyTo(cfg.UsageServiceURL, "/api/v1"))
+			protected.POST("/usage/track", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 		}
 	}
 

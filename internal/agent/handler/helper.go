@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/r0lm0/go-saas-api/internal/platform/response"
 )
 
@@ -35,6 +38,62 @@ func getUserIDSSE(c *gin.Context) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return userID, true
+}
+
+type UserPreferences struct {
+	DisplayName string   `json:"display_name"`
+	Profession  string   `json:"profession"`
+	Traits      []string `json:"traits"`
+	AboutMe     string   `json:"about_me"`
+}
+
+func getUserPreferences(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) (*UserPreferences, error) {
+	if pool == nil {
+		return nil, nil
+	}
+
+	query := `
+		SELECT display_name, profession, traits, about_me
+		FROM user_preferences
+		WHERE user_id = $1
+	`
+	row := pool.QueryRow(ctx, query, userID)
+
+	var prefs UserPreferences
+	var traits []string
+	err := row.Scan(&prefs.DisplayName, &prefs.Profession, &traits, &prefs.AboutMe)
+	if err != nil {
+		return nil, err
+	}
+	prefs.Traits = traits
+
+	return &prefs, nil
+}
+
+func buildUserContext(prefs *UserPreferences) string {
+	if prefs == nil {
+		return ""
+	}
+
+	var parts []string
+	if prefs.DisplayName != "" {
+		parts = append(parts, fmt.Sprintf("El usuario se llama %s", prefs.DisplayName))
+	}
+	if prefs.Profession != "" {
+		parts = append(parts, fmt.Sprintf("trabaja como %s", prefs.Profession))
+	}
+	if len(prefs.Traits) > 0 {
+		parts = append(parts, fmt.Sprintf("deberías ser %s", strings.Join(prefs.Traits, ", ")))
+	}
+	if prefs.AboutMe != "" {
+		parts = append(parts, fmt.Sprintf("contexto adicional: %s", prefs.AboutMe))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return "\n\n[Preferencias del usuario] " + strings.Join(parts, ". ") + "."
 }
 
 func writeSSEError(c *gin.Context, status int, code string, msg string) {

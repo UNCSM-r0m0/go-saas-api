@@ -57,6 +57,7 @@ func main() {
 	// Auth layer
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 	userStore := auth.NewPostgresUserStore(pgPool)
+	prefsStore := auth.NewPostgresPreferencesStore(pgPool)
 	refreshStore := auth.NewRedisRefreshTokenStore(redisClient)
 	resetStore := auth.NewRedisPasswordResetTokenStore(redisClient)
 
@@ -75,6 +76,7 @@ func main() {
 
 	authService := auth.NewService(userStore, refreshStore, resetStore, emailSender, cfg.FrontendURL, jwtMgr, cfg.JWTExpiration, 7*24*time.Hour, 15*time.Minute)
 	authHandler := auth.NewHandler(authService, log)
+	prefsHandler := auth.NewPreferencesHandler(prefsStore, log)
 
 	// OAuth layer
 	oauthStateStore := auth.NewRedisOAuthStateStore(redisClient)
@@ -110,6 +112,10 @@ func main() {
 	authHandler.RegisterRoutes(r)
 	oauthHandler.RegisterRoutes(r)
 
+	// Admin routes
+	adminHandler := auth.NewAdminHandler(userStore, log)
+	adminHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr), middleware.AdminOnly())
+
 	// API key management
 	apiKeyStore := apikey.NewPostgresStore(pgPool)
 	apiKeyService := apikey.NewService(apiKeyStore)
@@ -126,6 +132,7 @@ func main() {
 	users := r.Group("/users")
 	users.Use(middleware.JWTAuth(jwtMgr))
 	users.PUT("/profile", authHandler.UpdateProfile)
+	prefsHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,

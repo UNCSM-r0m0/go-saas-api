@@ -38,7 +38,7 @@ func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *Sess
 	}
 }
 
-func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string) (<-chan llm.Chunk, error) {
+func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string) (<-chan llm.Chunk, error) {
 	var conversationID uuid.UUID
 	if convID != nil {
 		conversationID = *convID
@@ -106,7 +106,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		}
 	}
 
-	messages := BuildMessages(agent, history, userContent)
+	messages := BuildMessages(agent, history, userContent, userContext)
 	toolDefs := BuildToolDefinitions(toolInstances)
 
 	outCh := make(chan llm.Chunk)

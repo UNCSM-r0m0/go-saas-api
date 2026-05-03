@@ -6,12 +6,15 @@ import (
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
-func BuildMessages(agent *model.Agent, history []model.Message, userMessage string) []llm.Message {
+func BuildMessages(agent *model.Agent, history []model.Message, userMessage string, userContext string) []llm.Message {
 	var messages []llm.Message
 
 	systemContent := agent.SystemPrompt
 	if systemContent == "" {
 		systemContent = string(agent.Role)
+	}
+	if userContext != "" {
+		systemContent += userContext
 	}
 	messages = append(messages, llm.Message{Role: "system", Content: systemContent})
 

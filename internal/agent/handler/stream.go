@@ -29,7 +29,12 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model)
+
+	// Obtener preferencias del usuario para personalizar el system prompt
+	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
+	userContext := buildUserContext(prefs)
+
+	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext)
 	if err != nil {
 		h.log.Error("chat stream failed", logger.Error(err))
 		writeSSEError(c, http.StatusOK, "STREAM_ERROR", err.Error())
@@ -76,7 +81,12 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model)
+
+	// Obtener preferencias del usuario para personalizar el system prompt
+	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
+	userContext := buildUserContext(prefs)
+
+	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model, userContext)
 	if err != nil {
 		h.log.Error("chat failed", logger.Error(err))
 		writeSSEError(c, http.StatusInternalServerError, "STREAM_ERROR", "chat failed")

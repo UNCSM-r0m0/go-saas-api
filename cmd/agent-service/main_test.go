@@ -148,7 +148,7 @@ func setupTestRouter() (*gin.Engine, *memConversationRepo, *memMessageRepo, *mem
 	multiClient := llm.NewMultiClient()
 	wsManager := websocket.NewManager(orch, log)
 
-	h := handler.NewHandler(orch, convRepo, msgRepo, artRepo, log, multiClient, wsManager, nil)
+	h := handler.NewHandler(orch, convRepo, msgRepo, artRepo, log, multiClient, wsManager, nil, nil)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	h.RegisterRoutes(r)

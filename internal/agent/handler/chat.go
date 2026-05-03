@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
@@ -29,6 +30,7 @@ type Handler struct {
 	providerStore provider.Store
 	wsManager     *websocket.Manager
 	hc            *health.Checker
+	pgPool        *pgxpool.Pool
 }
 
 // NewHandler creates a new agent handler.
@@ -42,6 +44,7 @@ func NewHandler(
 	providerStore provider.Store,
 	wsManager *websocket.Manager,
 	hc *health.Checker,
+	pgPool *pgxpool.Pool,
 ) *Handler {
 	return &Handler{
 		orch:          orch,
@@ -53,6 +56,7 @@ func NewHandler(
 		providerStore: providerStore,
 		wsManager:     wsManager,
 		hc:            hc,
+		pgPool:        pgPool,
 	}
 }
 
@@ -164,20 +168,21 @@ func (h *Handler) handleListModelsPublic(c *gin.Context) {
 				if m.SupportsImages {
 					features = append(features, "multimodal")
 				}
-				models = append(models, gin.H{
-					"id":                m.Name,
-					"name":              m.Name,
-					"provider":          providerNameByID[m.ProviderID.String()],
-					"description":       firstNonEmptyString(m.Description, "Model "+m.Name),
-					"maxTokens":         m.MaxTokens,
-					"supportsImages":    m.SupportsImages,
-					"supportsReasoning": false,
-					"isPremium":         m.IsPremium,
-					"is_premium":        m.IsPremium,
-					"isAvailable":       available,
-					"available":         available,
-					"features":          features,
-				})
+			models = append(models, gin.H{
+				"id":                m.Name,
+				"model_id":          m.ID.String(),
+				"name":              m.Name,
+				"provider":          providerNameByID[m.ProviderID.String()],
+				"description":       firstNonEmptyString(m.Description, "Model "+m.Name),
+				"maxTokens":         m.MaxTokens,
+				"supportsImages":    m.SupportsImages,
+				"supportsReasoning": false,
+				"isPremium":         m.IsPremium,
+				"is_premium":        m.IsPremium,
+				"isAvailable":       available,
+				"available":         available,
+				"features":          features,
+			})
 			}
 			response.OK(c, models, "models retrieved")
 			return
@@ -299,7 +304,12 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model)
+	
+	// Obtener preferencias del usuario para personalizar el system prompt
+	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
+	userContext := buildUserContext(prefs)
+	
+	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext)
 	if err != nil {
 		h.log.Error("chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "chat failed")

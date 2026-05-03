@@ -85,6 +85,39 @@ func (s *PostgresUserStore) Delete(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+// ListUsers retrieves all users with pagination
+func (s *PostgresUserStore) ListUsers(ctx context.Context, limit, offset int) ([]*User, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	query := `
+		SELECT id, email, password_hash, name, role, is_admin, messages_used_this_month, oauth_provider, oauth_subject, created_at, updated_at
+		FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2
+	`
+	rows, err := s.pool.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		user, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
+// UpdateUserRole updates a user's role
+func (s *PostgresUserStore) UpdateUserRole(ctx context.Context, id uuid.UUID, role string) error {
+	query := `UPDATE users SET role = $2, updated_at = NOW() WHERE id = $1`
+	_, err := s.pool.Exec(ctx, query, id, role)
+	return err
+}
+
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
 	err := row.Scan(

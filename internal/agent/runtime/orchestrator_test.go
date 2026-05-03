@@ -125,7 +125,7 @@ func TestOrchestrator_Chat(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 
-	ch, err := orch.Chat(ctx, userID, nil, "hi there", nil, "")
+	ch, err := orch.Chat(ctx, userID, nil, "hi there", nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "")
+	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "")
+	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -100,7 +100,7 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.RequestID(), middleware.Logger(log), middleware.CORS())
-	agentHandler := handler.NewHandler(orchestrator, convStore, msgStore, artStore, log, multiClient, providerStore, wsManager, hc)
+	agentHandler := handler.NewHandler(orchestrator, convStore, msgStore, artStore, log, multiClient, providerStore, wsManager, hc, pgPool)
 	agentHandler.RegisterRoutes(r)
 	fileHandler.RegisterRoutes(r)
 	providerHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))
