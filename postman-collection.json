@@ -1,0 +1,185 @@
+{
+	"info": {
+		"_postman_id": "go-saas-api-local",
+		"name": "go-saas-api Local Tests",
+		"description": "Collection para probar login, modelos y chat con providers activos (Ollama, OpenCode, Kimi)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/health",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3000",
+					"path": ["health"]
+				}
+			}
+		},
+		{
+			"name": "2. Register User",
+			"request": {
+				"method": "POST",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Test123456!\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3000/api/v1/auth/register",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3000",
+					"path": ["api", "v1", "auth", "register"]
+				}
+			}
+		},
+		{
+			"name": "3. Login",
+			"request": {
+				"method": "POST",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Test123456!\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3000/api/v1/auth/login",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3000",
+					"path": ["api", "v1", "auth", "login"]
+				}
+			}
+		},
+		{
+			"name": "4. Get Profile",
+			"request": {
+				"method": "GET",
+				"header": [
+					{"key": "Authorization", "value": "Bearer {{jwt_token}}"}
+				],
+				"url": {
+					"raw": "http://localhost:3000/api/v1/auth/profile",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3000",
+					"path": ["api", "v1", "auth", "profile"]
+				}
+			}
+		},
+		{
+			"name": "5. List Public Models",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/api/v1/models/public",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3000",
+					"path": ["api", "v1", "models", "public"]
+				}
+			}
+		},
+		{
+			"name": "6. Chat - Ollama (qwen2.5-coder:3b)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{"key": "Content-Type", "value": "application/json"},
+					{"key": "Authorization", "value": "Bearer {{jwt_token}}"}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"message\": \"Hola, ¿qué modelo eres?\",\n  \"model\": \"qwen2.5-coder:3b\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3002/agent/chat",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3002",
+					"path": ["agent", "chat"]
+				}
+			}
+		},
+		{
+			"name": "7. Chat - OpenCode (kimi-k2.6)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{"key": "Content-Type", "value": "application/json"},
+					{"key": "Authorization", "value": "Bearer {{jwt_token}}"}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"message\": \"Hola, ¿qué modelo eres?\",\n  \"model\": \"kimi-k2.6\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3002/agent/chat",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3002",
+					"path": ["agent", "chat"]
+				}
+			}
+		},
+		{
+			"name": "8. Chat - Kimi (kimi-for-coding)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{"key": "Content-Type", "value": "application/json"},
+					{"key": "Authorization", "value": "Bearer {{jwt_token}}"}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"message\": \"Hola, ¿qué modelo eres?\",\n  \"model\": \"kimi-for-coding\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3002/agent/chat",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3002",
+					"path": ["agent", "chat"]
+				}
+			}
+		},
+		{
+			"name": "9. List Chat Sessions",
+			"request": {
+				"method": "GET",
+				"header": [
+					{"key": "Authorization", "value": "Bearer {{jwt_token}}"}
+				],
+				"url": {
+					"raw": "http://localhost:3002/chat/sessions",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3002",
+					"path": ["chat", "sessions"]
+				}
+			}
+		},
+		{
+			"name": "10. Logout",
+			"request": {
+				"method": "POST",
+				"header": [
+					{"key": "Authorization", "value": "Bearer {{jwt_token}}"}
+				],
+				"url": {
+					"raw": "http://localhost:3000/api/v1/auth/logout",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "3000",
+					"path": ["api", "v1", "auth", "logout"]
+				}
+			}
+		}
+	]
+}

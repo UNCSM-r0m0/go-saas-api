@@ -42,7 +42,6 @@ bin/
 
 # Test files
 test_body*.json
-postman-collection.json
 
 # Temporary
 tmp/
