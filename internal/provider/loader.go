@@ -1,4 +1,4 @@
-package main
+package provider
 
 import (
 	"context"
@@ -8,19 +8,18 @@ import (
 	"time"
 
 	"github.com/r0lm0/go-saas-api/internal/platform/crypto"
-	"github.com/r0lm0/go-saas-api/internal/provider"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
 // ProviderLoader loads AI providers from the database into the MultiClient.
 type ProviderLoader struct {
-	store       provider.Store
+	store       Store
 	multiClient *llm.MultiClient
 	masterKey   string
 }
 
 // NewProviderLoader creates a new provider loader.
-func NewProviderLoader(store provider.Store, multiClient *llm.MultiClient, masterKey string) *ProviderLoader {
+func NewProviderLoader(store Store, multiClient *llm.MultiClient, masterKey string) *ProviderLoader {
 	return &ProviderLoader{store: store, multiClient: multiClient, masterKey: masterKey}
 }
 
@@ -53,7 +52,7 @@ func (pl *ProviderLoader) LoadAll(ctx context.Context) error {
 		}
 
 		// For Ollama, verify models actually exist locally before registering
-		if p.Type == provider.ProviderOllama {
+		if p.Type == ProviderOllama {
 			modelNames = pl.filterOllamaModels(ctx, p.BaseURL, modelNames)
 			if len(modelNames) == 0 {
 				continue // skip Ollama provider if no models are available locally
@@ -73,26 +72,26 @@ func (pl *ProviderLoader) LoadAll(ctx context.Context) error {
 }
 
 // createClient instantiates the correct LLM client based on provider type.
-func (pl *ProviderLoader) createClient(p provider.AIProvider) (llm.Client, error) {
+func (pl *ProviderLoader) createClient(p AIProvider) (llm.Client, error) {
 	apiKey, err := pl.decryptAPIKey(p)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt api key for provider %s: %w", p.Name, err)
 	}
 
 	switch p.Type {
-	case provider.ProviderOllama:
+	case ProviderOllama:
 		return llm.NewOllamaClient(p.BaseURL), nil
-	case provider.ProviderOpenAI:
+	case ProviderOpenAI:
 		return llm.NewOpenAIClient(apiKey), nil
-	case provider.ProviderGemini:
+	case ProviderGemini:
 		return llm.NewGeminiClient(apiKey), nil
-	case provider.ProviderDeepSeek:
+	case ProviderDeepSeek:
 		return llm.NewDeepSeekClient(apiKey), nil
-	case provider.ProviderKimi:
+	case ProviderKimi:
 		return llm.NewKimiAnthropicClient(apiKey), nil
-	case provider.ProviderLMStudio:
+	case ProviderLMStudio:
 		return llm.NewLMStudioClient(p.BaseURL, apiKey), nil
-	case provider.ProviderOpenCode:
+	case ProviderOpenCode:
 		baseURL := p.BaseURL
 		if baseURL == "" {
 			baseURL = "https://opencode.ai/zen/go/v1"
@@ -104,7 +103,7 @@ func (pl *ProviderLoader) createClient(p provider.AIProvider) (llm.Client, error
 }
 
 // decryptAPIKey decrypts the provider's API key using the master key.
-func (pl *ProviderLoader) decryptAPIKey(p provider.AIProvider) (string, error) {
+func (pl *ProviderLoader) decryptAPIKey(p AIProvider) (string, error) {
 	if p.APIKeyEncrypted == nil || *p.APIKeyEncrypted == "" {
 		return "", nil
 	}
