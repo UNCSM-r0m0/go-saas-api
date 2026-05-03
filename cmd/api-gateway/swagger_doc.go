@@ -173,7 +173,6 @@ type limitInfo struct {
 }
 
 type trackUsageReq struct {
-	TenantID       string   `json:"tenant_id" binding:"required"`
 	UserID         string   `json:"user_id" binding:"required"`
 	ConversationID *string  `json:"conversation_id"`
 	Model          string   `json:"model" binding:"required"`
@@ -381,7 +380,6 @@ func _swaggerModelsPublic(c *gin.Context) {}
 // @Accept json
 // @Produce plain
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param request body chatReq true "Chat message"
 // @Success 200 {string} string "SSE stream"
@@ -395,7 +393,6 @@ func _swaggerAgentChat(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param request body chatReq true "Chat message"
 // @Success 200 {object} map[string]interface{}
@@ -409,7 +406,6 @@ func _swaggerChatMessage(c *gin.Context) {}
 // @Accept json
 // @Produce plain
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param request body chatReq true "Chat message"
 // @Success 200 {string} string "SSE stream"
@@ -423,7 +419,6 @@ func _swaggerChatMessageStream(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param request body map[string]string true "Chat title and model"
 // @Success 201 {object} map[string]interface{}
@@ -434,7 +429,6 @@ func _swaggerCreateChat(c *gin.Context) {}
 // @Tags agent
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "Chat ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]string
@@ -445,7 +439,6 @@ func _swaggerGetChat(c *gin.Context) {}
 // @Tags agent
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param limit query int false "Limit" default(20)
 // @Param offset query int false "Offset" default(0)
@@ -456,7 +449,6 @@ func _swaggerChatSessions(c *gin.Context) {}
 // @Summary WebSocket chat upgrade
 // @Tags agent
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Success 101 {string} string "WebSocket upgrade"
 // @Router /api/v1/agent/ws [get]
@@ -467,7 +459,6 @@ func _swaggerAgentWS(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param request body artifactReq true "Artifact data"
 // @Success 201 {object} model.Artifact
 // @Failure 400 {object} map[string]string
@@ -478,7 +469,6 @@ func _swaggerCreateArtifact(c *gin.Context) {}
 // @Tags agent
 // @Produce plain
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "Artifact ID"
 // @Success 200 {string} string "Artifact content"
 // @Failure 404 {object} map[string]string
@@ -489,7 +479,6 @@ func _swaggerPreviewArtifact(c *gin.Context) {}
 // @Tags agent
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param limit query int false "Limit" default(20)
 // @Param offset query int false "Offset" default(0)
@@ -502,7 +491,6 @@ func _swaggerListConversations(c *gin.Context) {}
 // @Tags agent
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "Conversation ID"
 // @Success 200 {object} model.Conversation
 // @Failure 404 {object} map[string]string
@@ -514,7 +502,6 @@ func _swaggerGetConversation(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "Conversation ID"
 // @Param request body map[string]string true "Fields to update"
 // @Success 200 {object} model.Conversation
@@ -527,7 +514,6 @@ func _swaggerUpdateConversation(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "Chat ID"
 // @Param request body map[string]string true "Fields to update"
 // @Success 200 {object} map[string]interface{}
@@ -539,7 +525,6 @@ func _swaggerUpdateChatSession(c *gin.Context) {}
 // @Tags agent
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "Conversation ID"
 // @Success 200 {object} map[string]string
 // @Failure 404 {object} map[string]string
@@ -550,7 +535,6 @@ func _swaggerDeleteConversation(c *gin.Context) {}
 // @Tags agent
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "Chat ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]string
@@ -561,7 +545,6 @@ func _swaggerDeleteChatSession(c *gin.Context) {}
 // @Tags agent
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "Conversation ID"
 // @Param limit query int false "Limit" default(50)
 // @Success 200 {object} messagesResp
@@ -714,7 +697,6 @@ func _swaggerListPlans(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param request body subscribeReq true "Subscription request"
 // @Success 200 {object} subscribeResp
@@ -726,7 +708,6 @@ func _swaggerSubscribe(c *gin.Context) {}
 // @Tags billing
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Success 200 {object} subscriptionResp
 // @Router /api/v1/billing/subscription [get]
@@ -736,7 +717,6 @@ func _swaggerGetSubscription(c *gin.Context) {}
 // @Tags billing
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Success 200 {object} cancelResp
 // @Router /api/v1/billing/cancel [post]
@@ -757,7 +737,6 @@ func _swaggerStripeWebhook(c *gin.Context) {}
 // @Tags billing
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/stripe/subscription [get]
@@ -768,7 +747,6 @@ func _swaggerStripeSubscription(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param request body map[string]string true "Price ID"
 // @Success 200 {object} map[string]interface{}
@@ -780,7 +758,6 @@ func _swaggerStripeCreateCheckout(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/stripe/create-portal-session [post]
@@ -800,7 +777,6 @@ func _swaggerStripeConfirmSession(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param request body map[string]string true "Plan"
 // @Success 200 {object} map[string]interface{}
@@ -812,7 +788,6 @@ func _swaggerCreateSubscription(c *gin.Context) {}
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/subscriptions/cancel [post]
@@ -826,7 +801,6 @@ func _swaggerCancelSubscriptionFrontend(c *gin.Context) {}
 // @Tags usage
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Success 200 {object} usageStatsResp
 // @Router /api/v1/usage/stats [get]
@@ -889,7 +863,6 @@ func _swaggerRevokeAPIKey(c *gin.Context) {}
 // @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param file formData file true "File to upload"
 // @Success 201 {object} fileupload.Upload
@@ -901,7 +874,6 @@ func _swaggerUploadFile(c *gin.Context) {}
 // @Tags files
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param X-User-ID header string true "User ID"
 // @Param limit query int false "Limit" default(20)
 // @Param offset query int false "Offset" default(0)
@@ -913,7 +885,6 @@ func _swaggerListFiles(c *gin.Context) {}
 // @Tags files
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "File ID"
 // @Success 200 {object} fileupload.Upload
 // @Failure 404 {object} map[string]string
@@ -924,7 +895,6 @@ func _swaggerGetFile(c *gin.Context) {}
 // @Tags files
 // @Produce octet-stream
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "File ID"
 // @Success 200 {file} binary "File content"
 // @Failure 404 {object} map[string]string
@@ -935,7 +905,6 @@ func _swaggerDownloadFile(c *gin.Context) {}
 // @Tags files
 // @Produce json
 // @Security BearerAuth
-// @Param X-Tenant-ID header string true "Tenant ID"
 // @Param id path string true "File ID"
 // @Success 200 {object} map[string]string
 // @Failure 404 {object} map[string]string

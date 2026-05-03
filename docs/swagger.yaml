@@ -1,366 +1,5 @@
 definitions:
-  cmd_api-gateway.apiKeyCreateReq:
-    properties:
-      name:
-        type: string
-    required:
-    - name
-    type: object
-  cmd_api-gateway.apiKeyCreateResp:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: string
-      key:
-        type: string
-      name:
-        type: string
-      scopes:
-        items:
-          type: string
-        type: array
-    type: object
-  cmd_api-gateway.apiKeysResp:
-    properties:
-      keys:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_apikey.APIKey'
-        type: array
-    type: object
-  cmd_api-gateway.artifactReq:
-    properties:
-      content:
-        type: string
-      conversation_id:
-        type: string
-      language:
-        type: string
-      name:
-        type: string
-      type:
-        type: string
-    required:
-    - content
-    - conversation_id
-    - name
-    - type
-    type: object
-  cmd_api-gateway.cancelResp:
-    properties:
-      status:
-        type: string
-    type: object
-  cmd_api-gateway.chatReq:
-    properties:
-      conversation_id:
-        type: string
-      file_ids:
-        items:
-          type: string
-        type: array
-      message:
-        type: string
-    required:
-    - message
-    type: object
-  cmd_api-gateway.conversationsResp:
-    properties:
-      conversations:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation'
-        type: array
-    type: object
-  cmd_api-gateway.filesResp:
-    properties:
-      files:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload'
-        type: array
-    type: object
-  cmd_api-gateway.forgotPasswordResp:
-    properties:
-      message:
-        type: string
-    type: object
-  cmd_api-gateway.healthResp:
-    properties:
-      healthy:
-        type: boolean
-      status:
-        type: string
-    type: object
-  cmd_api-gateway.limitInfo:
-    properties:
-      features:
-        additionalProperties: {}
-        type: object
-      max_tokens_per_request:
-        type: integer
-      messages_per_day:
-        type: integer
-    type: object
-  cmd_api-gateway.loginResp:
-    properties:
-      token:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.TokenPair'
-      user:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User'
-    type: object
-  cmd_api-gateway.logoutResp:
-    properties:
-      message:
-        type: string
-    type: object
-  cmd_api-gateway.meResp:
-    properties:
-      user:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User'
-    type: object
-  cmd_api-gateway.messagesResp:
-    properties:
-      messages:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Message'
-        type: array
-    type: object
-  cmd_api-gateway.modelItem:
-    properties:
-      id:
-        type: string
-      provider:
-        type: string
-    type: object
-  cmd_api-gateway.modelsListResp:
-    properties:
-      models:
-        items:
-          $ref: '#/definitions/cmd_api-gateway.modelItem'
-        type: array
-    type: object
-  cmd_api-gateway.plansResp:
-    properties:
-      plans:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Plan'
-        type: array
-    type: object
-  cmd_api-gateway.providerModelsResp:
-    properties:
-      models:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel'
-        type: array
-    type: object
-  cmd_api-gateway.providersResp:
-    properties:
-      providers:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider'
-        type: array
-    type: object
-  cmd_api-gateway.refreshResp:
-    properties:
-      token:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.TokenPair'
-      user:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User'
-    type: object
-  cmd_api-gateway.registerResp:
-    properties:
-      user:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User'
-    type: object
-  cmd_api-gateway.resetPasswordResp:
-    properties:
-      message:
-        type: string
-    type: object
-  cmd_api-gateway.subscribeReq:
-    properties:
-      email:
-        type: string
-      plan_slug:
-        type: string
-    required:
-    - email
-    - plan_slug
-    type: object
-  cmd_api-gateway.subscribeResp:
-    properties:
-      checkout_url:
-        type: string
-    type: object
-  cmd_api-gateway.subscriptionResp:
-    properties:
-      plan:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Plan'
-      subscription:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Subscription'
-    type: object
-  cmd_api-gateway.trackUsageReq:
-    properties:
-      conversation_id:
-        type: string
-      cost_usd:
-        type: number
-      latency_ms:
-        type: integer
-      model:
-        type: string
-      provider:
-        type: string
-      tenant_id:
-        type: string
-      tokens_input:
-        type: integer
-      tokens_output:
-        type: integer
-      user_id:
-        type: string
-    required:
-    - model
-    - provider
-    - tenant_id
-    - user_id
-    type: object
-  cmd_api-gateway.trackUsageResp:
-    properties:
-      status:
-        type: string
-    type: object
-  cmd_api-gateway.usageLimitsResp:
-    properties:
-      limits:
-        additionalProperties:
-          $ref: '#/definitions/cmd_api-gateway.limitInfo'
-        type: object
-    type: object
-  cmd_api-gateway.usageStatsResp:
-    properties:
-      stats:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_billing.DailyUsage'
-        type: array
-    type: object
-  cmd_api-gateway.webhookResp:
-    properties:
-      status:
-        type: string
-    type: object
-  github_com_r0lm0_go-saas-api_internal_agent_model.Artifact:
-    properties:
-      content:
-        type: string
-      conversation_id:
-        type: string
-      created_at:
-        type: string
-      id:
-        type: string
-      is_deleted:
-        type: boolean
-      language:
-        type: string
-      message_id:
-        type: string
-      name:
-        type: string
-      tenant_id:
-        type: string
-      type:
-        type: string
-      updated_at:
-        type: string
-      version:
-        type: integer
-    type: object
-  github_com_r0lm0_go-saas-api_internal_agent_model.Conversation:
-    properties:
-      agent_id:
-        type: string
-      created_at:
-        type: string
-      id:
-        type: string
-      messages:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Message'
-        type: array
-      metadata:
-        additionalProperties: {}
-        type: object
-      status:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.ConversationStatus'
-      tenant_id:
-        type: string
-      title:
-        type: string
-      updated_at:
-        type: string
-      user_id:
-        type: string
-    type: object
-  github_com_r0lm0_go-saas-api_internal_agent_model.ConversationStatus:
-    enum:
-    - active
-    - archived
-    - deleted
-    type: string
-    x-enum-varnames:
-    - ConversationActive
-    - ConversationArchived
-    - ConversationDeleted
-  github_com_r0lm0_go-saas-api_internal_agent_model.Message:
-    properties:
-      content:
-        type: string
-      conversation_id:
-        type: string
-      created_at:
-        type: string
-      id:
-        type: string
-      latency_ms:
-        type: integer
-      model:
-        type: string
-      role:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.MessageRole'
-      tenant_id:
-        type: string
-      tokens_input:
-        type: integer
-      tokens_output:
-        type: integer
-      tool_calls:
-        items:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.ToolCall'
-        type: array
-    type: object
-  github_com_r0lm0_go-saas-api_internal_agent_model.MessageRole:
-    enum:
-    - user
-    - assistant
-    - system
-    - tool
-    type: string
-    x-enum-varnames:
-    - MessageRoleUser
-    - MessageRoleAssistant
-    - MessageRoleSystem
-    - MessageRoleTool
-  github_com_r0lm0_go-saas-api_internal_agent_model.ToolCall:
-    properties:
-      arguments:
-        additionalProperties: {}
-        type: object
-      id:
-        type: string
-      name:
-        type: string
-    type: object
-  github_com_r0lm0_go-saas-api_internal_apikey.APIKey:
+  apikey.APIKey:
     properties:
       created_at:
         type: string
@@ -378,19 +17,17 @@ definitions:
         items:
           type: string
         type: array
-      tenant_id:
-        type: string
       user_id:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_auth.ForgotPasswordRequest:
+  auth.ForgotPasswordRequest:
     properties:
       email:
         type: string
     required:
     - email
     type: object
-  github_com_r0lm0_go-saas-api_internal_auth.LoginRequest:
+  auth.LoginRequest:
     properties:
       email:
         type: string
@@ -400,14 +37,14 @@ definitions:
     - email
     - password
     type: object
-  github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest:
+  auth.RefreshRequest:
     properties:
       refresh_token:
         type: string
     required:
     - refresh_token
     type: object
-  github_com_r0lm0_go-saas-api_internal_auth.RegisterRequest:
+  auth.RegisterRequest:
     properties:
       email:
         type: string
@@ -421,7 +58,7 @@ definitions:
     - name
     - password
     type: object
-  github_com_r0lm0_go-saas-api_internal_auth.ResetPasswordRequest:
+  auth.ResetPasswordRequest:
     properties:
       new_password:
         minLength: 8
@@ -432,7 +69,7 @@ definitions:
     - new_password
     - token
     type: object
-  github_com_r0lm0_go-saas-api_internal_auth.TokenPair:
+  auth.TokenPair:
     properties:
       access_token:
         type: string
@@ -442,7 +79,7 @@ definitions:
       refresh_token:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_auth.User:
+  auth.User:
     properties:
       created_at:
         type: string
@@ -450,6 +87,10 @@ definitions:
         type: string
       id:
         type: string
+      is_admin:
+        type: boolean
+      messages_used_this_month:
+        type: integer
       name:
         type: string
       oauth_provider:
@@ -458,12 +99,10 @@ definitions:
         type: string
       role:
         type: string
-      tenant_id:
-        type: string
       updated_at:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_billing.DailyUsage:
+  billing.DailyUsage:
     properties:
       cost_usd:
         type: number
@@ -471,8 +110,6 @@ definitions:
         type: string
       requests:
         type: integer
-      tenant_id:
-        type: string
       tokens_input:
         type: integer
       tokens_output:
@@ -480,7 +117,7 @@ definitions:
       user_id:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_billing.Plan:
+  billing.Plan:
     properties:
       amount_cents:
         type: integer
@@ -501,7 +138,7 @@ definitions:
         type: boolean
       max_tokens_per_request:
         type: integer
-      messages_per_day:
+      messages_per_month:
         type: integer
       name:
         type: string
@@ -512,7 +149,7 @@ definitions:
       updated_at:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_billing.Subscription:
+  billing.Subscription:
     properties:
       cancel_at_period_end:
         type: boolean
@@ -534,14 +171,12 @@ definitions:
         type: string
       stripe_subscription_id:
         type: string
-      tenant_id:
-        type: string
       updated_at:
         type: string
       user_id:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_fileupload.Upload:
+  fileupload.Upload:
     properties:
       content_type:
         type: string
@@ -560,12 +195,362 @@ definitions:
         type: string
       size_bytes:
         type: integer
-      tenant_id:
+      user_id:
+        type: string
+    type: object
+  main.apiKeyCreateReq:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  main.apiKeyCreateResp:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      key:
+        type: string
+      name:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+    type: object
+  main.apiKeysResp:
+    properties:
+      keys:
+        items:
+          $ref: '#/definitions/apikey.APIKey'
+        type: array
+    type: object
+  main.artifactReq:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      language:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    required:
+    - content
+    - conversation_id
+    - name
+    - type
+    type: object
+  main.cancelResp:
+    properties:
+      status:
+        type: string
+    type: object
+  main.chatReq:
+    properties:
+      conversation_id:
+        type: string
+      file_ids:
+        items:
+          type: string
+        type: array
+      message:
+        type: string
+    required:
+    - message
+    type: object
+  main.conversationsResp:
+    properties:
+      conversations:
+        items:
+          $ref: '#/definitions/model.Conversation'
+        type: array
+    type: object
+  main.filesResp:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/fileupload.Upload'
+        type: array
+    type: object
+  main.forgotPasswordResp:
+    properties:
+      message:
+        type: string
+    type: object
+  main.healthResp:
+    properties:
+      healthy:
+        type: boolean
+      status:
+        type: string
+    type: object
+  main.limitInfo:
+    properties:
+      features:
+        additionalProperties: {}
+        type: object
+      max_tokens_per_request:
+        type: integer
+      messages_per_day:
+        type: integer
+    type: object
+  main.loginResp:
+    properties:
+      token:
+        $ref: '#/definitions/auth.TokenPair'
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  main.logoutResp:
+    properties:
+      message:
+        type: string
+    type: object
+  main.meResp:
+    properties:
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  main.messagesResp:
+    properties:
+      messages:
+        items:
+          $ref: '#/definitions/model.Message'
+        type: array
+    type: object
+  main.modelItem:
+    properties:
+      id:
+        type: string
+      provider:
+        type: string
+    type: object
+  main.modelsListResp:
+    properties:
+      models:
+        items:
+          $ref: '#/definitions/main.modelItem'
+        type: array
+    type: object
+  main.plansResp:
+    properties:
+      plans:
+        items:
+          $ref: '#/definitions/billing.Plan'
+        type: array
+    type: object
+  main.providerModelsResp:
+    properties:
+      models:
+        items:
+          $ref: '#/definitions/provider.AIModel'
+        type: array
+    type: object
+  main.providersResp:
+    properties:
+      providers:
+        items:
+          $ref: '#/definitions/provider.AIProvider'
+        type: array
+    type: object
+  main.refreshResp:
+    properties:
+      token:
+        $ref: '#/definitions/auth.TokenPair'
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  main.registerResp:
+    properties:
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  main.resetPasswordResp:
+    properties:
+      message:
+        type: string
+    type: object
+  main.subscribeReq:
+    properties:
+      email:
+        type: string
+      plan_slug:
+        type: string
+    required:
+    - email
+    - plan_slug
+    type: object
+  main.subscribeResp:
+    properties:
+      checkout_url:
+        type: string
+    type: object
+  main.subscriptionResp:
+    properties:
+      plan:
+        $ref: '#/definitions/billing.Plan'
+      subscription:
+        $ref: '#/definitions/billing.Subscription'
+    type: object
+  main.trackUsageReq:
+    properties:
+      conversation_id:
+        type: string
+      cost_usd:
+        type: number
+      latency_ms:
+        type: integer
+      model:
+        type: string
+      provider:
+        type: string
+      tokens_input:
+        type: integer
+      tokens_output:
+        type: integer
+      user_id:
+        type: string
+    required:
+    - model
+    - provider
+    - user_id
+    type: object
+  main.trackUsageResp:
+    properties:
+      status:
+        type: string
+    type: object
+  main.usageLimitsResp:
+    properties:
+      limits:
+        additionalProperties:
+          $ref: '#/definitions/main.limitInfo'
+        type: object
+    type: object
+  main.usageStatsResp:
+    properties:
+      stats:
+        items:
+          $ref: '#/definitions/billing.DailyUsage'
+        type: array
+    type: object
+  main.webhookResp:
+    properties:
+      status:
+        type: string
+    type: object
+  model.Artifact:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      is_deleted:
+        type: boolean
+      language:
+        type: string
+      message_id:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  model.Conversation:
+    properties:
+      agent_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      messages:
+        items:
+          $ref: '#/definitions/model.Message'
+        type: array
+      metadata:
+        additionalProperties: {}
+        type: object
+      status:
+        $ref: '#/definitions/model.ConversationStatus'
+      title:
+        type: string
+      updated_at:
         type: string
       user_id:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_provider.AIModel:
+  model.ConversationStatus:
+    enum:
+    - active
+    - archived
+    - deleted
+    type: string
+    x-enum-varnames:
+    - ConversationActive
+    - ConversationArchived
+    - ConversationDeleted
+  model.Message:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      latency_ms:
+        type: integer
+      model:
+        type: string
+      role:
+        $ref: '#/definitions/model.MessageRole'
+      tokens_input:
+        type: integer
+      tokens_output:
+        type: integer
+      tool_calls:
+        items:
+          $ref: '#/definitions/model.ToolCall'
+        type: array
+    type: object
+  model.MessageRole:
+    enum:
+    - user
+    - assistant
+    - system
+    - tool
+    type: string
+    x-enum-varnames:
+    - MessageRoleUser
+    - MessageRoleAssistant
+    - MessageRoleSystem
+    - MessageRoleTool
+  model.ToolCall:
+    properties:
+      arguments:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  provider.AIModel:
     properties:
       config:
         additionalProperties: {}
@@ -599,7 +584,7 @@ definitions:
       updated_at:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_provider.AIProvider:
+  provider.AIProvider:
     properties:
       base_url:
         type: string
@@ -608,6 +593,8 @@ definitions:
         type: object
       created_at:
         type: string
+      encryption_key_version:
+        type: integer
       id:
         type: string
       is_active:
@@ -618,14 +605,12 @@ definitions:
         type: string
       priority:
         type: integer
-      tenant_id:
-        type: string
       type:
-        $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.ProviderType'
+        $ref: '#/definitions/provider.ProviderType'
       updated_at:
         type: string
     type: object
-  github_com_r0lm0_go-saas-api_internal_provider.ProviderType:
+  provider.ProviderType:
     enum:
     - ollama
     - openai
@@ -634,6 +619,7 @@ definitions:
     - kimi
     - lmstudio
     - anthropic
+    - opencode
     - custom
     type: string
     x-enum-varnames:
@@ -644,6 +630,7 @@ definitions:
     - ProviderKimi
     - ProviderLMStudio
     - ProviderAnthropic
+    - ProviderOpenCode
     - ProviderCustom
 info:
   contact: {}
@@ -689,7 +676,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel'
+            $ref: '#/definitions/provider.AIModel'
         "404":
           description: Not Found
           schema:
@@ -723,7 +710,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel'
+            $ref: '#/definitions/provider.AIModel'
         "404":
           description: Not Found
           schema:
@@ -743,7 +730,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.providersResp'
+            $ref: '#/definitions/main.providersResp'
         "401":
           description: Unauthorized
           schema:
@@ -772,7 +759,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider'
+            $ref: '#/definitions/provider.AIProvider'
         "400":
           description: Bad Request
           schema:
@@ -825,7 +812,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider'
+            $ref: '#/definitions/provider.AIProvider'
         "404":
           description: Not Found
           schema:
@@ -859,7 +846,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider'
+            $ref: '#/definitions/provider.AIProvider'
         "400":
           description: Bad Request
           schema:
@@ -885,7 +872,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.providerModelsResp'
+            $ref: '#/definitions/main.providerModelsResp'
       security:
       - BearerAuth: []
       summary: List models for a provider
@@ -913,7 +900,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel'
+            $ref: '#/definitions/provider.AIModel'
       security:
       - BearerAuth: []
       summary: Create a model for a provider
@@ -979,11 +966,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -994,7 +976,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/cmd_api-gateway.chatReq'
+          $ref: '#/definitions/main.chatReq'
       produces:
       - text/plain
       responses:
@@ -1022,11 +1004,6 @@ paths:
   /api/v1/agent/ws:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1050,7 +1027,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.apiKeysResp'
+            $ref: '#/definitions/main.apiKeysResp'
       security:
       - BearerAuth: []
       summary: List API keys
@@ -1065,14 +1042,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/cmd_api-gateway.apiKeyCreateReq'
+          $ref: '#/definitions/main.apiKeyCreateReq'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/cmd_api-gateway.apiKeyCreateResp'
+            $ref: '#/definitions/main.apiKeyCreateResp'
       security:
       - BearerAuth: []
       summary: Create a new API key
@@ -1105,24 +1082,19 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Artifact data
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/cmd_api-gateway.artifactReq'
+          $ref: '#/definitions/main.artifactReq'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Artifact'
+            $ref: '#/definitions/model.Artifact'
         "400":
           description: Bad Request
           schema:
@@ -1137,11 +1109,6 @@ paths:
   /api/v1/artifacts/{id}/preview:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Artifact ID
         in: path
         name: id
@@ -1184,7 +1151,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.loginResp'
+            $ref: '#/definitions/main.loginResp'
         "401":
           description: Unauthorized
           schema:
@@ -1204,14 +1171,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.ForgotPasswordRequest'
+          $ref: '#/definitions/auth.ForgotPasswordRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.forgotPasswordResp'
+            $ref: '#/definitions/main.forgotPasswordResp'
       summary: Request password reset email
       tags:
       - auth
@@ -1246,7 +1213,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.loginResp'
+            $ref: '#/definitions/main.loginResp'
         "401":
           description: Unauthorized
           schema:
@@ -1287,7 +1254,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.loginResp'
+            $ref: '#/definitions/main.loginResp'
         "401":
           description: Unauthorized
           schema:
@@ -1307,14 +1274,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.LoginRequest'
+          $ref: '#/definitions/auth.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.loginResp'
+            $ref: '#/definitions/main.loginResp'
         "400":
           description: Bad Request
           schema:
@@ -1340,14 +1307,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest'
+          $ref: '#/definitions/auth.RefreshRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.logoutResp'
+            $ref: '#/definitions/main.logoutResp'
       summary: Logout and invalidate refresh token
       tags:
       - auth
@@ -1359,7 +1326,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.meResp'
+            $ref: '#/definitions/main.meResp'
         "401":
           description: Unauthorized
           schema:
@@ -1379,7 +1346,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.meResp'
+            $ref: '#/definitions/main.meResp'
         "401":
           description: Unauthorized
           schema:
@@ -1401,14 +1368,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest'
+          $ref: '#/definitions/auth.RefreshRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.refreshResp'
+            $ref: '#/definitions/main.refreshResp'
         "401":
           description: Unauthorized
           schema:
@@ -1428,14 +1395,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RegisterRequest'
+          $ref: '#/definitions/auth.RegisterRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/cmd_api-gateway.registerResp'
+            $ref: '#/definitions/main.registerResp'
         "400":
           description: Bad Request
           schema:
@@ -1461,14 +1428,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_auth.ResetPasswordRequest'
+          $ref: '#/definitions/auth.ResetPasswordRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.resetPasswordResp'
+            $ref: '#/definitions/main.resetPasswordResp'
         "400":
           description: Bad Request
           schema:
@@ -1481,11 +1448,6 @@ paths:
   /api/v1/billing/cancel:
     post:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1497,7 +1459,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.cancelResp'
+            $ref: '#/definitions/main.cancelResp'
       security:
       - BearerAuth: []
       summary: Cancel subscription
@@ -1511,7 +1473,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.plansResp'
+            $ref: '#/definitions/main.plansResp'
       security:
       - BearerAuth: []
       summary: List billing plans
@@ -1522,11 +1484,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1537,14 +1494,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/cmd_api-gateway.subscribeReq'
+          $ref: '#/definitions/main.subscribeReq'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.subscribeResp'
+            $ref: '#/definitions/main.subscribeResp'
         "400":
           description: Bad Request
           schema:
@@ -1559,11 +1516,6 @@ paths:
   /api/v1/billing/subscription:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1575,7 +1527,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.subscriptionResp'
+            $ref: '#/definitions/main.subscriptionResp'
       security:
       - BearerAuth: []
       summary: Get current subscription
@@ -1603,7 +1555,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.webhookResp'
+            $ref: '#/definitions/main.webhookResp'
         "400":
           description: Bad Request
           schema:
@@ -1618,11 +1570,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1652,11 +1599,6 @@ paths:
   /api/v1/chat/{id}:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Chat ID
         in: path
         name: id
@@ -1686,11 +1628,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1701,7 +1638,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/cmd_api-gateway.chatReq'
+          $ref: '#/definitions/main.chatReq'
       produces:
       - application/json
       responses:
@@ -1732,11 +1669,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1747,7 +1679,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/cmd_api-gateway.chatReq'
+          $ref: '#/definitions/main.chatReq'
       produces:
       - text/plain
       responses:
@@ -1780,18 +1712,13 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.modelsListResp'
+            $ref: '#/definitions/main.modelsListResp'
       summary: List available AI models
       tags:
       - agent
   /api/v1/chat/sessions:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1823,11 +1750,6 @@ paths:
   /api/v1/chat/sessions/{id}:
     delete:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Chat ID
         in: path
         name: id
@@ -1856,11 +1778,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Chat ID
         in: path
         name: id
@@ -1896,11 +1813,6 @@ paths:
   /api/v1/conversations:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -1922,7 +1834,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.conversationsResp'
+            $ref: '#/definitions/main.conversationsResp'
         "401":
           description: Unauthorized
           schema:
@@ -1937,11 +1849,6 @@ paths:
   /api/v1/conversations/{id}:
     delete:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Conversation ID
         in: path
         name: id
@@ -1969,11 +1876,6 @@ paths:
       - agent
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Conversation ID
         in: path
         name: id
@@ -1985,7 +1887,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation'
+            $ref: '#/definitions/model.Conversation'
         "404":
           description: Not Found
           schema:
@@ -2001,11 +1903,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Conversation ID
         in: path
         name: id
@@ -2025,7 +1922,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation'
+            $ref: '#/definitions/model.Conversation'
         "404":
           description: Not Found
           schema:
@@ -2040,11 +1937,6 @@ paths:
   /api/v1/conversations/{id}/messages:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: Conversation ID
         in: path
         name: id
@@ -2061,7 +1953,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.messagesResp'
+            $ref: '#/definitions/main.messagesResp'
         "404":
           description: Not Found
           schema:
@@ -2076,11 +1968,6 @@ paths:
   /api/v1/files:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -2102,7 +1989,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.filesResp'
+            $ref: '#/definitions/main.filesResp'
       security:
       - BearerAuth: []
       summary: List uploaded files
@@ -2112,11 +1999,6 @@ paths:
       consumes:
       - multipart/form-data
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -2133,7 +2015,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload'
+            $ref: '#/definitions/fileupload.Upload'
         "400":
           description: Bad Request
           schema:
@@ -2148,11 +2030,6 @@ paths:
   /api/v1/files/{id}:
     delete:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: File ID
         in: path
         name: id
@@ -2180,11 +2057,6 @@ paths:
       - files
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: File ID
         in: path
         name: id
@@ -2196,7 +2068,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload'
+            $ref: '#/definitions/fileupload.Upload'
         "404":
           description: Not Found
           schema:
@@ -2211,11 +2083,6 @@ paths:
   /api/v1/files/{id}/download:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: File ID
         in: path
         name: id
@@ -2247,11 +2114,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.healthResp'
+            $ref: '#/definitions/main.healthResp'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/cmd_api-gateway.healthResp'
+            $ref: '#/definitions/main.healthResp'
       summary: Health check
       tags:
       - health
@@ -2297,11 +2164,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -2333,11 +2195,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -2359,11 +2216,6 @@ paths:
   /api/v1/stripe/subscription:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -2387,11 +2239,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -2423,11 +2270,6 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -2454,18 +2296,13 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.usageLimitsResp'
+            $ref: '#/definitions/main.usageLimitsResp'
       summary: Get usage limits by plan
       tags:
       - usage
   /api/v1/usage/stats:
     get:
       parameters:
-      - description: Tenant ID
-        in: header
-        name: X-Tenant-ID
-        required: true
-        type: string
       - description: User ID
         in: header
         name: X-User-ID
@@ -2477,7 +2314,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.usageStatsResp'
+            $ref: '#/definitions/main.usageStatsResp'
       security:
       - BearerAuth: []
       summary: Get usage statistics
@@ -2493,14 +2330,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/cmd_api-gateway.trackUsageReq'
+          $ref: '#/definitions/main.trackUsageReq'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/cmd_api-gateway.trackUsageResp'
+            $ref: '#/definitions/main.trackUsageResp'
       security:
       - BearerAuth: []
       summary: Track a usage event
@@ -2525,7 +2362,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/cmd_api-gateway.meResp'
+            $ref: '#/definitions/main.meResp'
         "401":
           description: Unauthorized
           schema:

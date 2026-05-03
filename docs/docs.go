@@ -42,7 +42,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel"
+                            "$ref": "#/definitions/provider.AIModel"
                         }
                     },
                     "404": {
@@ -138,7 +138,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel"
+                            "$ref": "#/definitions/provider.AIModel"
                         }
                     },
                     "404": {
@@ -171,7 +171,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.providersResp"
+                            "$ref": "#/definitions/main.providersResp"
                         }
                     },
                     "401": {
@@ -217,7 +217,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider"
+                            "$ref": "#/definitions/provider.AIProvider"
                         }
                     },
                     "400": {
@@ -259,7 +259,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider"
+                            "$ref": "#/definitions/provider.AIProvider"
                         }
                     },
                     "404": {
@@ -355,7 +355,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider"
+                            "$ref": "#/definitions/provider.AIProvider"
                         }
                     },
                     "400": {
@@ -397,7 +397,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.providerModelsResp"
+                            "$ref": "#/definitions/main.providerModelsResp"
                         }
                     }
                 }
@@ -441,7 +441,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel"
+                            "$ref": "#/definitions/provider.AIModel"
                         }
                     }
                 }
@@ -555,13 +555,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -573,7 +566,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.chatReq"
+                            "$ref": "#/definitions/main.chatReq"
                         }
                     }
                 ],
@@ -619,13 +612,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -660,7 +646,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.apiKeysResp"
+                            "$ref": "#/definitions/main.apiKeysResp"
                         }
                     }
                 }
@@ -688,7 +674,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.apiKeyCreateReq"
+                            "$ref": "#/definitions/main.apiKeyCreateReq"
                         }
                     }
                 ],
@@ -696,7 +682,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.apiKeyCreateResp"
+                            "$ref": "#/definitions/main.apiKeyCreateResp"
                         }
                     }
                 }
@@ -757,19 +743,12 @@ const docTemplate = `{
                 "summary": "Create a new artifact",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
                         "description": "Artifact data",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.artifactReq"
+                            "$ref": "#/definitions/main.artifactReq"
                         }
                     }
                 ],
@@ -777,7 +756,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Artifact"
+                            "$ref": "#/definitions/model.Artifact"
                         }
                     },
                     "400": {
@@ -807,13 +786,6 @@ const docTemplate = `{
                 ],
                 "summary": "Preview artifact content",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "Artifact ID",
@@ -871,7 +843,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.loginResp"
+                            "$ref": "#/definitions/main.loginResp"
                         }
                     },
                     "401": {
@@ -905,7 +877,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.ForgotPasswordRequest"
+                            "$ref": "#/definitions/auth.ForgotPasswordRequest"
                         }
                     }
                 ],
@@ -913,7 +885,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.forgotPasswordResp"
+                            "$ref": "#/definitions/main.forgotPasswordResp"
                         }
                     }
                 }
@@ -967,7 +939,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.loginResp"
+                            "$ref": "#/definitions/main.loginResp"
                         }
                     },
                     "401": {
@@ -1030,7 +1002,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.loginResp"
+                            "$ref": "#/definitions/main.loginResp"
                         }
                     },
                     "401": {
@@ -1064,7 +1036,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.LoginRequest"
+                            "$ref": "#/definitions/auth.LoginRequest"
                         }
                     }
                 ],
@@ -1072,7 +1044,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.loginResp"
+                            "$ref": "#/definitions/main.loginResp"
                         }
                     },
                     "400": {
@@ -1115,7 +1087,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest"
+                            "$ref": "#/definitions/auth.RefreshRequest"
                         }
                     }
                 ],
@@ -1123,7 +1095,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.logoutResp"
+                            "$ref": "#/definitions/main.logoutResp"
                         }
                     }
                 }
@@ -1147,7 +1119,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.meResp"
+                            "$ref": "#/definitions/main.meResp"
                         }
                     },
                     "401": {
@@ -1180,7 +1152,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.meResp"
+                            "$ref": "#/definitions/main.meResp"
                         }
                     },
                     "401": {
@@ -1214,7 +1186,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest"
+                            "$ref": "#/definitions/auth.RefreshRequest"
                         }
                     }
                 ],
@@ -1222,7 +1194,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.refreshResp"
+                            "$ref": "#/definitions/main.refreshResp"
                         }
                     },
                     "401": {
@@ -1256,7 +1228,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.RegisterRequest"
+                            "$ref": "#/definitions/auth.RegisterRequest"
                         }
                     }
                 ],
@@ -1264,7 +1236,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.registerResp"
+                            "$ref": "#/definitions/main.registerResp"
                         }
                     },
                     "400": {
@@ -1307,7 +1279,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.ResetPasswordRequest"
+                            "$ref": "#/definitions/auth.ResetPasswordRequest"
                         }
                     }
                 ],
@@ -1315,7 +1287,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.resetPasswordResp"
+                            "$ref": "#/definitions/main.resetPasswordResp"
                         }
                     },
                     "400": {
@@ -1347,13 +1319,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -1364,7 +1329,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.cancelResp"
+                            "$ref": "#/definitions/main.cancelResp"
                         }
                     }
                 }
@@ -1388,7 +1353,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.plansResp"
+                            "$ref": "#/definitions/main.plansResp"
                         }
                     }
                 }
@@ -1414,13 +1379,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -1432,7 +1390,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.subscribeReq"
+                            "$ref": "#/definitions/main.subscribeReq"
                         }
                     }
                 ],
@@ -1440,7 +1398,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.subscribeResp"
+                            "$ref": "#/definitions/main.subscribeResp"
                         }
                     },
                     "400": {
@@ -1472,13 +1430,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -1489,7 +1440,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.subscriptionResp"
+                            "$ref": "#/definitions/main.subscriptionResp"
                         }
                     }
                 }
@@ -1529,7 +1480,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.webhookResp"
+                            "$ref": "#/definitions/main.webhookResp"
                         }
                     },
                     "400": {
@@ -1562,13 +1513,6 @@ const docTemplate = `{
                 ],
                 "summary": "Create a new chat (r3-chat)",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "User ID",
@@ -1620,13 +1564,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -1638,7 +1575,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.chatReq"
+                            "$ref": "#/definitions/main.chatReq"
                         }
                     }
                 ],
@@ -1691,13 +1628,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -1709,7 +1639,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.chatReq"
+                            "$ref": "#/definitions/main.chatReq"
                         }
                     }
                 ],
@@ -1754,7 +1684,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.modelsListResp"
+                            "$ref": "#/definitions/main.modelsListResp"
                         }
                     }
                 }
@@ -1775,13 +1705,6 @@ const docTemplate = `{
                 ],
                 "summary": "List chat sessions (r3-chat alias)",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "User ID",
@@ -1832,13 +1755,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "Chat ID",
                         "name": "id",
                         "in": "path",
@@ -1881,13 +1797,6 @@ const docTemplate = `{
                 ],
                 "summary": "Update chat session (r3-chat alias)",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "Chat ID",
@@ -1945,13 +1854,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "Chat ID",
                         "name": "id",
                         "in": "path",
@@ -1995,13 +1897,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -2026,7 +1921,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.conversationsResp"
+                            "$ref": "#/definitions/main.conversationsResp"
                         }
                     },
                     "401": {
@@ -2058,13 +1953,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "Conversation ID",
                         "name": "id",
                         "in": "path",
@@ -2075,7 +1963,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation"
+                            "$ref": "#/definitions/model.Conversation"
                         }
                     },
                     "404": {
@@ -2103,13 +1991,6 @@ const docTemplate = `{
                 ],
                 "summary": "Delete a conversation",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "Conversation ID",
@@ -2158,13 +2039,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "Conversation ID",
                         "name": "id",
                         "in": "path",
@@ -2187,7 +2061,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation"
+                            "$ref": "#/definitions/model.Conversation"
                         }
                     },
                     "404": {
@@ -2219,13 +2093,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "Conversation ID",
                         "name": "id",
                         "in": "path",
@@ -2243,7 +2110,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.messagesResp"
+                            "$ref": "#/definitions/main.messagesResp"
                         }
                     },
                     "404": {
@@ -2275,13 +2142,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -2306,7 +2166,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.filesResp"
+                            "$ref": "#/definitions/main.filesResp"
                         }
                     }
                 }
@@ -2330,13 +2190,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -2354,7 +2207,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload"
+                            "$ref": "#/definitions/fileupload.Upload"
                         }
                     },
                     "400": {
@@ -2386,13 +2239,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "File ID",
                         "name": "id",
                         "in": "path",
@@ -2403,7 +2249,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload"
+                            "$ref": "#/definitions/fileupload.Upload"
                         }
                     },
                     "404": {
@@ -2431,13 +2277,6 @@ const docTemplate = `{
                 ],
                 "summary": "Delete a file",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "File ID",
@@ -2485,13 +2324,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "File ID",
                         "name": "id",
                         "in": "path",
@@ -2530,13 +2362,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.healthResp"
+                            "$ref": "#/definitions/main.healthResp"
                         }
                     },
                     "503": {
                         "description": "Service Unavailable",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.healthResp"
+                            "$ref": "#/definitions/main.healthResp"
                         }
                     }
                 }
@@ -2619,13 +2451,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -2675,13 +2500,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -2714,13 +2532,6 @@ const docTemplate = `{
                 ],
                 "summary": "Get Stripe subscription (r3-chat)",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "User ID",
@@ -2758,13 +2569,6 @@ const docTemplate = `{
                 ],
                 "summary": "Create subscription (r3-chat)",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "User ID",
@@ -2816,13 +2620,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -2853,7 +2650,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.usageLimitsResp"
+                            "$ref": "#/definitions/main.usageLimitsResp"
                         }
                     }
                 }
@@ -2876,13 +2673,6 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Tenant ID",
-                        "name": "X-Tenant-ID",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
                         "description": "User ID",
                         "name": "X-User-ID",
                         "in": "header",
@@ -2893,7 +2683,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.usageStatsResp"
+                            "$ref": "#/definitions/main.usageStatsResp"
                         }
                     }
                 }
@@ -2923,7 +2713,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.trackUsageReq"
+                            "$ref": "#/definitions/main.trackUsageReq"
                         }
                     }
                 ],
@@ -2931,7 +2721,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.trackUsageResp"
+                            "$ref": "#/definitions/main.trackUsageResp"
                         }
                     }
                 }
@@ -2972,7 +2762,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/cmd_api-gateway.meResp"
+                            "$ref": "#/definitions/main.meResp"
                         }
                     },
                     "401": {
@@ -2989,556 +2779,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "cmd_api-gateway.apiKeyCreateReq": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.apiKeyCreateResp": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "key": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "scopes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.apiKeysResp": {
-            "type": "object",
-            "properties": {
-                "keys": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_apikey.APIKey"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.artifactReq": {
-            "type": "object",
-            "required": [
-                "content",
-                "conversation_id",
-                "name",
-                "type"
-            ],
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "conversation_id": {
-                    "type": "string"
-                },
-                "language": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.cancelResp": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.chatReq": {
-            "type": "object",
-            "required": [
-                "message"
-            ],
-            "properties": {
-                "conversation_id": {
-                    "type": "string"
-                },
-                "file_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.conversationsResp": {
-            "type": "object",
-            "properties": {
-                "conversations": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Conversation"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.filesResp": {
-            "type": "object",
-            "properties": {
-                "files": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_fileupload.Upload"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.forgotPasswordResp": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.healthResp": {
-            "type": "object",
-            "properties": {
-                "healthy": {
-                    "type": "boolean"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.limitInfo": {
-            "type": "object",
-            "properties": {
-                "features": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "max_tokens_per_request": {
-                    "type": "integer"
-                },
-                "messages_per_day": {
-                    "type": "integer"
-                }
-            }
-        },
-        "cmd_api-gateway.loginResp": {
-            "type": "object",
-            "properties": {
-                "token": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.TokenPair"
-                },
-                "user": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User"
-                }
-            }
-        },
-        "cmd_api-gateway.logoutResp": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.meResp": {
-            "type": "object",
-            "properties": {
-                "user": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User"
-                }
-            }
-        },
-        "cmd_api-gateway.messagesResp": {
-            "type": "object",
-            "properties": {
-                "messages": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Message"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.modelItem": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "provider": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.modelsListResp": {
-            "type": "object",
-            "properties": {
-                "models": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/cmd_api-gateway.modelItem"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.plansResp": {
-            "type": "object",
-            "properties": {
-                "plans": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Plan"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.providerModelsResp": {
-            "type": "object",
-            "properties": {
-                "models": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIModel"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.providersResp": {
-            "type": "object",
-            "properties": {
-                "providers": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.AIProvider"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.refreshResp": {
-            "type": "object",
-            "properties": {
-                "token": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.TokenPair"
-                },
-                "user": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User"
-                }
-            }
-        },
-        "cmd_api-gateway.registerResp": {
-            "type": "object",
-            "properties": {
-                "user": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_auth.User"
-                }
-            }
-        },
-        "cmd_api-gateway.resetPasswordResp": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.subscribeReq": {
-            "type": "object",
-            "required": [
-                "email",
-                "plan_slug"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "plan_slug": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.subscribeResp": {
-            "type": "object",
-            "properties": {
-                "checkout_url": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.subscriptionResp": {
-            "type": "object",
-            "properties": {
-                "plan": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Plan"
-                },
-                "subscription": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_billing.Subscription"
-                }
-            }
-        },
-        "cmd_api-gateway.trackUsageReq": {
-            "type": "object",
-            "required": [
-                "model",
-                "provider",
-                "tenant_id",
-                "user_id"
-            ],
-            "properties": {
-                "conversation_id": {
-                    "type": "string"
-                },
-                "cost_usd": {
-                    "type": "number"
-                },
-                "latency_ms": {
-                    "type": "integer"
-                },
-                "model": {
-                    "type": "string"
-                },
-                "provider": {
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "type": "string"
-                },
-                "tokens_input": {
-                    "type": "integer"
-                },
-                "tokens_output": {
-                    "type": "integer"
-                },
-                "user_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.trackUsageResp": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "cmd_api-gateway.usageLimitsResp": {
-            "type": "object",
-            "properties": {
-                "limits": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/cmd_api-gateway.limitInfo"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.usageStatsResp": {
-            "type": "object",
-            "properties": {
-                "stats": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_billing.DailyUsage"
-                    }
-                }
-            }
-        },
-        "cmd_api-gateway.webhookResp": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_r0lm0_go-saas-api_internal_agent_model.Artifact": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "conversation_id": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "is_deleted": {
-                    "type": "boolean"
-                },
-                "language": {
-                    "type": "string"
-                },
-                "message_id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_r0lm0_go-saas-api_internal_agent_model.Conversation": {
-            "type": "object",
-            "properties": {
-                "agent_id": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "messages": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.Message"
-                    }
-                },
-                "metadata": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "status": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.ConversationStatus"
-                },
-                "tenant_id": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_r0lm0_go-saas-api_internal_agent_model.ConversationStatus": {
-            "type": "string",
-            "enum": [
-                "active",
-                "archived",
-                "deleted"
-            ],
-            "x-enum-varnames": [
-                "ConversationActive",
-                "ConversationArchived",
-                "ConversationDeleted"
-            ]
-        },
-        "github_com_r0lm0_go-saas-api_internal_agent_model.Message": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "conversation_id": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "latency_ms": {
-                    "type": "integer"
-                },
-                "model": {
-                    "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.MessageRole"
-                },
-                "tenant_id": {
-                    "type": "string"
-                },
-                "tokens_input": {
-                    "type": "integer"
-                },
-                "tokens_output": {
-                    "type": "integer"
-                },
-                "tool_calls": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_agent_model.ToolCall"
-                    }
-                }
-            }
-        },
-        "github_com_r0lm0_go-saas-api_internal_agent_model.MessageRole": {
-            "type": "string",
-            "enum": [
-                "user",
-                "assistant",
-                "system",
-                "tool"
-            ],
-            "x-enum-varnames": [
-                "MessageRoleUser",
-                "MessageRoleAssistant",
-                "MessageRoleSystem",
-                "MessageRoleTool"
-            ]
-        },
-        "github_com_r0lm0_go-saas-api_internal_agent_model.ToolCall": {
-            "type": "object",
-            "properties": {
-                "arguments": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_r0lm0_go-saas-api_internal_apikey.APIKey": {
+        "apikey.APIKey": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -3565,15 +2806,12 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "tenant_id": {
-                    "type": "string"
-                },
                 "user_id": {
                     "type": "string"
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_auth.ForgotPasswordRequest": {
+        "auth.ForgotPasswordRequest": {
             "type": "object",
             "required": [
                 "email"
@@ -3584,7 +2822,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_auth.LoginRequest": {
+        "auth.LoginRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -3599,7 +2837,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_auth.RefreshRequest": {
+        "auth.RefreshRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -3610,7 +2848,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_auth.RegisterRequest": {
+        "auth.RegisterRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -3630,7 +2868,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_auth.ResetPasswordRequest": {
+        "auth.ResetPasswordRequest": {
             "type": "object",
             "required": [
                 "new_password",
@@ -3646,7 +2884,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_auth.TokenPair": {
+        "auth.TokenPair": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -3661,7 +2899,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_auth.User": {
+        "auth.User": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -3672,6 +2910,12 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "is_admin": {
+                    "type": "boolean"
+                },
+                "messages_used_this_month": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -3685,15 +2929,12 @@ const docTemplate = `{
                 "role": {
                     "type": "string"
                 },
-                "tenant_id": {
-                    "type": "string"
-                },
                 "updated_at": {
                     "type": "string"
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_billing.DailyUsage": {
+        "billing.DailyUsage": {
             "type": "object",
             "properties": {
                 "cost_usd": {
@@ -3704,9 +2945,6 @@ const docTemplate = `{
                 },
                 "requests": {
                     "type": "integer"
-                },
-                "tenant_id": {
-                    "type": "string"
                 },
                 "tokens_input": {
                     "type": "integer"
@@ -3719,7 +2957,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_billing.Plan": {
+        "billing.Plan": {
             "type": "object",
             "properties": {
                 "amount_cents": {
@@ -3750,7 +2988,7 @@ const docTemplate = `{
                 "max_tokens_per_request": {
                     "type": "integer"
                 },
-                "messages_per_day": {
+                "messages_per_month": {
                     "type": "integer"
                 },
                 "name": {
@@ -3767,7 +3005,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_billing.Subscription": {
+        "billing.Subscription": {
             "type": "object",
             "properties": {
                 "cancel_at_period_end": {
@@ -3800,9 +3038,6 @@ const docTemplate = `{
                 "stripe_subscription_id": {
                     "type": "string"
                 },
-                "tenant_id": {
-                    "type": "string"
-                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -3811,7 +3046,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_fileupload.Upload": {
+        "fileupload.Upload": {
             "type": "object",
             "properties": {
                 "content_type": {
@@ -3839,7 +3074,459 @@ const docTemplate = `{
                 "size_bytes": {
                     "type": "integer"
                 },
-                "tenant_id": {
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.apiKeyCreateReq": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.apiKeyCreateResp": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "main.apiKeysResp": {
+            "type": "object",
+            "properties": {
+                "keys": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apikey.APIKey"
+                    }
+                }
+            }
+        },
+        "main.artifactReq": {
+            "type": "object",
+            "required": [
+                "content",
+                "conversation_id",
+                "name",
+                "type"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "conversation_id": {
+                    "type": "string"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.cancelResp": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.chatReq": {
+            "type": "object",
+            "required": [
+                "message"
+            ],
+            "properties": {
+                "conversation_id": {
+                    "type": "string"
+                },
+                "file_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.conversationsResp": {
+            "type": "object",
+            "properties": {
+                "conversations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Conversation"
+                    }
+                }
+            }
+        },
+        "main.filesResp": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/fileupload.Upload"
+                    }
+                }
+            }
+        },
+        "main.forgotPasswordResp": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.healthResp": {
+            "type": "object",
+            "properties": {
+                "healthy": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.limitInfo": {
+            "type": "object",
+            "properties": {
+                "features": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "max_tokens_per_request": {
+                    "type": "integer"
+                },
+                "messages_per_day": {
+                    "type": "integer"
+                }
+            }
+        },
+        "main.loginResp": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "$ref": "#/definitions/auth.TokenPair"
+                },
+                "user": {
+                    "$ref": "#/definitions/auth.User"
+                }
+            }
+        },
+        "main.logoutResp": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.meResp": {
+            "type": "object",
+            "properties": {
+                "user": {
+                    "$ref": "#/definitions/auth.User"
+                }
+            }
+        },
+        "main.messagesResp": {
+            "type": "object",
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Message"
+                    }
+                }
+            }
+        },
+        "main.modelItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.modelsListResp": {
+            "type": "object",
+            "properties": {
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.modelItem"
+                    }
+                }
+            }
+        },
+        "main.plansResp": {
+            "type": "object",
+            "properties": {
+                "plans": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/billing.Plan"
+                    }
+                }
+            }
+        },
+        "main.providerModelsResp": {
+            "type": "object",
+            "properties": {
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/provider.AIModel"
+                    }
+                }
+            }
+        },
+        "main.providersResp": {
+            "type": "object",
+            "properties": {
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/provider.AIProvider"
+                    }
+                }
+            }
+        },
+        "main.refreshResp": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "$ref": "#/definitions/auth.TokenPair"
+                },
+                "user": {
+                    "$ref": "#/definitions/auth.User"
+                }
+            }
+        },
+        "main.registerResp": {
+            "type": "object",
+            "properties": {
+                "user": {
+                    "$ref": "#/definitions/auth.User"
+                }
+            }
+        },
+        "main.resetPasswordResp": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.subscribeReq": {
+            "type": "object",
+            "required": [
+                "email",
+                "plan_slug"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "plan_slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.subscribeResp": {
+            "type": "object",
+            "properties": {
+                "checkout_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.subscriptionResp": {
+            "type": "object",
+            "properties": {
+                "plan": {
+                    "$ref": "#/definitions/billing.Plan"
+                },
+                "subscription": {
+                    "$ref": "#/definitions/billing.Subscription"
+                }
+            }
+        },
+        "main.trackUsageReq": {
+            "type": "object",
+            "required": [
+                "model",
+                "provider",
+                "user_id"
+            ],
+            "properties": {
+                "conversation_id": {
+                    "type": "string"
+                },
+                "cost_usd": {
+                    "type": "number"
+                },
+                "latency_ms": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "tokens_input": {
+                    "type": "integer"
+                },
+                "tokens_output": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.trackUsageResp": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.usageLimitsResp": {
+            "type": "object",
+            "properties": {
+                "limits": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/main.limitInfo"
+                    }
+                }
+            }
+        },
+        "main.usageStatsResp": {
+            "type": "object",
+            "properties": {
+                "stats": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/billing.DailyUsage"
+                    }
+                }
+            }
+        },
+        "main.webhookResp": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.Artifact": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "conversation_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_deleted": {
+                    "type": "boolean"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "message_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.Conversation": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Message"
+                    }
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "status": {
+                    "$ref": "#/definitions/model.ConversationStatus"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
                     "type": "string"
                 },
                 "user_id": {
@@ -3847,7 +3534,88 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_provider.AIModel": {
+        "model.ConversationStatus": {
+            "type": "string",
+            "enum": [
+                "active",
+                "archived",
+                "deleted"
+            ],
+            "x-enum-varnames": [
+                "ConversationActive",
+                "ConversationArchived",
+                "ConversationDeleted"
+            ]
+        },
+        "model.Message": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "conversation_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "latency_ms": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/model.MessageRole"
+                },
+                "tokens_input": {
+                    "type": "integer"
+                },
+                "tokens_output": {
+                    "type": "integer"
+                },
+                "tool_calls": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.ToolCall"
+                    }
+                }
+            }
+        },
+        "model.MessageRole": {
+            "type": "string",
+            "enum": [
+                "user",
+                "assistant",
+                "system",
+                "tool"
+            ],
+            "x-enum-varnames": [
+                "MessageRoleUser",
+                "MessageRoleAssistant",
+                "MessageRoleSystem",
+                "MessageRoleTool"
+            ]
+        },
+        "model.ToolCall": {
+            "type": "object",
+            "properties": {
+                "arguments": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "provider.AIModel": {
             "type": "object",
             "properties": {
                 "config": {
@@ -3898,7 +3666,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_provider.AIProvider": {
+        "provider.AIProvider": {
             "type": "object",
             "properties": {
                 "base_url": {
@@ -3910,6 +3678,9 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "encryption_key_version": {
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -3926,18 +3697,15 @@ const docTemplate = `{
                 "priority": {
                     "type": "integer"
                 },
-                "tenant_id": {
-                    "type": "string"
-                },
                 "type": {
-                    "$ref": "#/definitions/github_com_r0lm0_go-saas-api_internal_provider.ProviderType"
+                    "$ref": "#/definitions/provider.ProviderType"
                 },
                 "updated_at": {
                     "type": "string"
                 }
             }
         },
-        "github_com_r0lm0_go-saas-api_internal_provider.ProviderType": {
+        "provider.ProviderType": {
             "type": "string",
             "enum": [
                 "ollama",
@@ -3947,6 +3715,7 @@ const docTemplate = `{
                 "kimi",
                 "lmstudio",
                 "anthropic",
+                "opencode",
                 "custom"
             ],
             "x-enum-varnames": [
@@ -3957,6 +3726,7 @@ const docTemplate = `{
                 "ProviderKimi",
                 "ProviderLMStudio",
                 "ProviderAnthropic",
+                "ProviderOpenCode",
                 "ProviderCustom"
             ]
         }

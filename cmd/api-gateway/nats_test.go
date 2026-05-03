@@ -22,9 +22,8 @@ func TestCacheInvalidationLogic(t *testing.T) {
 		t.Skip("Redis not available:", err)
 	}
 
-	tenantID := "test-tenant-uuid"
 	userID := "test-user-uuid"
-	cacheKey := fmt.Sprintf("tier:%s:%s", tenantID, userID)
+	cacheKey := fmt.Sprintf("tier:%s", userID)
 
 	// Seed cache
 	_ = redisClient.Set(ctx, cacheKey, "premium", 5*time.Minute).Err()
