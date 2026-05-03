@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
@@ -41,6 +42,17 @@ func (s *SessionManager) AddMessage(ctx context.Context, msg *model.Message) err
 		return fmt.Errorf("create message: %w", err)
 	}
 	return nil
+}
+
+// UpdateConversationTitle updates the title of a conversation.
+func (s *SessionManager) UpdateConversationTitle(ctx context.Context, id uuid.UUID, title string) error {
+	conv, err := s.convRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	conv.Title = title
+	conv.UpdatedAt = time.Now()
+	return s.convRepo.Update(ctx, conv)
 }
 
 // GetHistory retrieves messages for a conversation.

@@ -66,6 +66,12 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		return nil, fmt.Errorf("save user message: %w", err)
 	}
 
+	// 2b. Generate title asynchronously for new conversations
+	isNewConversation := convID == nil
+	if isNewConversation {
+		go o.generateAndSaveTitle(ctx, userID, conversationID, content)
+	}
+
 	// 3. Load history
 	history, err := o.sessions.GetHistory(ctx, conversationID, 50)
 	if err != nil {
@@ -269,6 +275,52 @@ func (o *Orchestrator) buildFileContext(ctx context.Context, fileIDs []uuid.UUID
 		return "", nil
 	}
 	return "Attached files:\n" + strings.Join(parts, "\n\n"), nil
+}
+
+func (o *Orchestrator) generateAndSaveTitle(ctx context.Context, userID, convID uuid.UUID, firstMessage string) {
+	titleCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	prompt := fmt.Sprintf(`Generate a short title (3-6 words, no quotes, no punctuation at end) summarizing this message. Reply ONLY with the title, nothing else.
+
+Message: %s`, truncate(firstMessage, 500))
+
+	req := llm.Request{
+		Model:       "qwen2.5-coder:3b",
+		Messages:    []llm.Message{{Role: "user", Content: prompt}},
+		MaxTokens:   20,
+		Temperature: 0.3,
+	}
+
+	resp, err := o.llmClient.Complete(titleCtx, req)
+	if err != nil {
+		return // Silently fail, keep fallback title
+	}
+
+	title := cleanTitle(resp)
+	if title == "" {
+		return
+	}
+
+	_ = o.sessions.UpdateConversationTitle(titleCtx, convID, title)
+}
+
+func cleanTitle(raw string) string {
+	title := strings.TrimSpace(raw)
+	title = strings.Trim(title, `"'`)
+	title = strings.TrimRight(title, ".!?")
+	title = strings.ReplaceAll(title, "\n", " ")
+	if len(title) > 60 {
+		title = title[:60]
+	}
+	return title
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max]
 }
 
 func min(a, b int) int {
