@@ -127,7 +127,7 @@ func TestOrchestrator_Chat(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil)
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 	userID := uuid.New()
 
@@ -177,7 +177,7 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil)
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
@@ -245,7 +245,7 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil)
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
@@ -275,7 +275,7 @@ func TestOrchestrator_resolveAgent_DBLookup(t *testing.T) {
 		SystemPrompt: "custom prompt",
 	}
 	agentRepo := &mockAgentRepoWithRole{agent: expectedAgent}
-	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil)
+	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	agent, err := orch.resolveAgent(ctx, model.RoleCoder)
@@ -295,7 +295,7 @@ func TestOrchestrator_resolveAgent_DBLookup(t *testing.T) {
 
 func TestOrchestrator_resolveAgent_FallbackToDefault(t *testing.T) {
 	agentRepo := &memAgentRepo{}
-	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil)
+	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	agent, err := orch.resolveAgent(ctx, model.RoleCoder)

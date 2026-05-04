@@ -14,6 +14,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/internal/document"
 	"github.com/r0lm0/go-saas-api/internal/fileupload"
+	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
@@ -26,9 +27,10 @@ type Orchestrator struct {
 	fileSvc    *fileupload.Service
 	docClient  *document.Client
 	classifier *LLMClassifier
+	log        logger.Logger
 }
 
-func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, fileSvc *fileupload.Service, docClient *document.Client) *Orchestrator {
+func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, fileSvc *fileupload.Service, docClient *document.Client, log logger.Logger) *Orchestrator {
 	return &Orchestrator{
 		llmClient:  client,
 		registry:   registry,
@@ -38,6 +40,7 @@ func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *Sess
 		fileSvc:    fileSvc,
 		docClient:  docClient,
 		classifier: NewLLMClassifier(client),
+		log:        log,
 	}
 }
 
@@ -271,6 +274,10 @@ func min(a, b int) int {
 }
 
 var htmlBlockRegex = regexp.MustCompile("(?s)```html\\s*(.*?)\\s*```")
+var doctypeRegex = regexp.MustCompile("(?s)(<!DOCTYPE html>.*?</html>)")
+
+const websiteAgentTimeout = 90 * time.Second
+const firstChunkTimeout = 30 * time.Second
 
 // websiteAgentLoop streams a single LLM response without tools, extracts HTML artifact if present.
 func (o *Orchestrator) websiteAgentLoop(
@@ -280,6 +287,13 @@ func (o *Orchestrator) websiteAgentLoop(
 	messages []llm.Message,
 	conversationID uuid.UUID,
 ) {
+	// Send progress event immediately
+	select {
+	case outCh <- llm.Chunk{Event: "progress", Content: "Generando sitio web..."}:
+	case <-ctx.Done():
+		return
+	}
+
 	req := llm.Request{
 		Model:       agent.Model,
 		Messages:    messages,
@@ -288,17 +302,31 @@ func (o *Orchestrator) websiteAgentLoop(
 		Stream:      true,
 	}
 
+	o.log.Info("website_agent: starting LLM stream", logger.String("model", agent.Model), logger.String("conversation_id", conversationID.String()))
+
 	llmCh, err := o.llmClient.Stream(ctx, req)
 	if err != nil {
+		o.log.Error("website_agent: LLM stream failed", logger.Error(err))
 		select {
-		case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("LLM error: %v", err), Done: true}:
+		case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("Error iniciando generación: %v", err), Done: true}:
 		case <-ctx.Done():
 		}
 		return
 	}
 
+	// Timeout for first chunk
+	firstChunkTimer := time.NewTimer(firstChunkTimeout)
+	defer firstChunkTimer.Stop()
+
 	var contentBuilder strings.Builder
+	chunkCount := 0
 	for chunk := range llmCh {
+		if chunkCount == 0 {
+			firstChunkTimer.Stop()
+			o.log.Info("website_agent: received first chunk")
+		}
+		chunkCount++
+
 		if chunk.Content != "" {
 			contentBuilder.WriteString(chunk.Content)
 			select {
@@ -312,29 +340,65 @@ func (o *Orchestrator) websiteAgentLoop(
 		}
 	}
 
+	// Check if we timed out waiting for first chunk
+	select {
+	case <-firstChunkTimer.C:
+		o.log.Warn("website_agent: timeout waiting for first chunk")
+		select {
+		case outCh <- llm.Chunk{Event: "error", Content: "El agente tardó demasiado en responder. Reintentá con una instrucción más corta.", Done: true}:
+		case <-ctx.Done():
+		}
+		return
+	default:
+	}
+
+	o.log.Info("website_agent: stream complete", logger.Int("chunks", chunkCount), logger.Int("content_length", contentBuilder.Len()))
+
+	// Send progress event
+	select {
+	case outCh <- llm.Chunk{Event: "progress", Content: "Extrayendo HTML..."}:
+	case <-ctx.Done():
+		return
+	}
+
 	fullContent := contentBuilder.String()
 
-	// Extract HTML artifact
+	// Extract HTML artifact - try multiple patterns
 	var artifactID string
+	var htmlContent string
+
+	// Try markdown code block first
 	if match := htmlBlockRegex.FindStringSubmatch(fullContent); len(match) > 1 {
-		htmlContent := strings.TrimSpace(match[1])
-		if htmlContent != "" {
-			art := &model.Artifact{
-				ID:             uuid.New(),
-				ConversationID: conversationID,
-				Name:           "index.html",
-				Type:           "website",
-				Language:       "html",
-				Content:        htmlContent,
-				Version:        1,
-				CreatedAt:      time.Now(),
-				UpdatedAt:      time.Now(),
-			}
-			if o.artRepo != nil {
-				_ = o.artRepo.Create(ctx, art)
-			}
-			artifactID = art.ID.String()
+		htmlContent = strings.TrimSpace(match[1])
+		o.log.Info("website_agent: found HTML in markdown block")
+	} else if match := doctypeRegex.FindStringSubmatch(fullContent); len(match) > 1 {
+		// Fallback: extract raw HTML document
+		htmlContent = strings.TrimSpace(match[1])
+		o.log.Info("website_agent: found raw HTML document")
+	}
+
+	if htmlContent != "" {
+		art := &model.Artifact{
+			ID:             uuid.New(),
+			ConversationID: conversationID,
+			Name:           "index.html",
+			Type:           "website",
+			Language:       "html",
+			Content:        htmlContent,
+			Version:        1,
+			CreatedAt:      time.Now(),
+			UpdatedAt:      time.Now(),
 		}
+		if o.artRepo != nil {
+			if err := o.artRepo.Create(ctx, art); err != nil {
+				o.log.Error("website_agent: failed to save artifact", logger.Error(err))
+			} else {
+				artifactID = art.ID.String()
+				o.log.Info("website_agent: artifact saved", logger.String("artifact_id", artifactID))
+			}
+		}
+	} else {
+		o.log.Warn("website_agent: no HTML found in response")
 	}
 
 	// Save assistant message

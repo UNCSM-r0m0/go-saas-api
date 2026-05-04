@@ -145,7 +145,7 @@ func setupTestRouter() (*gin.Engine, *memConversationRepo, *memMessageRepo, *mem
 
 	registry := tools.NewRegistry()
 	sessions := runtime.NewSessionManager(convRepo, msgRepo)
-	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, artRepo, nil, nil)
+	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, artRepo, nil, nil, nil)
 
 	multiClient := llm.NewMultiClient()
 	wsManager := websocket.NewManager(orch, log)
