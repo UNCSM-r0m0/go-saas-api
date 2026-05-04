@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // accumulatedToolCall tracks a tool call being built across SSE chunks.
@@ -31,7 +30,6 @@ func NewOpenAICompatibleClient(baseURL, apiKey string) *OpenAICompatibleClient {
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		client: &http.Client{
-			Timeout:   120 * time.Second,
 			Transport: &http.Transport{MaxIdleConnsPerHost: 10},
 		},
 	}

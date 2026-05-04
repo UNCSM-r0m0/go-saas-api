@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // KimiAnthropicClient implements Client for Kimi's Anthropic-compatible API.
@@ -23,7 +22,6 @@ func NewKimiAnthropicClient(apiKey string) *KimiAnthropicClient {
 	return &KimiAnthropicClient{
 		apiKey: apiKey,
 		client: &http.Client{
-			Timeout:   120 * time.Second,
 			Transport: &http.Transport{MaxIdleConnsPerHost: 10},
 		},
 	}

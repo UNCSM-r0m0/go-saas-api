@@ -368,14 +368,18 @@ func (o *Orchestrator) websiteAgentLoop(
 	var artifactID string
 	var htmlContent string
 
+	o.log.Info("website_agent: extracting HTML", logger.Int("content_length", len(fullContent)), logger.String("content_preview", truncate(fullContent, 100)))
+
 	// Try markdown code block first
 	if match := htmlBlockRegex.FindStringSubmatch(fullContent); len(match) > 1 {
 		htmlContent = strings.TrimSpace(match[1])
-		o.log.Info("website_agent: found HTML in markdown block")
+		o.log.Info("website_agent: found HTML in markdown block", logger.Int("html_length", len(htmlContent)))
 	} else if match := doctypeRegex.FindStringSubmatch(fullContent); len(match) > 1 {
 		// Fallback: extract raw HTML document
 		htmlContent = strings.TrimSpace(match[1])
-		o.log.Info("website_agent: found raw HTML document")
+		o.log.Info("website_agent: found raw HTML document", logger.Int("html_length", len(htmlContent)))
+	} else {
+		o.log.Warn("website_agent: no HTML pattern matched", logger.String("preview", truncate(fullContent, 200)))
 	}
 
 	if htmlContent != "" {
@@ -414,17 +418,27 @@ func (o *Orchestrator) websiteAgentLoop(
 	if artifactID != "" {
 		if artUUID, err := uuid.Parse(artifactID); err == nil {
 			msg.ArtifactID = &artUUID
+			o.log.Info("website_agent: linked artifact to message", logger.String("message_id", msg.ID.String()), logger.String("artifact_id", artifactID))
 		}
 	}
-	_ = o.sessions.AddMessage(ctx, msg)
+	if err := o.sessions.AddMessage(ctx, msg); err != nil {
+		o.log.Error("website_agent: failed to save assistant message", logger.Error(err))
+	} else {
+		o.log.Info("website_agent: assistant message saved", logger.String("message_id", msg.ID.String()), logger.Int("content_length", len(fullContent)))
+	}
 
 	// Send artifact metadata as final chunk
 	if artifactID != "" {
+		o.log.Info("website_agent: sending artifact event", logger.String("artifact_id", artifactID))
 		select {
 		case outCh <- llm.Chunk{Event: "artifact", Content: artifactID, Done: false}:
+			 o.log.Info("website_agent: artifact event sent successfully")
 		case <-ctx.Done():
+			o.log.Warn("website_agent: context cancelled before sending artifact event")
 			return
 		}
+	} else {
+		o.log.Warn("website_agent: no artifact to send (artifactID is empty)")
 	}
 
 	select {

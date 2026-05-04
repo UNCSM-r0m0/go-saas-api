@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // GeminiClient implements Client for Google Gemini.
@@ -24,7 +23,6 @@ func NewGeminiClient(apiKey string) *GeminiClient {
 		baseURL: "https://generativelanguage.googleapis.com",
 		apiKey:  apiKey,
 		client: &http.Client{
-			Timeout:   120 * time.Second,
 			Transport: &http.Transport{MaxIdleConnsPerHost: 10},
 		},
 	}

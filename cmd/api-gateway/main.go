@@ -124,7 +124,8 @@ func main() {
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger(log))
 	r.Use(middleware.CORS())
-	r.Use(middleware.RequestTimeout(30 * time.Second))
+	// Timeout extendido para soportar streaming SSE de website agent (hasta 3 minutos)
+	r.Use(middleware.RequestTimeout(300 * time.Second))
 
 	// Swagger UI (development only)
 	if cfg.Env != "production" {

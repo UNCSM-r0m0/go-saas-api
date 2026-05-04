@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 )
 
 // OllamaClient implements Client for Ollama.
@@ -21,7 +20,6 @@ func NewOllamaClient(baseURL string) *OllamaClient {
 	return &OllamaClient{
 		baseURL: baseURL,
 		client: &http.Client{
-			Timeout:   120 * time.Second,
 			Transport: &http.Transport{MaxIdleConnsPerHost: 10},
 		},
 	}

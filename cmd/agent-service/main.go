@@ -142,7 +142,9 @@ func main() {
 	agentHandler.RegisterRoutes(r)
 	fileHandler.RegisterRoutes(r)
 	providerHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))
-	r.Use(middleware.RequestTimeout(60 * time.Second))
+	// Timeout de 5 minutos para todos los endpoints (incluyendo streaming SSE)
+	// El LLM puede tardar hasta 3 minutos en generar una landing page
+	r.Use(middleware.RequestTimeout(300 * time.Second))
 	httpSrv := &http.Server{Addr: ":" + cfg.Port, Handler: r}
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

@@ -116,6 +116,10 @@ func writeSSEAgentLoop(c *gin.Context, streamCh <-chan llm.Chunk, conversationID
 			data := fmt.Sprintf("data: {\"event\":\"tool_result\",\"toolName\":%q,\"content\":%q,\"conversationId\":%q}\n\n",
 				chunk.ToolName, chunk.Content, conversationID)
 			_, _ = c.Writer.Write([]byte(data))
+		case "progress":
+			data := fmt.Sprintf("data: {\"event\":\"progress\",\"content\":%q,\"conversationId\":%q}\n\n",
+				chunk.Content, conversationID)
+			_, _ = c.Writer.Write([]byte(data))
 		case "artifact":
 			data := fmt.Sprintf("data: {\"event\":\"artifact\",\"artifactId\":%q,\"artifactType\":\"website\",\"conversationId\":%q}\n\n",
 				chunk.Content, conversationID)
