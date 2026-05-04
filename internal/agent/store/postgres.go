@@ -137,9 +137,9 @@ func NewArtifactStore(pool *pgxpool.Pool) *ArtifactStore {
 
 func (s *ArtifactStore) Create(ctx context.Context, art *model.Artifact) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO artifacts (id, conversation_id, message_id, name, type, language, content, version, is_deleted, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		art.ID, art.ConversationID, art.MessageID, art.Name, art.Type, art.Language, art.Content, art.Version, art.IsDeleted, art.CreatedAt, art.UpdatedAt)
+		`INSERT INTO artifacts (id, conversation_id, message_id, name, type, language, content, entry_file, is_complete, version, is_deleted, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		art.ID, art.ConversationID, art.MessageID, art.Name, art.Type, art.Language, art.Content, art.EntryFile, art.IsComplete, art.Version, art.IsDeleted, art.CreatedAt, art.UpdatedAt)
 	return err
 }
 
@@ -147,24 +147,42 @@ func (s *ArtifactStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Artif
 	var art model.Artifact
 	var msgID *uuid.UUID
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, conversation_id, message_id, name, type, language, content, version, is_deleted, created_at, updated_at
+		`SELECT id, conversation_id, message_id, name, type, language, content, entry_file, is_complete, version, is_deleted, created_at, updated_at
 		 FROM artifacts WHERE id = $1`, id).Scan(
-		&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt)
+		&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.EntryFile, &art.IsComplete, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	art.MessageID = msgID
-	return &art, nil
+	
+	// Load files if it's a multi-file project
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, artifact_id, path, language, content, file_order, created_at, updated_at
+		 FROM artifact_files WHERE artifact_id = $1 ORDER BY file_order ASC, path ASC`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	for rows.Next() {
+		var f model.ArtifactFile
+		if err := rows.Scan(&f.ID, &f.ArtifactID, &f.Path, &f.Language, &f.Content, &f.FileOrder, &f.CreatedAt, &f.UpdatedAt); err != nil {
+			return nil, err
+		}
+		art.Files = append(art.Files, f)
+	}
+	
+	return &art, rows.Err()
 }
 
 func (s *ArtifactStore) GetByName(ctx context.Context, conversationID uuid.UUID, name string) (*model.Artifact, error) {
 	var art model.Artifact
 	var msgID *uuid.UUID
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, conversation_id, message_id, name, type, language, content, version, is_deleted, created_at, updated_at
+		`SELECT id, conversation_id, message_id, name, type, language, content, entry_file, is_complete, version, is_deleted, created_at, updated_at
 		 FROM artifacts WHERE conversation_id = $1 AND name = $2 AND is_deleted = false`,
 		conversationID, name).Scan(
-		&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt)
+		&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.EntryFile, &art.IsComplete, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +192,7 @@ func (s *ArtifactStore) GetByName(ctx context.Context, conversationID uuid.UUID,
 
 func (s *ArtifactStore) ListByConversation(ctx context.Context, conversationID uuid.UUID) ([]model.Artifact, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, conversation_id, message_id, name, type, language, content, version, is_deleted, created_at, updated_at
+		`SELECT id, conversation_id, message_id, name, type, language, content, entry_file, is_complete, version, is_deleted, created_at, updated_at
 		 FROM artifacts WHERE conversation_id = $1 AND is_deleted = false ORDER BY created_at DESC`,
 		conversationID)
 	if err != nil {
@@ -186,7 +204,7 @@ func (s *ArtifactStore) ListByConversation(ctx context.Context, conversationID u
 	for rows.Next() {
 		var art model.Artifact
 		var msgID *uuid.UUID
-		if err := rows.Scan(&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt); err != nil {
+		if err := rows.Scan(&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.EntryFile, &art.IsComplete, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt); err != nil {
 			return nil, err
 		}
 		art.MessageID = msgID

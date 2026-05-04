@@ -20,30 +20,32 @@ import (
 )
 
 type Orchestrator struct {
-	llmClient  llm.Client
-	registry   *tools.Registry
-	sessions   *SessionManager
-	agentRepo  repository.AgentRepo
-	artRepo    repository.ArtifactRepo
-	fileSvc    *fileupload.Service
-	docClient  *document.Client
-	providers  provider.Store
-	classifier *LLMClassifier
-	log        logger.Logger
+	llmClient    llm.Client
+	registry     *tools.Registry
+	sessions     *SessionManager
+	agentRepo    repository.AgentRepo
+	artRepo      repository.ArtifactRepo
+	artFileRepo  repository.ArtifactFileRepo
+	fileSvc      *fileupload.Service
+	docClient    *document.Client
+	providers    provider.Store
+	classifier   *LLMClassifier
+	log          logger.Logger
 }
 
-func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, fileSvc *fileupload.Service, docClient *document.Client, providers provider.Store, log logger.Logger) *Orchestrator {
+func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, artFileRepo repository.ArtifactFileRepo, fileSvc *fileupload.Service, docClient *document.Client, providers provider.Store, log logger.Logger) *Orchestrator {
 	return &Orchestrator{
-		llmClient:  client,
-		registry:   registry,
-		sessions:   sessions,
-		agentRepo:  agentRepo,
-		artRepo:    artRepo,
-		fileSvc:    fileSvc,
-		docClient:  docClient,
-		providers:  providers,
-		classifier: NewLLMClassifier(client),
-		log:        log,
+		llmClient:    client,
+		registry:     registry,
+		sessions:     sessions,
+		agentRepo:    agentRepo,
+		artRepo:      artRepo,
+		artFileRepo:  artFileRepo,
+		fileSvc:      fileSvc,
+		docClient:    docClient,
+		providers:    providers,
+		classifier:   NewLLMClassifier(client),
+		log:          log,
 	}
 }
 
@@ -311,6 +313,65 @@ var htmlBlockRegex = regexp.MustCompile("(?is)```(?:html|markup)\\s*(.*?)(?:```|
 var doctypeRegex = regexp.MustCompile("(?is)(<!DOCTYPE\\s+html\\b.*?</html>|<!DOCTYPE\\s+html\\b.*\\z)")
 var htmlTagRegex = regexp.MustCompile("(?is)(<html\\b.*?</html>|<html\\b.*\\z)")
 
+// multiFileRegex matches the === FILE: path === delimiter format
+var multiFileRegex = regexp.MustCompile("(?m)^===\\s*FILE:\\s*(.+?)\\s*===(.*?)(?=^===\\s*FILE:|^===\\s*END\\s*===|\\z)")
+
+// parseMultiFile extracts files from the LLM output using the === FILE: path === format
+func parseMultiFile(content string) []model.ArtifactFile {
+	matches := multiFileRegex.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	var files []model.ArtifactFile
+	for i, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		path := strings.TrimSpace(match[1])
+		fileContent := strings.TrimSpace(match[2])
+		if path == "" || fileContent == "" {
+			continue
+		}
+
+		// Detect language from extension
+		lang := detectLanguageFromPath(path)
+
+		files = append(files, model.ArtifactFile{
+			ID:        uuid.New(),
+			Path:      path,
+			Language:  lang,
+			Content:   fileContent,
+			FileOrder: i,
+		})
+	}
+
+	return files
+}
+
+func detectLanguageFromPath(path string) string {
+	ext := ""
+	if idx := strings.LastIndex(path, "."); idx != -1 {
+		ext = path[idx+1:]
+	}
+
+	langMap := map[string]string{
+		"html": "html", "htm": "html",
+		"css": "css", "scss": "scss", "sass": "sass",
+		"js": "javascript", "jsx": "jsx",
+		"ts": "typescript", "tsx": "tsx",
+		"json": "json",
+		"md": "markdown",
+		"py": "python",
+		"go": "go",
+	}
+
+	if lang, ok := langMap[ext]; ok {
+		return lang
+	}
+	return "text"
+}
+
 const websiteAgentTimeout = 180 * time.Second // 3 minutos para landing pages completas
 const firstChunkTimeout = 45 * time.Second
 const maxWebsiteContinuations = 2
@@ -381,23 +442,46 @@ func (o *Orchestrator) websiteAgentLoop(
 		logger.Int("content_length", len(fullContent)))
 
 	select {
-	case outCh <- llm.Chunk{Event: "progress", Content: "Extrayendo HTML..."}:
+	case outCh <- llm.Chunk{Event: "progress", Content: "Extrayendo archivos..."}:
 	case <-ctx.Done():
 		o.log.Warn("website_agent: context cancelled before extraction")
 		return
 	}
 
-	htmlContent, matchType := extractWebsiteHTML(fullContent)
-	if htmlContent != "" {
-		o.log.Info("website_agent: HTML extracted",
-			logger.String("match_type", matchType),
-			logger.Int("html_length", len(htmlContent)),
-			logger.String("html_preview", truncate(htmlContent, 80)))
+	// Try multi-file format first
+	files := parseMultiFile(fullContent)
+	var htmlContent string
+	var artifactID string
+
+	if len(files) > 0 {
+		o.log.Info("website_agent: multi-file project detected",
+			logger.Int("file_count", len(files)),
+			logger.String("files", strings.Join(getFilePaths(files), ", ")))
+
+		// Find entry HTML file
+		for _, f := range files {
+			if f.Path == "index.html" {
+				htmlContent = f.Content
+				break
+			}
+		}
+
+		artifactID = o.saveWebsiteArtifact(ctx, conversationID, htmlContent, files)
 	} else {
-		o.log.Warn("website_agent: no HTML pattern matched", logger.String("preview", truncate(fullContent, 200)))
+		// Fallback to single HTML extraction
+		htmlContent, matchType := extractWebsiteHTML(fullContent)
+		if htmlContent != "" {
+			o.log.Info("website_agent: HTML extracted",
+				logger.String("match_type", matchType),
+				logger.Int("html_length", len(htmlContent)),
+				logger.String("html_preview", truncate(htmlContent, 80)))
+		} else {
+			o.log.Warn("website_agent: no HTML pattern matched", logger.String("preview", truncate(fullContent, 200)))
+		}
+
+		artifactID = o.saveWebsiteArtifact(ctx, conversationID, htmlContent, nil)
 	}
 
-	artifactID := o.saveWebsiteArtifact(ctx, conversationID, htmlContent)
 	o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, fullContent, artifactID)
 	o.sendWebsiteArtifactResult(ctx, outCh, artifactID)
 }
@@ -491,30 +575,54 @@ func needsWebsiteContinuation(html string) bool {
 		strings.Contains(lower, "<body") && !strings.Contains(lower, "</body>")
 }
 
-func (o *Orchestrator) saveWebsiteArtifact(ctx context.Context, conversationID uuid.UUID, htmlContent string) string {
-	if htmlContent == "" {
+func (o *Orchestrator) saveWebsiteArtifact(ctx context.Context, conversationID uuid.UUID, htmlContent string, files []model.ArtifactFile) string {
+	if htmlContent == "" && len(files) == 0 {
 		return ""
 	}
+
 	art := &model.Artifact{
 		ID:             uuid.New(),
 		ConversationID: conversationID,
-		Name:           "index.html",
+		Name:           "Landing Page",
 		Type:           "website",
-		Language:       "html",
+		Language:       "typescript",
 		Content:        htmlContent,
+		EntryFile:      "index.html",
+		IsComplete:     true,
 		Version:        1,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
+
 	if o.artRepo == nil {
 		o.log.Warn("website_agent: artRepo is nil, artifact not saved")
 		return ""
 	}
+
+	// Save main artifact
 	if err := o.artRepo.Create(ctx, art); err != nil {
 		o.log.Error("website_agent: failed to save artifact", logger.Error(err), logger.String("conversation_id", conversationID.String()))
 		return ""
 	}
-	o.log.Info("website_agent: artifact saved", logger.String("artifact_id", art.ID.String()), logger.Int("html_length", len(htmlContent)))
+
+	// Save individual files if multi-file project
+	if len(files) > 0 && o.artFileRepo != nil {
+		for i := range files {
+			files[i].ArtifactID = art.ID
+		}
+		if err := o.artFileRepo.CreateMany(ctx, files); err != nil {
+			o.log.Error("website_agent: failed to save artifact files", logger.Error(err), logger.String("artifact_id", art.ID.String()))
+			return ""
+		}
+		o.log.Info("website_agent: multi-file artifact saved",
+			logger.String("artifact_id", art.ID.String()),
+			logger.Int("file_count", len(files)))
+	} else {
+		o.log.Info("website_agent: single-file artifact saved",
+			logger.String("artifact_id", art.ID.String()),
+			logger.Int("html_length", len(htmlContent)))
+	}
+
 	return art.ID.String()
 }
 
@@ -557,4 +665,12 @@ func (o *Orchestrator) sendWebsiteArtifactResult(ctx context.Context, outCh chan
 	case outCh <- llm.Chunk{Done: true}:
 	case <-ctx.Done():
 	}
+}
+
+func getFilePaths(files []model.ArtifactFile) []string {
+	paths := make([]string, len(files))
+	for i, f := range files {
+		paths[i] = f.Path
+	}
+	return paths
 }

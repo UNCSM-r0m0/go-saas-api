@@ -71,23 +71,8 @@ func (h *Handler) handleGetArtifact(c *gin.Context) {
 		return
 	}
 
-	// Normalizar como proyecto con files array
-	project := gin.H{
-		"id":              art.ID,
-		"conversation_id": art.ConversationID,
-		"type":            art.Type,
-		"entry_file":      art.Name,
-		"version":         art.Version,
-		"created_at":      art.CreatedAt,
-		"updated_at":      art.UpdatedAt,
-		"files": []gin.H{
-			{
-				"path":     art.Name,
-				"language": art.Language,
-				"content":  art.Content,
-			},
-		},
-	}
+	// Normalizar como proyecto con files array (soporta single-file y multi-file)
+	project := art.ToProject()
 
 	response.OK(c, project, "artifact retrieved")
 }

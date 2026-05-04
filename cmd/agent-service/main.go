@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/r0lm0/go-saas-api/internal/agent/handler"
+	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/store"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
@@ -115,6 +116,7 @@ func main() {
 	convStore := store.NewConversationStore(pgPool)
 	msgStore := store.NewMessageStore(pgPool)
 	artStore := store.NewArtifactStore(pgPool)
+	artFileStore := repository.NewArtifactFileRepo(pgPool)
 	agentStore := store.NewAgentStore(pgPool)
 	toolRegistry := tools.NewRegistry()
 	_ = toolRegistry.Register(tools.NewFileWriteTool(artStore))
@@ -129,7 +131,7 @@ func main() {
 	if cfg.DocumentServiceURL != "" {
 		docClient = document.NewClient(cfg.DocumentServiceURL)
 	}
-	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, artStore, fileService, docClient, providerStore, log)
+	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, artStore, artFileStore, fileService, docClient, providerStore, log)
 	wsManager := websocket.NewManager(orchestrator, log)
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
