@@ -302,9 +302,13 @@ func (o *Orchestrator) websiteAgentLoop(
 		Stream:      true,
 	}
 
-	o.log.Info("website_agent: starting LLM stream", logger.String("model", agent.Model), logger.String("conversation_id", conversationID.String()))
+	o.log.Info("website_agent: calling LLM Stream", logger.String("model", agent.Model), logger.Int("msg_count", len(messages)), logger.String("conversation_id", conversationID.String()))
 
-	llmCh, err := o.llmClient.Stream(ctx, req)
+	// Create a timeout context for the LLM call
+	llmCtx, llmCancel := context.WithTimeout(ctx, websiteAgentTimeout)
+	defer llmCancel()
+
+	llmCh, err := o.llmClient.Stream(llmCtx, req)
 	if err != nil {
 		o.log.Error("website_agent: LLM stream failed", logger.Error(err))
 		select {
@@ -314,16 +318,16 @@ func (o *Orchestrator) websiteAgentLoop(
 		return
 	}
 
-	// Timeout for first chunk
-	firstChunkTimer := time.NewTimer(firstChunkTimeout)
-	defer firstChunkTimer.Stop()
+	o.log.Info("website_agent: LLM stream started successfully")
 
 	var contentBuilder strings.Builder
 	chunkCount := 0
+	firstChunkReceived := false
+
 	for chunk := range llmCh {
-		if chunkCount == 0 {
-			firstChunkTimer.Stop()
-			o.log.Info("website_agent: received first chunk")
+		if !firstChunkReceived {
+			firstChunkReceived = true
+			o.log.Info("website_agent: received first chunk", logger.String("content_preview", truncate(chunk.Content, 50)))
 		}
 		chunkCount++
 
@@ -340,16 +344,13 @@ func (o *Orchestrator) websiteAgentLoop(
 		}
 	}
 
-	// Check if we timed out waiting for first chunk
-	select {
-	case <-firstChunkTimer.C:
-		o.log.Warn("website_agent: timeout waiting for first chunk")
+	if !firstChunkReceived {
+		o.log.Warn("website_agent: stream closed without any chunks")
 		select {
 		case outCh <- llm.Chunk{Event: "error", Content: "El agente tardó demasiado en responder. Reintentá con una instrucción más corta.", Done: true}:
 		case <-ctx.Done():
 		}
 		return
-	default:
 	}
 
 	o.log.Info("website_agent: stream complete", logger.Int("chunks", chunkCount), logger.Int("content_length", contentBuilder.Len()))
