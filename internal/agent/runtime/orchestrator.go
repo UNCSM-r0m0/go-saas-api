@@ -276,8 +276,8 @@ func min(a, b int) int {
 var htmlBlockRegex = regexp.MustCompile("(?s)```html\\s*(.*?)\\s*```")
 var doctypeRegex = regexp.MustCompile("(?s)(<!DOCTYPE html>.*?</html>)")
 
-const websiteAgentTimeout = 90 * time.Second
-const firstChunkTimeout = 30 * time.Second
+const websiteAgentTimeout = 180 * time.Second // 3 minutos para landing pages completas
+const firstChunkTimeout = 45 * time.Second
 
 // websiteAgentLoop streams a single LLM response without tools, extracts HTML artifact if present.
 func (o *Orchestrator) websiteAgentLoop(
