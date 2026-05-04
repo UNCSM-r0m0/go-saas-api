@@ -16,6 +16,7 @@ const (
 	RoleCritic       AgentRole = "critic"
 	RoleResearcher   AgentRole = "researcher"
 	RoleAssistant    AgentRole = "assistant"
+	RoleWebsiteAgent AgentRole = "website_agent"
 )
 
 // Agent is a configured AI agent or sub-agent.

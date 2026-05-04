@@ -22,6 +22,7 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 		Context        string      `json:"context"`
 		ConversationID *uuid.UUID  `json:"conversationId"`
 		FileIDs        []uuid.UUID `json:"fileIds"`
+		Mode           string      `json:"mode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeSSEError(c, http.StatusBadRequest, "STREAM_ERROR", err.Error())
@@ -34,7 +35,7 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
 	userContext := buildUserContext(prefs)
 
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext)
+	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
 		h.log.Error("chat stream failed", logger.Error(err))
 		writeSSEError(c, http.StatusOK, "STREAM_ERROR", err.Error())
@@ -74,6 +75,7 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 		Message        string      `json:"message" binding:"required"`
 		Model          string      `json:"model"`
 		FileIDs        []uuid.UUID `json:"file_ids"`
+		Mode           string      `json:"mode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeSSEError(c, http.StatusBadRequest, "STREAM_ERROR", err.Error())
@@ -86,7 +88,7 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
 	userContext := buildUserContext(prefs)
 
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model, userContext)
+	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
 		h.log.Error("chat failed", logger.Error(err))
 		writeSSEError(c, http.StatusInternalServerError, "STREAM_ERROR", "chat failed")
@@ -113,6 +115,10 @@ func writeSSEAgentLoop(c *gin.Context, streamCh <-chan llm.Chunk, conversationID
 		case "tool_result":
 			data := fmt.Sprintf("data: {\"event\":\"tool_result\",\"toolName\":%q,\"content\":%q,\"conversationId\":%q}\n\n",
 				chunk.ToolName, chunk.Content, conversationID)
+			_, _ = c.Writer.Write([]byte(data))
+		case "artifact":
+			data := fmt.Sprintf("data: {\"event\":\"artifact\",\"artifactId\":%q,\"artifactType\":\"website\",\"conversationId\":%q}\n\n",
+				chunk.Content, conversationID)
 			_, _ = c.Writer.Write([]byte(data))
 		case "error":
 			data := fmt.Sprintf("data: {\"event\":\"error\",\"content\":%q,\"conversationId\":%q}\n\n",

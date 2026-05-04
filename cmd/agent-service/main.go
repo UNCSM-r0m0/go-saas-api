@@ -91,7 +91,7 @@ func main() {
 	if cfg.DocumentServiceURL != "" {
 		docClient = document.NewClient(cfg.DocumentServiceURL)
 	}
-	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, fileService, docClient)
+	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, artStore, fileService, docClient)
 	wsManager := websocket.NewManager(orchestrator, log)
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)

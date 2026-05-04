@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -43,7 +43,7 @@ func (m *memConversationRepo) ListByUser(_ context.Context, userID uuid.UUID, _,
 	return list, nil
 }
 func (m *memConversationRepo) Update(_ context.Context, _ *model.Conversation) error { return nil }
-func (m *memConversationRepo) Delete(_ context.Context, _ uuid.UUID) error { return nil }
+func (m *memConversationRepo) Delete(_ context.Context, _ uuid.UUID) error           { return nil }
 
 var _ repository.ConversationRepo = (*memConversationRepo)(nil)
 
@@ -83,9 +83,11 @@ var _ repository.ArtifactRepo = (*memArtifactRepo)(nil)
 
 type memAgentRepo struct{}
 
-func (m *memAgentRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error)          { return nil, nil }
-func (m *memAgentRepo) GetByRole(_ context.Context, _ model.AgentRole) (*model.Agent, error) { return nil, nil }
-func (m *memAgentRepo) GetDefault(_ context.Context) (*model.Agent, error)                   { return nil, nil }
+func (m *memAgentRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error) { return nil, nil }
+func (m *memAgentRepo) GetByRole(_ context.Context, _ model.AgentRole) (*model.Agent, error) {
+	return nil, nil
+}
+func (m *memAgentRepo) GetDefault(_ context.Context) (*model.Agent, error) { return nil, nil }
 
 var _ repository.AgentRepo = (*memAgentRepo)(nil)
 
@@ -143,7 +145,7 @@ func setupTestRouter() (*gin.Engine, *memConversationRepo, *memMessageRepo, *mem
 
 	registry := tools.NewRegistry()
 	sessions := runtime.NewSessionManager(convRepo, msgRepo)
-	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil)
+	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, artRepo, nil, nil)
 
 	multiClient := llm.NewMultiClient()
 	wsManager := websocket.NewManager(orch, log)

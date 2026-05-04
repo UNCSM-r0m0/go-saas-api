@@ -69,6 +69,8 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.POST("/agent/suggest-traits", h.handleSuggestTraits)
 	r.GET("/agent/ws", h.wsManager.HandleUpgrade)
 	r.POST("/artifacts", h.handleCreateArtifact)
+	r.POST("/artifacts/website", h.handleCreateWebsiteArtifact)
+	r.GET("/artifacts/:id", h.handleGetArtifact)
 	r.GET("/artifacts/:id/preview", h.handlePreviewArtifact)
 
 	// Conversations REST API (legacy)
@@ -362,6 +364,7 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 		Context        string      `json:"context"`
 		ConversationID *uuid.UUID  `json:"conversationId"`
 		FileIDs        []uuid.UUID `json:"fileIds"`
+		Mode           string      `json:"mode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
@@ -374,7 +377,7 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
 	userContext := buildUserContext(prefs)
 
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext)
+	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
 		h.log.Error("chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "chat failed")
@@ -383,6 +386,7 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 
 	var fullContent strings.Builder
 	var toolSteps []gin.H
+	var artifactID string
 	for chunk := range streamCh {
 		switch chunk.Event {
 		case "tool_start":
@@ -397,6 +401,8 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 				"toolName": chunk.ToolName,
 				"content":  chunk.Content,
 			})
+		case "artifact":
+			artifactID = chunk.Content
 		default:
 			fullContent.WriteString(chunk.Content)
 		}
@@ -458,6 +464,10 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 	}
 	if len(toolSteps) > 0 {
 		result["toolSteps"] = toolSteps
+	}
+	if artifactID != "" {
+		result["artifactId"] = artifactID
+		result["artifactType"] = "website"
 	}
 	response.OK(c, result, "message sent")
 }

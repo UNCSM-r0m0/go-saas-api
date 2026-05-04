@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,24 +22,26 @@ type Orchestrator struct {
 	registry   *tools.Registry
 	sessions   *SessionManager
 	agentRepo  repository.AgentRepo
+	artRepo    repository.ArtifactRepo
 	fileSvc    *fileupload.Service
 	docClient  *document.Client
 	classifier *LLMClassifier
 }
 
-func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, fileSvc *fileupload.Service, docClient *document.Client) *Orchestrator {
+func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, fileSvc *fileupload.Service, docClient *document.Client) *Orchestrator {
 	return &Orchestrator{
 		llmClient:  client,
 		registry:   registry,
 		sessions:   sessions,
 		agentRepo:  agentRepo,
+		artRepo:    artRepo,
 		fileSvc:    fileSvc,
 		docClient:  docClient,
 		classifier: NewLLMClassifier(client),
 	}
 }
 
-func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string) (<-chan llm.Chunk, error) {
+func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string, mode string) (<-chan llm.Chunk, error) {
 	var conversationID uuid.UUID
 	if convID != nil {
 		conversationID = *convID
@@ -96,6 +99,21 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		if err == nil && fileContext != "" {
 			userContent = fileContext + "\n\n" + content
 		}
+	}
+
+	// Website agent mode: bypass tools, use special system prompt, extract HTML artifact
+	if mode == "website_agent" {
+		agent.SystemPrompt = prompts.WebsiteAgent()
+		agent.Role = model.RoleWebsiteAgent
+
+		messages := BuildMessages(agent, history, userContent, userContext)
+
+		outCh := make(chan llm.Chunk)
+		go func() {
+			defer close(outCh)
+			o.websiteAgentLoop(ctx, outCh, agent, messages, conversationID)
+		}()
+		return outCh, nil
 	}
 
 	toolList := o.registry.List()
@@ -250,4 +268,97 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+var htmlBlockRegex = regexp.MustCompile("(?s)```html\\s*(.*?)\\s*```")
+
+// websiteAgentLoop streams a single LLM response without tools, extracts HTML artifact if present.
+func (o *Orchestrator) websiteAgentLoop(
+	ctx context.Context,
+	outCh chan<- llm.Chunk,
+	agent *model.Agent,
+	messages []llm.Message,
+	conversationID uuid.UUID,
+) {
+	req := llm.Request{
+		Model:       agent.Model,
+		Messages:    messages,
+		Temperature: 0.7,
+		MaxTokens:   4096,
+		Stream:      true,
+	}
+
+	llmCh, err := o.llmClient.Stream(ctx, req)
+	if err != nil {
+		select {
+		case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("LLM error: %v", err), Done: true}:
+		case <-ctx.Done():
+		}
+		return
+	}
+
+	var contentBuilder strings.Builder
+	for chunk := range llmCh {
+		if chunk.Content != "" {
+			contentBuilder.WriteString(chunk.Content)
+			select {
+			case outCh <- llm.Chunk{Content: chunk.Content}:
+			case <-ctx.Done():
+				return
+			}
+		}
+		if chunk.Done {
+			break
+		}
+	}
+
+	fullContent := contentBuilder.String()
+
+	// Extract HTML artifact
+	var artifactID string
+	if match := htmlBlockRegex.FindStringSubmatch(fullContent); len(match) > 1 {
+		htmlContent := strings.TrimSpace(match[1])
+		if htmlContent != "" {
+			art := &model.Artifact{
+				ID:             uuid.New(),
+				ConversationID: conversationID,
+				Name:           "index.html",
+				Type:           "website",
+				Language:       "html",
+				Content:        htmlContent,
+				Version:        1,
+				CreatedAt:      time.Now(),
+				UpdatedAt:      time.Now(),
+			}
+			if o.artRepo != nil {
+				_ = o.artRepo.Create(ctx, art)
+			}
+			artifactID = art.ID.String()
+		}
+	}
+
+	// Save assistant message
+	msg := &model.Message{
+		ID:             uuid.New(),
+		ConversationID: conversationID,
+		Role:           model.MessageRoleAssistant,
+		Content:        fullContent,
+		Model:          agent.Model,
+		CreatedAt:      time.Now(),
+	}
+	_ = o.sessions.AddMessage(ctx, msg)
+
+	// Send artifact metadata as final chunk
+	if artifactID != "" {
+		select {
+		case outCh <- llm.Chunk{Event: "artifact", Content: artifactID, Done: false}:
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	select {
+	case outCh <- llm.Chunk{Done: true}:
+	case <-ctx.Done():
+	}
 }
