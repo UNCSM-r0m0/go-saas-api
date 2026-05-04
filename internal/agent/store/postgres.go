@@ -94,15 +94,15 @@ func NewMessageStore(pool *pgxpool.Pool) *MessageStore {
 
 func (s *MessageStore) Create(ctx context.Context, msg *model.Message) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO messages (id, conversation_id, role, content, tool_calls, tool_call_id, tool_name, model, tokens_input, tokens_output, latency_ms, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		msg.ID, msg.ConversationID, msg.Role, msg.Content, msg.ToolCalls, msg.ToolCallID, msg.ToolName, msg.Model, msg.TokensInput, msg.TokensOutput, msg.LatencyMs, msg.CreatedAt)
+		`INSERT INTO messages (id, conversation_id, role, content, tool_calls, tool_call_id, tool_name, model, tokens_input, tokens_output, latency_ms, artifact_id, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		msg.ID, msg.ConversationID, msg.Role, msg.Content, msg.ToolCalls, msg.ToolCallID, msg.ToolName, msg.Model, msg.TokensInput, msg.TokensOutput, msg.LatencyMs, msg.ArtifactID, msg.CreatedAt)
 	return err
 }
 
 func (s *MessageStore) ListByConversation(ctx context.Context, conversationID uuid.UUID, limit int) ([]model.Message, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, conversation_id, role, content, tool_calls, tool_call_id, tool_name, model, tokens_input, tokens_output, latency_ms, created_at
+		`SELECT id, conversation_id, role, content, tool_calls, tool_call_id, tool_name, model, tokens_input, tokens_output, latency_ms, artifact_id, created_at
 		 FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC LIMIT $2`,
 		conversationID, limit)
 	if err != nil {
@@ -113,9 +113,11 @@ func (s *MessageStore) ListByConversation(ctx context.Context, conversationID uu
 	var list []model.Message
 	for rows.Next() {
 		var msg model.Message
-		if err := rows.Scan(&msg.ID, &msg.ConversationID, &msg.Role, &msg.Content, &msg.ToolCalls, &msg.ToolCallID, &msg.ToolName, &msg.Model, &msg.TokensInput, &msg.TokensOutput, &msg.LatencyMs, &msg.CreatedAt); err != nil {
+		var artifactID *uuid.UUID
+		if err := rows.Scan(&msg.ID, &msg.ConversationID, &msg.Role, &msg.Content, &msg.ToolCalls, &msg.ToolCallID, &msg.ToolName, &msg.Model, &msg.TokensInput, &msg.TokensOutput, &msg.LatencyMs, &artifactID, &msg.CreatedAt); err != nil {
 			return nil, err
 		}
+		msg.ArtifactID = artifactID
 		list = append(list, msg)
 	}
 	return list, rows.Err()

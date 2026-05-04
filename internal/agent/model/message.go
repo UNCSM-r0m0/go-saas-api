@@ -36,5 +36,6 @@ type Message struct {
 	TokensInput    int         `json:"tokens_input,omitempty"`
 	TokensOutput   int         `json:"tokens_output,omitempty"`
 	LatencyMs      int         `json:"latency_ms,omitempty"`
+	ArtifactID     *uuid.UUID  `json:"artifact_id,omitempty"`
 	CreatedAt      time.Time   `json:"created_at"`
 }

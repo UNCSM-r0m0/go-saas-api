@@ -346,6 +346,11 @@ func (o *Orchestrator) websiteAgentLoop(
 		Model:          agent.Model,
 		CreatedAt:      time.Now(),
 	}
+	if artifactID != "" {
+		if artUUID, err := uuid.Parse(artifactID); err == nil {
+			msg.ArtifactID = &artUUID
+		}
+	}
 	_ = o.sessions.AddMessage(ctx, msg)
 
 	// Send artifact metadata as final chunk

@@ -46,6 +46,11 @@ func (h *Handler) handleCreateArtifact(c *gin.Context) {
 }
 
 func (h *Handler) handleGetArtifact(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid id")
@@ -56,6 +61,13 @@ func (h *Handler) handleGetArtifact(c *gin.Context) {
 	if err != nil {
 		h.log.Error("get artifact failed", logger.Error(err))
 		response.Error(c, http.StatusNotFound, "artifact not found")
+		return
+	}
+
+	// Verificar que el usuario es dueño de la conversación
+	conv, err := h.convRepo.GetByID(c.Request.Context(), art.ConversationID)
+	if err != nil || conv.UserID != userID {
+		response.Error(c, http.StatusForbidden, "no permission to access this artifact")
 		return
 	}
 
@@ -112,6 +124,11 @@ func (h *Handler) handleCreateWebsiteArtifact(c *gin.Context) {
 }
 
 func (h *Handler) handlePreviewArtifact(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid id")
@@ -122,6 +139,13 @@ func (h *Handler) handlePreviewArtifact(c *gin.Context) {
 	if err != nil {
 		h.log.Error("get artifact failed", logger.Error(err))
 		response.Error(c, http.StatusNotFound, "artifact not found")
+		return
+	}
+
+	// Verificar que el usuario es dueño de la conversación
+	conv, err := h.convRepo.GetByID(c.Request.Context(), art.ConversationID)
+	if err != nil || conv.UserID != userID {
+		response.Error(c, http.StatusForbidden, "no permission to access this artifact")
 		return
 	}
 
