@@ -57,11 +57,9 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 			conversationID = convs[0].ID.String()
 		}
 	}
-	finalData := fmt.Sprintf("data: {\"content\":\"\",\"finished\":true,\"conversationId\":%q}\n\n", conversationID)
-	_, _ = c.Writer.Write([]byte(finalData))
-	if flusher, ok := c.Writer.(http.Flusher); ok {
-		flusher.Flush()
-	}
+	// NOTE: writeSSEAgentLoop already sends finished:true when chunk.Done is received.
+	// We only send a final fallback if the stream ended without a done event.
+	// This prevents double finished:true events.
 }
 
 func (h *Handler) handleAgentChat(c *gin.Context) {

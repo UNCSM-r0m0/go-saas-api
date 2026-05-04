@@ -274,7 +274,9 @@ func min(a, b int) int {
 }
 
 var htmlBlockRegex = regexp.MustCompile("(?s)```html\\s*(.*?)\\s*```")
+var markupBlockRegex = regexp.MustCompile("(?s)```markup\\s*(.*?)\\s*```")
 var doctypeRegex = regexp.MustCompile("(?s)(<!DOCTYPE html>.*?</html>)")
+var htmlTagRegex = regexp.MustCompile("(?s)(<html.*?>.*?</html>)")
 
 const websiteAgentTimeout = 180 * time.Second // 3 minutos para landing pages completas
 const firstChunkTimeout = 45 * time.Second
@@ -312,7 +314,7 @@ func (o *Orchestrator) websiteAgentLoop(
 	if err != nil {
 		o.log.Error("website_agent: LLM stream failed", logger.Error(err))
 		select {
-		case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("Error iniciando generación: %v", err), Done: true}:
+		case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("Error iniciando generación: %v", err)}:
 		case <-ctx.Done():
 		}
 		return
@@ -324,6 +326,7 @@ func (o *Orchestrator) websiteAgentLoop(
 	chunkCount := 0
 	firstChunkReceived := false
 
+	// Accumulate ALL content first, do NOT pass Done:true from LLM
 	for chunk := range llmCh {
 		if !firstChunkReceived {
 			firstChunkReceived = true
@@ -333,55 +336,75 @@ func (o *Orchestrator) websiteAgentLoop(
 
 		if chunk.Content != "" {
 			contentBuilder.WriteString(chunk.Content)
+			// Forward content chunks but strip Done flag to prevent premature closing
 			select {
 			case outCh <- llm.Chunk{Content: chunk.Content}:
 			case <-ctx.Done():
+				o.log.Warn("website_agent: context cancelled during streaming")
 				return
 			}
 		}
-		if chunk.Done {
-			break
-		}
+		// NOTE: we deliberately ignore chunk.Done here and let the loop drain all chunks
 	}
 
 	if !firstChunkReceived {
 		o.log.Warn("website_agent: stream closed without any chunks")
 		select {
-		case outCh <- llm.Chunk{Event: "error", Content: "El agente tardó demasiado en responder. Reintentá con una instrucción más corta.", Done: true}:
+		case outCh <- llm.Chunk{Event: "error", Content: "El agente tardó demasiado en responder. Reintentá con una instrucción más corta."}:
 		case <-ctx.Done():
 		}
 		return
 	}
 
-	o.log.Info("website_agent: stream complete", logger.Int("chunks", chunkCount), logger.Int("content_length", contentBuilder.Len()))
+	fullContent := contentBuilder.String()
+	o.log.Info("website_agent: stream complete",
+		logger.Int("chunks", chunkCount),
+		logger.Int("content_length", len(fullContent)))
 
-	// Send progress event
+	// Send extraction progress
 	select {
 	case outCh <- llm.Chunk{Event: "progress", Content: "Extrayendo HTML..."}:
 	case <-ctx.Done():
+		o.log.Warn("website_agent: context cancelled before extraction")
 		return
 	}
 
-	fullContent := contentBuilder.String()
-
-	// Extract HTML artifact - try multiple patterns
+	// Extract HTML artifact - try multiple patterns in order
 	var artifactID string
 	var htmlContent string
+	var matchType string
 
-	o.log.Info("website_agent: extracting HTML", logger.Int("content_length", len(fullContent)), logger.String("content_preview", truncate(fullContent, 100)))
+	o.log.Info("website_agent: extracting HTML", logger.Int("content_length", len(fullContent)))
 
-	// Try markdown code block first
+	// Pattern 1: markdown html block
 	if match := htmlBlockRegex.FindStringSubmatch(fullContent); len(match) > 1 {
 		htmlContent = strings.TrimSpace(match[1])
-		o.log.Info("website_agent: found HTML in markdown block", logger.Int("html_length", len(htmlContent)))
-	} else if match := doctypeRegex.FindStringSubmatch(fullContent); len(match) > 1 {
-		// Fallback: extract raw HTML document
+		matchType = "markdown_html_block"
+	} else if match := markupBlockRegex.FindStringSubmatch(fullContent); len(match) > 1 {
+		// Pattern 2: markdown markup block
 		htmlContent = strings.TrimSpace(match[1])
-		o.log.Info("website_agent: found raw HTML document", logger.Int("html_length", len(htmlContent)))
-	} else {
-		o.log.Warn("website_agent: no HTML pattern matched", logger.String("preview", truncate(fullContent, 200)))
+		matchType = "markdown_markup_block"
+	} else if match := doctypeRegex.FindStringSubmatch(fullContent); len(match) > 1 {
+		// Pattern 3: raw HTML with DOCTYPE
+		htmlContent = strings.TrimSpace(match[1])
+		matchType = "doctype_html"
+	} else if match := htmlTagRegex.FindStringSubmatch(fullContent); len(match) > 1 {
+		// Pattern 4: html tags without DOCTYPE
+		htmlContent = strings.TrimSpace(match[1])
+		matchType = "html_tag"
 	}
 
+	if htmlContent != "" {
+		o.log.Info("website_agent: HTML extracted",
+			logger.String("match_type", matchType),
+			logger.Int("html_length", len(htmlContent)),
+			logger.String("html_preview", truncate(htmlContent, 80)))
+	} else {
+		o.log.Warn("website_agent: no HTML pattern matched",
+			logger.String("preview", truncate(fullContent, 200)))
+	}
+
+	// Create and save artifact
 	if htmlContent != "" {
 		art := &model.Artifact{
 			ID:             uuid.New(),
@@ -396,17 +419,26 @@ func (o *Orchestrator) websiteAgentLoop(
 		}
 		if o.artRepo != nil {
 			if err := o.artRepo.Create(ctx, art); err != nil {
-				o.log.Error("website_agent: failed to save artifact", logger.Error(err))
+				o.log.Error("website_agent: failed to save artifact",
+					logger.Error(err),
+					logger.String("conversation_id", conversationID.String()))
+				// Send error event so frontend knows something went wrong
+				select {
+				case outCh <- llm.Chunk{Event: "error", Content: "Error guardando el artifact. El HTML fue generado pero no se pudo guardar."}:
+				case <-ctx.Done():
+				}
 			} else {
 				artifactID = art.ID.String()
-				o.log.Info("website_agent: artifact saved", logger.String("artifact_id", artifactID))
+				o.log.Info("website_agent: artifact saved",
+					logger.String("artifact_id", artifactID),
+					logger.Int("html_length", len(htmlContent)))
 			}
+		} else {
+			o.log.Warn("website_agent: artRepo is nil, artifact not saved")
 		}
-	} else {
-		o.log.Warn("website_agent: no HTML found in response")
 	}
 
-	// Save assistant message
+	// Save assistant message WITH artifact_id link
 	msg := &model.Message{
 		ID:             uuid.New(),
 		ConversationID: conversationID,
@@ -418,31 +450,44 @@ func (o *Orchestrator) websiteAgentLoop(
 	if artifactID != "" {
 		if artUUID, err := uuid.Parse(artifactID); err == nil {
 			msg.ArtifactID = &artUUID
-			o.log.Info("website_agent: linked artifact to message", logger.String("message_id", msg.ID.String()), logger.String("artifact_id", artifactID))
+			o.log.Info("website_agent: linked artifact to message",
+				logger.String("message_id", msg.ID.String()),
+				logger.String("artifact_id", artifactID))
 		}
 	}
 	if err := o.sessions.AddMessage(ctx, msg); err != nil {
 		o.log.Error("website_agent: failed to save assistant message", logger.Error(err))
 	} else {
-		o.log.Info("website_agent: assistant message saved", logger.String("message_id", msg.ID.String()), logger.Int("content_length", len(fullContent)))
+		o.log.Info("website_agent: assistant message saved",
+			logger.String("message_id", msg.ID.String()),
+			logger.Int("content_length", len(fullContent)),
+			logger.String("artifact_id", artifactID))
 	}
 
-	// Send artifact metadata as final chunk
+	// Send artifact event BEFORE done event
 	if artifactID != "" {
 		o.log.Info("website_agent: sending artifact event", logger.String("artifact_id", artifactID))
 		select {
-		case outCh <- llm.Chunk{Event: "artifact", Content: artifactID, Done: false}:
-			 o.log.Info("website_agent: artifact event sent successfully")
+		case outCh <- llm.Chunk{Event: "artifact", Content: artifactID}:
+			o.log.Info("website_agent: artifact event sent successfully")
 		case <-ctx.Done():
 			o.log.Warn("website_agent: context cancelled before sending artifact event")
 			return
 		}
 	} else {
-		o.log.Warn("website_agent: no artifact to send (artifactID is empty)")
+		o.log.Warn("website_agent: no artifact_id to send")
+		select {
+		case outCh <- llm.Chunk{Event: "error", Content: "No se encontró HTML en la respuesta. Intentá con una descripción más detallada."}:
+		case <-ctx.Done():
+			return
+		}
 	}
 
+	// Send single Done:true event at the very end
+	o.log.Info("website_agent: sending final done event")
 	select {
 	case outCh <- llm.Chunk{Done: true}:
 	case <-ctx.Done():
+		o.log.Warn("website_agent: context cancelled before sending done event")
 	}
 }
