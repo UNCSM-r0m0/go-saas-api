@@ -59,7 +59,25 @@ func (h *Handler) handleGetArtifact(c *gin.Context) {
 		return
 	}
 
-	response.OK(c, art, "artifact retrieved")
+	// Normalizar como proyecto con files array
+	project := gin.H{
+		"id":              art.ID,
+		"conversation_id": art.ConversationID,
+		"type":            art.Type,
+		"entry_file":      art.Name,
+		"version":         art.Version,
+		"created_at":      art.CreatedAt,
+		"updated_at":      art.UpdatedAt,
+		"files": []gin.H{
+			{
+				"path":     art.Name,
+				"language": art.Language,
+				"content":  art.Content,
+			},
+		},
+	}
+
+	response.OK(c, project, "artifact retrieved")
 }
 
 func (h *Handler) handleCreateWebsiteArtifact(c *gin.Context) {
