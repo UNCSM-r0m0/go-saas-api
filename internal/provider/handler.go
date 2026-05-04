@@ -247,15 +247,17 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	}
 
 	var req struct {
-		Name              string `json:"name" binding:"required"`
-		DisplayName       string `json:"display_name" binding:"required"`
-		Description       string `json:"description"`
-		MaxTokens         int    `json:"max_tokens"`
-		ContextWindow     int    `json:"context_window"`
-		SupportsStreaming bool   `json:"supports_streaming"`
-		SupportsImages    bool   `json:"supports_images"`
-		IsPublic          bool   `json:"is_public"`
-		IsPremium         bool   `json:"is_premium"`
+		Name                 string         `json:"name" binding:"required"`
+		DisplayName          string         `json:"display_name" binding:"required"`
+		Description          string         `json:"description"`
+		MaxTokens            int            `json:"max_tokens"`
+		ContextWindow        int            `json:"context_window"`
+		SupportsStreaming    bool           `json:"supports_streaming"`
+		SupportsImages       bool           `json:"supports_images"`
+		SupportsWebsiteAgent *bool          `json:"supports_website_agent"`
+		Config               map[string]any `json:"config"`
+		IsPublic             bool           `json:"is_public"`
+		IsPremium            bool           `json:"is_premium"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -266,6 +268,12 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	if err != nil {
 		h.log.Error("create model failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create model"})
+		return
+	}
+	m.Config = withWebsiteAgentConfig(req.Config, boolValue(req.SupportsWebsiteAgent, false))
+	if err := h.service.UpdateModel(c.Request.Context(), m); err != nil {
+		h.log.Error("update model config failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update model config"})
 		return
 	}
 
@@ -332,20 +340,28 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	}
 
 	var req struct {
-		Name              string `json:"name" binding:"required"`
-		DisplayName       string `json:"display_name" binding:"required"`
-		Description       string `json:"description"`
-		MaxTokens         int    `json:"max_tokens"`
-		ContextWindow     int    `json:"context_window"`
-		SupportsStreaming bool   `json:"supports_streaming"`
-		SupportsImages    bool   `json:"supports_images"`
-		IsActive          bool   `json:"is_active"`
-		IsPublic          bool   `json:"is_public"`
-		IsPremium         bool   `json:"is_premium"`
+		Name                 string         `json:"name" binding:"required"`
+		DisplayName          string         `json:"display_name" binding:"required"`
+		Description          string         `json:"description"`
+		MaxTokens            int            `json:"max_tokens"`
+		ContextWindow        int            `json:"context_window"`
+		SupportsStreaming    bool           `json:"supports_streaming"`
+		SupportsImages       bool           `json:"supports_images"`
+		SupportsWebsiteAgent *bool          `json:"supports_website_agent"`
+		Config               map[string]any `json:"config"`
+		IsActive             bool           `json:"is_active"`
+		IsPublic             bool           `json:"is_public"`
+		IsPremium            bool           `json:"is_premium"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	existing, _ := h.service.GetModel(c.Request.Context(), id)
+	config := req.Config
+	if config == nil && existing != nil {
+		config = existing.Config
 	}
 
 	var descPtr *string
@@ -364,7 +380,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 		IsActive:          req.IsActive,
 		IsPublic:          req.IsPublic,
 		IsPremium:         req.IsPremium,
-		Config:            map[string]any{},
+		Config:            withWebsiteAgentConfig(config, boolValue(req.SupportsWebsiteAgent, existing != nil && existing.SupportsWebsiteAgent())),
 	}
 
 	if err := h.service.UpdateModel(c.Request.Context(), m); err != nil {
@@ -374,6 +390,22 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, m)
+}
+
+func withWebsiteAgentConfig(config map[string]any, supports bool) map[string]any {
+	if config == nil {
+		config = map[string]any{}
+	}
+	config["supports_website_agent"] = supports
+	config["website_agent"] = supports
+	return config
+}
+
+func boolValue(value *bool, fallback bool) bool {
+	if value == nil {
+		return fallback
+	}
+	return *value
 }
 
 // DeleteModel handles DELETE /admin/models/:id.

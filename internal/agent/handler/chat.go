@@ -235,20 +235,27 @@ func (h *Handler) handleListModelsPublic(c *gin.Context) {
 				if m.SupportsImages {
 					features = append(features, "multimodal")
 				}
+				if m.SupportsWebsiteAgent() {
+					features = append(features, "website_agent")
+				}
 				models = append(models, gin.H{
-					"id":                m.Name,
-					"model_id":          m.ID.String(),
-					"name":              m.Name,
-					"provider":          providerNameByID[m.ProviderID.String()],
-					"description":       firstNonEmptyString(m.Description, "Model "+m.Name),
-					"maxTokens":         m.MaxTokens,
-					"supportsImages":    m.SupportsImages,
-					"supportsReasoning": false,
-					"isPremium":         m.IsPremium,
-					"is_premium":        m.IsPremium,
-					"isAvailable":       available,
-					"available":         available,
-					"features":          features,
+					"id":                     m.Name,
+					"model_id":               m.ID.String(),
+					"name":                   m.Name,
+					"provider":               providerNameByID[m.ProviderID.String()],
+					"description":            firstNonEmptyString(m.Description, "Model "+m.Name),
+					"maxTokens":              m.MaxTokens,
+					"maxOutputTokens":        m.WebsiteAgentMaxTokens(),
+					"max_output_tokens":      m.WebsiteAgentMaxTokens(),
+					"supportsImages":         m.SupportsImages,
+					"supportsWebsiteAgent":   m.SupportsWebsiteAgent(),
+					"supports_website_agent": m.SupportsWebsiteAgent(),
+					"supportsReasoning":      false,
+					"isPremium":              m.IsPremium,
+					"is_premium":             m.IsPremium,
+					"isAvailable":            available,
+					"available":              available,
+					"features":               features,
 				})
 			}
 			response.OK(c, models, "models retrieved")
@@ -266,18 +273,22 @@ func (h *Handler) handleListModelsPublic(c *gin.Context) {
 			isPremium := !strings.Contains(strings.ToLower(p.Name), "ollama")
 			available := !isPremium || isPremiumTier
 			models = append(models, gin.H{
-				"id":                m,
-				"name":              m,
-				"provider":          p.Name,
-				"description":       "Model " + m + " via " + p.Name,
-				"maxTokens":         4096,
-				"supportsImages":    false,
-				"supportsReasoning": false,
-				"isPremium":         isPremium,
-				"is_premium":        isPremium,
-				"isAvailable":       available,
-				"available":         available,
-				"features":          []string{},
+				"id":                     m,
+				"name":                   m,
+				"provider":               p.Name,
+				"description":            "Model " + m + " via " + p.Name,
+				"maxTokens":              4096,
+				"maxOutputTokens":        4096,
+				"max_output_tokens":      4096,
+				"supportsImages":         false,
+				"supportsWebsiteAgent":   false,
+				"supports_website_agent": false,
+				"supportsReasoning":      false,
+				"isPremium":              isPremium,
+				"is_premium":             isPremium,
+				"isAvailable":            available,
+				"available":              available,
+				"features":               []string{},
 			})
 		}
 	}

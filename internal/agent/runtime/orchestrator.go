@@ -15,6 +15,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/document"
 	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/internal/provider"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
@@ -26,11 +27,12 @@ type Orchestrator struct {
 	artRepo    repository.ArtifactRepo
 	fileSvc    *fileupload.Service
 	docClient  *document.Client
+	providers  provider.Store
 	classifier *LLMClassifier
 	log        logger.Logger
 }
 
-func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, fileSvc *fileupload.Service, docClient *document.Client, log logger.Logger) *Orchestrator {
+func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, fileSvc *fileupload.Service, docClient *document.Client, providers provider.Store, log logger.Logger) *Orchestrator {
 	return &Orchestrator{
 		llmClient:  client,
 		registry:   registry,
@@ -39,6 +41,7 @@ func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *Sess
 		artRepo:    artRepo,
 		fileSvc:    fileSvc,
 		docClient:  docClient,
+		providers:  providers,
 		classifier: NewLLMClassifier(client),
 		log:        log,
 	}
@@ -106,6 +109,11 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 
 	// Website agent mode: bypass tools, use special system prompt, extract HTML artifact
 	if mode == "website_agent" {
+		capability, err := o.resolveWebsiteAgentCapability(ctx, agent.Model)
+		if err != nil {
+			return nil, err
+		}
+
 		agent.SystemPrompt = prompts.WebsiteAgent()
 		agent.Role = model.RoleWebsiteAgent
 
@@ -114,7 +122,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		outCh := make(chan llm.Chunk)
 		go func() {
 			defer close(outCh)
-			o.websiteAgentLoop(ctx, outCh, agent, messages, conversationID)
+			o.websiteAgentLoop(ctx, outCh, agent, messages, conversationID, capability.MaxTokens)
 		}()
 		return outCh, nil
 	}
@@ -273,95 +281,105 @@ func min(a, b int) int {
 	return b
 }
 
-var htmlBlockRegex = regexp.MustCompile("(?s)```html\\s*(.*?)\\s*```")
-var markupBlockRegex = regexp.MustCompile("(?s)```markup\\s*(.*?)\\s*```")
-var doctypeRegex = regexp.MustCompile("(?s)(<!DOCTYPE html>.*?</html>)")
-var htmlTagRegex = regexp.MustCompile("(?s)(<html.*?>.*?</html>)")
+type websiteAgentCapability struct {
+	MaxTokens int
+}
+
+func (o *Orchestrator) resolveWebsiteAgentCapability(ctx context.Context, modelName string) (websiteAgentCapability, error) {
+	const fallbackMaxTokens = 12000
+	if o.providers == nil {
+		return websiteAgentCapability{MaxTokens: fallbackMaxTokens}, nil
+	}
+
+	models, err := o.providers.ListActiveModels(ctx, false)
+	if err != nil {
+		return websiteAgentCapability{}, fmt.Errorf("validar modelo agentic: %w", err)
+	}
+	for _, m := range models {
+		if m.Name != modelName {
+			continue
+		}
+		if !m.SupportsWebsiteAgent() {
+			return websiteAgentCapability{}, fmt.Errorf("el modelo %q no está habilitado para Website Agent", modelName)
+		}
+		return websiteAgentCapability{MaxTokens: m.WebsiteAgentMaxTokens()}, nil
+	}
+	return websiteAgentCapability{}, fmt.Errorf("el modelo %q no está activo o no existe", modelName)
+}
+
+var htmlBlockRegex = regexp.MustCompile("(?is)```(?:html|markup)\\s*(.*?)(?:```|\\z)")
+var doctypeRegex = regexp.MustCompile("(?is)(<!DOCTYPE\\s+html\\b.*?</html>|<!DOCTYPE\\s+html\\b.*\\z)")
+var htmlTagRegex = regexp.MustCompile("(?is)(<html\\b.*?</html>|<html\\b.*\\z)")
 
 const websiteAgentTimeout = 180 * time.Second // 3 minutos para landing pages completas
 const firstChunkTimeout = 45 * time.Second
+const maxWebsiteContinuations = 2
 
-// websiteAgentLoop streams a single LLM response without tools, extracts HTML artifact if present.
+// websiteAgentLoop streams one or more LLM responses without tools, then extracts a website artifact.
 func (o *Orchestrator) websiteAgentLoop(
 	ctx context.Context,
 	outCh chan<- llm.Chunk,
 	agent *model.Agent,
 	messages []llm.Message,
 	conversationID uuid.UUID,
+	maxTokens int,
 ) {
-	// Send progress event immediately
 	select {
 	case outCh <- llm.Chunk{Event: "progress", Content: "Generando sitio web..."}:
 	case <-ctx.Done():
 		return
 	}
 
-	req := llm.Request{
-		Model:       agent.Model,
-		Messages:    messages,
-		Temperature: 0.7,
-		MaxTokens:   4096,
-		Stream:      true,
-	}
-
-	o.log.Info("website_agent: calling LLM Stream", logger.String("model", agent.Model), logger.Int("msg_count", len(messages)), logger.String("conversation_id", conversationID.String()))
-
-	// Create a timeout context for the LLM call
-	llmCtx, llmCancel := context.WithTimeout(ctx, websiteAgentTimeout)
-	defer llmCancel()
-
-	llmCh, err := o.llmClient.Stream(llmCtx, req)
-	if err != nil {
-		o.log.Error("website_agent: LLM stream failed", logger.Error(err))
-		select {
-		case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("Error iniciando generación: %v", err)}:
-		case <-ctx.Done():
-		}
-		return
-	}
-
-	o.log.Info("website_agent: LLM stream started successfully")
-
 	var contentBuilder strings.Builder
-	chunkCount := 0
-	firstChunkReceived := false
+	attemptMessages := append([]llm.Message(nil), messages...)
+	totalChunks := 0
+	maxAttempts := 1 + maxWebsiteContinuations
 
-	// Accumulate ALL content first, do NOT pass Done:true from LLM
-	for chunk := range llmCh {
-		if !firstChunkReceived {
-			firstChunkReceived = true
-			o.log.Info("website_agent: received first chunk", logger.String("content_preview", truncate(chunk.Content, 50)))
-		}
-		chunkCount++
-
-		if chunk.Content != "" {
-			contentBuilder.WriteString(chunk.Content)
-			// Forward content chunks but strip Done flag to prevent premature closing
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
 			select {
-			case outCh <- llm.Chunk{Content: chunk.Content}:
+			case outCh <- llm.Chunk{Event: "progress", Content: fmt.Sprintf("Continuando HTML (%d/%d)...", attempt-1, maxWebsiteContinuations)}:
 			case <-ctx.Done():
-				o.log.Warn("website_agent: context cancelled during streaming")
 				return
 			}
 		}
-		// NOTE: we deliberately ignore chunk.Done here and let the loop drain all chunks
-	}
 
-	if !firstChunkReceived {
-		o.log.Warn("website_agent: stream closed without any chunks")
-		select {
-		case outCh <- llm.Chunk{Event: "error", Content: "El agente tardó demasiado en responder. Reintentá con una instrucción más corta."}:
-		case <-ctx.Done():
+		chunks, gotFirstChunk, err := o.streamWebsiteAgentAttempt(ctx, outCh, &contentBuilder, agent, attemptMessages, conversationID, maxTokens, attempt)
+		totalChunks += chunks
+		if err != nil {
+			o.log.Error("website_agent: stream attempt failed", logger.Error(err), logger.Int("attempt", attempt))
+			select {
+			case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("Error generando sitio web: %v", err)}:
+			case <-ctx.Done():
+			}
+			return
 		}
-		return
+		if !gotFirstChunk {
+			o.log.Warn("website_agent: stream closed without chunks", logger.Int("attempt", attempt))
+			select {
+			case outCh <- llm.Chunk{Event: "error", Content: "El agente no devolvió contenido. Reintentá con una instrucción más corta."}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		fullContent := contentBuilder.String()
+		htmlContent, _ := extractWebsiteHTML(fullContent)
+		if htmlContent != "" && !needsWebsiteContinuation(htmlContent) {
+			break
+		}
+		if attempt == maxAttempts {
+			break
+		}
+
+		attemptMessages = continuationMessages(messages, fullContent)
 	}
 
 	fullContent := contentBuilder.String()
 	o.log.Info("website_agent: stream complete",
-		logger.Int("chunks", chunkCount),
+		logger.Int("chunks", totalChunks),
 		logger.Int("content_length", len(fullContent)))
 
-	// Send extraction progress
 	select {
 	case outCh <- llm.Chunk{Event: "progress", Content: "Extrayendo HTML..."}:
 	case <-ctx.Done():
@@ -369,125 +387,174 @@ func (o *Orchestrator) websiteAgentLoop(
 		return
 	}
 
-	// Extract HTML artifact - try multiple patterns in order
-	var artifactID string
-	var htmlContent string
-	var matchType string
-
-	o.log.Info("website_agent: extracting HTML", logger.Int("content_length", len(fullContent)))
-
-	// Pattern 1: markdown html block
-	if match := htmlBlockRegex.FindStringSubmatch(fullContent); len(match) > 1 {
-		htmlContent = strings.TrimSpace(match[1])
-		matchType = "markdown_html_block"
-	} else if match := markupBlockRegex.FindStringSubmatch(fullContent); len(match) > 1 {
-		// Pattern 2: markdown markup block
-		htmlContent = strings.TrimSpace(match[1])
-		matchType = "markdown_markup_block"
-	} else if match := doctypeRegex.FindStringSubmatch(fullContent); len(match) > 1 {
-		// Pattern 3: raw HTML with DOCTYPE
-		htmlContent = strings.TrimSpace(match[1])
-		matchType = "doctype_html"
-	} else if match := htmlTagRegex.FindStringSubmatch(fullContent); len(match) > 1 {
-		// Pattern 4: html tags without DOCTYPE
-		htmlContent = strings.TrimSpace(match[1])
-		matchType = "html_tag"
-	}
-
+	htmlContent, matchType := extractWebsiteHTML(fullContent)
 	if htmlContent != "" {
 		o.log.Info("website_agent: HTML extracted",
 			logger.String("match_type", matchType),
 			logger.Int("html_length", len(htmlContent)),
 			logger.String("html_preview", truncate(htmlContent, 80)))
 	} else {
-		o.log.Warn("website_agent: no HTML pattern matched",
-			logger.String("preview", truncate(fullContent, 200)))
+		o.log.Warn("website_agent: no HTML pattern matched", logger.String("preview", truncate(fullContent, 200)))
 	}
 
-	// Create and save artifact
-	if htmlContent != "" {
-		art := &model.Artifact{
-			ID:             uuid.New(),
-			ConversationID: conversationID,
-			Name:           "index.html",
-			Type:           "website",
-			Language:       "html",
-			Content:        htmlContent,
-			Version:        1,
-			CreatedAt:      time.Now(),
-			UpdatedAt:      time.Now(),
+	artifactID := o.saveWebsiteArtifact(ctx, conversationID, htmlContent)
+	o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, fullContent, artifactID)
+	o.sendWebsiteArtifactResult(ctx, outCh, artifactID)
+}
+
+func (o *Orchestrator) streamWebsiteAgentAttempt(
+	ctx context.Context,
+	outCh chan<- llm.Chunk,
+	contentBuilder *strings.Builder,
+	agent *model.Agent,
+	messages []llm.Message,
+	conversationID uuid.UUID,
+	maxTokens int,
+	attempt int,
+) (int, bool, error) {
+	req := llm.Request{
+		Model:       agent.Model,
+		Messages:    messages,
+		Temperature: 0.7,
+		MaxTokens:   maxTokens,
+		Stream:      true,
+	}
+
+	o.log.Info("website_agent: calling LLM Stream",
+		logger.String("model", agent.Model),
+		logger.Int("msg_count", len(messages)),
+		logger.Int("max_tokens", maxTokens),
+		logger.Int("attempt", attempt),
+		logger.String("conversation_id", conversationID.String()))
+
+	llmCtx, llmCancel := context.WithTimeout(ctx, websiteAgentTimeout)
+	defer llmCancel()
+
+	llmCh, err := o.llmClient.Stream(llmCtx, req)
+	if err != nil {
+		return 0, false, err
+	}
+
+	chunkCount := 0
+	firstChunkReceived := false
+	for chunk := range llmCh {
+		if !firstChunkReceived {
+			firstChunkReceived = true
+			o.log.Info("website_agent: received first chunk",
+				logger.Int("attempt", attempt),
+				logger.String("content_preview", truncate(chunk.Content, 50)))
 		}
-		if o.artRepo != nil {
-			if err := o.artRepo.Create(ctx, art); err != nil {
-				o.log.Error("website_agent: failed to save artifact",
-					logger.Error(err),
-					logger.String("conversation_id", conversationID.String()))
-				// Send error event so frontend knows something went wrong
-				select {
-				case outCh <- llm.Chunk{Event: "error", Content: "Error guardando el artifact. El HTML fue generado pero no se pudo guardar."}:
-				case <-ctx.Done():
-				}
-			} else {
-				artifactID = art.ID.String()
-				o.log.Info("website_agent: artifact saved",
-					logger.String("artifact_id", artifactID),
-					logger.Int("html_length", len(htmlContent)))
-			}
-		} else {
-			o.log.Warn("website_agent: artRepo is nil, artifact not saved")
+		chunkCount++
+
+		if chunk.Content == "" {
+			continue
+		}
+		contentBuilder.WriteString(chunk.Content)
+		select {
+		case outCh <- llm.Chunk{Content: chunk.Content}:
+		case <-ctx.Done():
+			o.log.Warn("website_agent: context cancelled during streaming")
+			return chunkCount, firstChunkReceived, ctx.Err()
 		}
 	}
 
-	// Save assistant message WITH artifact_id link
+	return chunkCount, firstChunkReceived, nil
+}
+
+func continuationMessages(base []llm.Message, fullContent string) []llm.Message {
+	messages := append([]llm.Message(nil), base...)
+	messages = append(messages,
+		llm.Message{Role: "assistant", Content: fullContent},
+		llm.Message{Role: "user", Content: `Continuá exactamente desde donde quedaste. No repitas lo anterior. Devolvé SOLO la continuación faltante para terminar el mismo documento HTML. Cerrá correctamente cualquier CSS, JS, body y html abierto.`},
+	)
+	return messages
+}
+
+func extractWebsiteHTML(content string) (string, string) {
+	if match := htmlBlockRegex.FindStringSubmatch(content); len(match) > 1 {
+		return strings.TrimSpace(match[1]), "markdown_code_block"
+	}
+	if match := doctypeRegex.FindStringSubmatch(content); len(match) > 1 {
+		return strings.TrimSpace(match[1]), "doctype_html"
+	}
+	if match := htmlTagRegex.FindStringSubmatch(content); len(match) > 1 {
+		return strings.TrimSpace(match[1]), "html_tag"
+	}
+	return "", ""
+}
+
+func needsWebsiteContinuation(html string) bool {
+	lower := strings.ToLower(html)
+	return strings.Contains(lower, "<html") && !strings.Contains(lower, "</html>") ||
+		strings.Contains(lower, "<style") && !strings.Contains(lower, "</style>") ||
+		strings.Contains(lower, "<script") && !strings.Contains(lower, "</script>") ||
+		strings.Contains(lower, "<body") && !strings.Contains(lower, "</body>")
+}
+
+func (o *Orchestrator) saveWebsiteArtifact(ctx context.Context, conversationID uuid.UUID, htmlContent string) string {
+	if htmlContent == "" {
+		return ""
+	}
+	art := &model.Artifact{
+		ID:             uuid.New(),
+		ConversationID: conversationID,
+		Name:           "index.html",
+		Type:           "website",
+		Language:       "html",
+		Content:        htmlContent,
+		Version:        1,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+	if o.artRepo == nil {
+		o.log.Warn("website_agent: artRepo is nil, artifact not saved")
+		return ""
+	}
+	if err := o.artRepo.Create(ctx, art); err != nil {
+		o.log.Error("website_agent: failed to save artifact", logger.Error(err), logger.String("conversation_id", conversationID.String()))
+		return ""
+	}
+	o.log.Info("website_agent: artifact saved", logger.String("artifact_id", art.ID.String()), logger.Int("html_length", len(htmlContent)))
+	return art.ID.String()
+}
+
+func (o *Orchestrator) saveWebsiteAssistantMessage(ctx context.Context, conversationID uuid.UUID, modelName, content, artifactID string) {
 	msg := &model.Message{
 		ID:             uuid.New(),
 		ConversationID: conversationID,
 		Role:           model.MessageRoleAssistant,
-		Content:        fullContent,
-		Model:          agent.Model,
+		Content:        content,
+		Model:          modelName,
 		CreatedAt:      time.Now(),
 	}
 	if artifactID != "" {
 		if artUUID, err := uuid.Parse(artifactID); err == nil {
 			msg.ArtifactID = &artUUID
-			o.log.Info("website_agent: linked artifact to message",
-				logger.String("message_id", msg.ID.String()),
-				logger.String("artifact_id", artifactID))
 		}
 	}
 	if err := o.sessions.AddMessage(ctx, msg); err != nil {
 		o.log.Error("website_agent: failed to save assistant message", logger.Error(err))
-	} else {
-		o.log.Info("website_agent: assistant message saved",
-			logger.String("message_id", msg.ID.String()),
-			logger.Int("content_length", len(fullContent)),
-			logger.String("artifact_id", artifactID))
+		return
 	}
+	o.log.Info("website_agent: assistant message saved", logger.String("message_id", msg.ID.String()), logger.Int("content_length", len(content)), logger.String("artifact_id", artifactID))
+}
 
-	// Send artifact event BEFORE done event
+func (o *Orchestrator) sendWebsiteArtifactResult(ctx context.Context, outCh chan<- llm.Chunk, artifactID string) {
 	if artifactID != "" {
-		o.log.Info("website_agent: sending artifact event", logger.String("artifact_id", artifactID))
 		select {
 		case outCh <- llm.Chunk{Event: "artifact", Content: artifactID}:
-			o.log.Info("website_agent: artifact event sent successfully")
 		case <-ctx.Done():
-			o.log.Warn("website_agent: context cancelled before sending artifact event")
 			return
 		}
 	} else {
-		o.log.Warn("website_agent: no artifact_id to send")
 		select {
-		case outCh <- llm.Chunk{Event: "error", Content: "No se encontró HTML en la respuesta. Intentá con una descripción más detallada."}:
+		case outCh <- llm.Chunk{Event: "error", Content: "No se encontró HTML utilizable en la respuesta. Intentá con una descripción más corta o usá un modelo habilitado para Website Agent."}:
 		case <-ctx.Done():
 			return
 		}
 	}
-
-	// Send single Done:true event at the very end
-	o.log.Info("website_agent: sending final done event")
 	select {
 	case outCh <- llm.Chunk{Done: true}:
 	case <-ctx.Done():
-		o.log.Warn("website_agent: context cancelled before sending done event")
 	}
 }

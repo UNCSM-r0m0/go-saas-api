@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,4 +66,87 @@ func (p *AIProvider) IsEnabled() bool {
 // IsEnabled returns true if the model is active.
 func (m *AIModel) IsEnabled() bool {
 	return m.IsActive
+}
+
+// SupportsWebsiteAgent returns true when this model is explicitly enabled for website generation.
+func (m *AIModel) SupportsWebsiteAgent() bool {
+	return configBool(m.Config, "supports_website_agent") || configBool(m.Config, "website_agent") || configNestedBool(m.Config, "capabilities", "website_agent")
+}
+
+// WebsiteAgentMaxTokens returns the model-specific output cap for website generation.
+func (m *AIModel) WebsiteAgentMaxTokens() int {
+	maxTokens := firstPositiveConfigInt(
+		configInt(m.Config, "website_agent_max_tokens"),
+		configInt(m.Config, "max_output_tokens"),
+		m.MaxTokens,
+		12000,
+	)
+	if maxTokens < 4096 {
+		return 4096
+	}
+	if maxTokens > 24000 {
+		return 24000
+	}
+	return maxTokens
+}
+
+func configBool(config map[string]any, key string) bool {
+	if config == nil {
+		return false
+	}
+	return anyBool(config[key])
+}
+
+func configNestedBool(config map[string]any, parent, key string) bool {
+	if config == nil {
+		return false
+	}
+	if nested, ok := config[parent].(map[string]any); ok {
+		return anyBool(nested[key])
+	}
+	return false
+}
+
+func configInt(config map[string]any, key string) int {
+	if config == nil {
+		return 0
+	}
+	return anyInt(config[key])
+}
+
+func firstPositiveConfigInt(values ...int) int {
+	for _, value := range values {
+		if value > 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func anyBool(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
+	default:
+		return false
+	}
+}
+
+func anyInt(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	default:
+		return 0
+	}
 }
