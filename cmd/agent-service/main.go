@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/r0lm0/go-saas-api/internal/agent/handler"
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/store"
@@ -28,6 +29,37 @@ import (
 	"time"
 )
 
+// runMigrations applies automatic database migrations
+func runMigrations(ctx context.Context, pool *pgxpool.Pool, log logger.Logger) error {
+	log.Info("running auto-migrations")
+
+	// Check if artifact_id column exists in messages table
+	var exists bool
+	err := pool.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'messages' AND column_name = 'artifact_id'
+		)`).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("check artifact_id column: %w", err)
+	}
+
+	if !exists {
+		log.Info("adding artifact_id column to messages table")
+		_, err = pool.Exec(ctx,
+			`ALTER TABLE messages 
+			 ADD COLUMN artifact_id UUID REFERENCES artifacts(id) ON DELETE SET NULL`)
+		if err != nil {
+			return fmt.Errorf("add artifact_id column: %w", err)
+		}
+		log.Info("artifact_id column added successfully")
+	} else {
+		log.Info("artifact_id column already exists")
+	}
+
+	return nil
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -48,6 +80,12 @@ func main() {
 		log.Fatal("failed to connect to postgres", logger.Error(err))
 	}
 	defer pgPool.Close()
+
+	// Auto-migration: ensure artifact_id column exists in messages table
+	if err := runMigrations(ctx, pgPool, log); err != nil {
+		log.Warn("auto-migration failed", logger.Error(err))
+	}
+
 	redisClient, err := redis.NewClient(cfg.RedisURL)
 	if err != nil {
 		log.Fatal("failed to connect to redis", logger.Error(err))
