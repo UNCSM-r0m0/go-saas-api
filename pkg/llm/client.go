@@ -31,11 +31,13 @@ type Request struct {
 }
 
 type Chunk struct {
-	Content  string    `json:"content"`
-	Done     bool      `json:"done"`
-	ToolCall *ToolCall `json:"tool_call,omitempty"`
-	Event    string    `json:"event,omitempty"`
-	ToolName string    `json:"tool_name,omitempty"`
+	Content      string    `json:"content"`
+	Done         bool      `json:"done"`
+	ToolCall     *ToolCall `json:"tool_call,omitempty"`
+	Event        string    `json:"event,omitempty"`
+	ToolName     string    `json:"tool_name,omitempty"`
+	ArtifactID   string    `json:"artifactId,omitempty"`
+	ArtifactType string    `json:"artifactType,omitempty"`
 }
 
 type ToolCall struct {

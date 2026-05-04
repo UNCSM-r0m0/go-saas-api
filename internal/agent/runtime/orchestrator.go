@@ -124,7 +124,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		outCh := make(chan llm.Chunk)
 		go func() {
 			defer close(outCh)
-			o.websiteAgentLoop(ctx, outCh, agent, messages, conversationID, capability.MaxTokens)
+			o.websiteAgentLoop(ctx, outCh, agent, messages, conversationID, capability.MaxTokens, content)
 		}()
 		return outCh, nil
 	}
@@ -313,23 +313,43 @@ var htmlBlockRegex = regexp.MustCompile("(?is)```(?:html|markup)\\s*(.*?)(?:```|
 var doctypeRegex = regexp.MustCompile("(?is)(<!DOCTYPE\\s+html\\b.*?</html>|<!DOCTYPE\\s+html\\b.*\\z)")
 var htmlTagRegex = regexp.MustCompile("(?is)(<html\\b.*?</html>|<html\\b.*\\z)")
 
-// multiFileRegex matches the === FILE: path === delimiter format
-var multiFileRegex = regexp.MustCompile("(?m)^===\\s*FILE:\\s*(.+?)\\s*===(.*?)(?=^===\\s*FILE:|^===\\s*END\\s*===|\\z)")
+// multiFileDelimiterRegex matches the === FILE: path === delimiter
+var multiFileDelimiterRegex = regexp.MustCompile("(?m)^===\\s*FILE:\\s*(.+?)\\s*===\\s*$")
 
 // parseMultiFile extracts files from the LLM output using the === FILE: path === format
 func parseMultiFile(content string) []model.ArtifactFile {
-	matches := multiFileRegex.FindAllStringSubmatch(content, -1)
+	// Find all delimiter positions with their paths
+	matches := multiFileDelimiterRegex.FindAllStringSubmatchIndex(content, -1)
 	if len(matches) == 0 {
 		return nil
 	}
 
 	var files []model.ArtifactFile
-	for i, match := range matches {
-		if len(match) < 3 {
+	for i := 0; i < len(matches); i++ {
+		match := matches[i]
+		if len(match) < 4 {
 			continue
 		}
-		path := strings.TrimSpace(match[1])
-		fileContent := strings.TrimSpace(match[2])
+
+		// Extract path from capture group
+		pathStart := match[2]
+		pathEnd := match[3]
+		path := strings.TrimSpace(content[pathStart:pathEnd])
+
+		// Extract content: from end of this delimiter to start of next delimiter (or end)
+		contentStart := match[1] // end of full match
+		contentEnd := len(content)
+		if i < len(matches)-1 {
+			contentEnd = matches[i+1][0] // start of next match
+		}
+
+		fileContent := strings.TrimSpace(content[contentStart:contentEnd])
+
+		// Remove trailing === END === or similar delimiter if present
+		if idx := strings.Index(fileContent, "==="); idx != -1 {
+			fileContent = strings.TrimSpace(fileContent[:idx])
+		}
+
 		if path == "" || fileContent == "" {
 			continue
 		}
@@ -384,6 +404,7 @@ func (o *Orchestrator) websiteAgentLoop(
 	messages []llm.Message,
 	conversationID uuid.UUID,
 	maxTokens int,
+	userContent string,
 ) {
 	select {
 	case outCh <- llm.Chunk{Event: "progress", Content: "Generando sitio web..."}:
@@ -482,7 +503,15 @@ func (o *Orchestrator) websiteAgentLoop(
 		artifactID = o.saveWebsiteArtifact(ctx, conversationID, htmlContent, nil)
 	}
 
-	o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, fullContent, artifactID)
+	// Generate clean summary for chat message
+	summary := o.generateProjectSummary(files, htmlContent)
+	o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, summary, artifactID)
+
+	// Generate title after successful artifact creation
+	if userContent != "" {
+		go o.generateAndSaveTitle(ctx, conversationID, conversationID, userContent)
+	}
+
 	o.sendWebsiteArtifactResult(ctx, outCh, artifactID)
 }
 
@@ -650,7 +679,11 @@ func (o *Orchestrator) saveWebsiteAssistantMessage(ctx context.Context, conversa
 func (o *Orchestrator) sendWebsiteArtifactResult(ctx context.Context, outCh chan<- llm.Chunk, artifactID string) {
 	if artifactID != "" {
 		select {
-		case outCh <- llm.Chunk{Event: "artifact", Content: artifactID}:
+		case outCh <- llm.Chunk{
+			Event:        "artifact",
+			ArtifactID:   artifactID,
+			ArtifactType: "website",
+		}:
 		case <-ctx.Done():
 			return
 		}
@@ -673,4 +706,15 @@ func getFilePaths(files []model.ArtifactFile) []string {
 		paths[i] = f.Path
 	}
 	return paths
+}
+
+func (o *Orchestrator) generateProjectSummary(files []model.ArtifactFile, htmlContent string) string {
+	if len(files) > 0 {
+		fileList := strings.Join(getFilePaths(files), ", ")
+		return fmt.Sprintf("🎨 **Landing Page generada**\n\nSe creó un proyecto web con %d archivos:\n- %s\n\nHacé clic en **'Ver en Sandbox'** para previsualizar y editar el sitio.", len(files), fileList)
+	}
+	if htmlContent != "" {
+		return "🎨 **Landing Page generada**\n\nSe creó una página HTML. Hacé clic en **'Ver en Sandbox'** para previsualizar."
+	}
+	return "🎨 Se intentó generar una landing page pero no se encontró contenido válido."
 }
