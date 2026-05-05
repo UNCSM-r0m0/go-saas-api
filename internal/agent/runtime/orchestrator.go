@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -20,32 +21,32 @@ import (
 )
 
 type Orchestrator struct {
-	llmClient    llm.Client
-	registry     *tools.Registry
-	sessions     *SessionManager
-	agentRepo    repository.AgentRepo
-	artRepo      repository.ArtifactRepo
-	artFileRepo  repository.ArtifactFileRepo
-	fileSvc      *fileupload.Service
-	docClient    *document.Client
-	providers    provider.Store
-	classifier   *LLMClassifier
-	log          logger.Logger
+	llmClient   llm.Client
+	registry    *tools.Registry
+	sessions    *SessionManager
+	agentRepo   repository.AgentRepo
+	artRepo     repository.ArtifactRepo
+	artFileRepo repository.ArtifactFileRepo
+	fileSvc     *fileupload.Service
+	docClient   *document.Client
+	providers   provider.Store
+	classifier  *LLMClassifier
+	log         logger.Logger
 }
 
 func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, artFileRepo repository.ArtifactFileRepo, fileSvc *fileupload.Service, docClient *document.Client, providers provider.Store, log logger.Logger) *Orchestrator {
 	return &Orchestrator{
-		llmClient:    client,
-		registry:     registry,
-		sessions:     sessions,
-		agentRepo:    agentRepo,
-		artRepo:      artRepo,
-		artFileRepo:  artFileRepo,
-		fileSvc:      fileSvc,
-		docClient:    docClient,
-		providers:    providers,
-		classifier:   NewLLMClassifier(client),
-		log:          log,
+		llmClient:   client,
+		registry:    registry,
+		sessions:    sessions,
+		agentRepo:   agentRepo,
+		artRepo:     artRepo,
+		artFileRepo: artFileRepo,
+		fileSvc:     fileSvc,
+		docClient:   docClient,
+		providers:   providers,
+		classifier:  NewLLMClassifier(client),
+		log:         log,
 	}
 }
 
@@ -315,6 +316,7 @@ var htmlTagRegex = regexp.MustCompile("(?is)(<html\\b.*?</html>|<html\\b.*\\z)")
 
 // multiFileDelimiterRegex matches the === FILE: path === delimiter
 var multiFileDelimiterRegex = regexp.MustCompile("(?m)^===\\s*FILE:\\s*(.+?)\\s*===\\s*$")
+var relativeImportRegex = regexp.MustCompile(`(?m)^\s*import\s+(?:.+?\s+from\s+)?['"](\.{1,2}/[^'"]+)['"]`)
 
 // parseMultiFile extracts files from the LLM output using the === FILE: path === format
 func parseMultiFile(content string) []model.ArtifactFile {
@@ -369,6 +371,256 @@ func parseMultiFile(content string) []model.ArtifactFile {
 	return files
 }
 
+type websiteFileIssue struct {
+	Path   string
+	Issue  string
+	LineNo int
+}
+
+func validateWebsiteProjectFiles(files []model.ArtifactFile) []websiteFileIssue {
+	existing := make(map[string]bool, len(files))
+	for _, f := range files {
+		existing[path.Clean(f.Path)] = true
+	}
+
+	var issues []websiteFileIssue
+	for _, f := range files {
+		cleanPath := path.Clean(f.Path)
+		if !isCodeFile(cleanPath) {
+			continue
+		}
+
+		content := strings.TrimSpace(f.Content)
+		if content == "" {
+			issues = append(issues, websiteFileIssue{Path: cleanPath, Issue: "archivo vacío"})
+			continue
+		}
+
+		lines := strings.Split(content, "\n")
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "import {") && strings.Count(trimmed, "{") > strings.Count(trimmed, "}") {
+				issues = append(issues, websiteFileIssue{Path: cleanPath, Issue: "import incompleto o truncado", LineNo: i + 1})
+				break
+			}
+			if strings.HasPrefix(trimmed, "import ") &&
+				!strings.Contains(trimmed, " from ") &&
+				!strings.HasPrefix(trimmed, "import '") &&
+				!strings.HasPrefix(trimmed, "import \"") &&
+				!strings.HasSuffix(trimmed, ";") {
+				issues = append(issues, websiteFileIssue{Path: cleanPath, Issue: "import inválido", LineNo: i + 1})
+				break
+			}
+		}
+
+		if strings.HasSuffix(content, "import") ||
+			strings.HasSuffix(content, "transition") ||
+			strings.HasSuffix(content, "className") ||
+			strings.HasSuffix(content, "=>") ||
+			strings.HasSuffix(content, "(") ||
+			strings.HasSuffix(content, "{") ||
+			strings.HasSuffix(content, "[") ||
+			strings.HasSuffix(content, ",") {
+			issues = append(issues, websiteFileIssue{Path: cleanPath, Issue: "archivo probablemente truncado"})
+			continue
+		}
+
+		if unbalanced := firstUnbalancedDelimiter(content); unbalanced != "" {
+			issues = append(issues, websiteFileIssue{Path: cleanPath, Issue: "delimitadores sin cerrar: " + unbalanced})
+			continue
+		}
+
+		for _, specifier := range relativeImportRegex.FindAllStringSubmatch(content, -1) {
+			if len(specifier) < 2 {
+				continue
+			}
+			if !relativeImportExists(cleanPath, specifier[1], existing) {
+				issues = append(issues, websiteFileIssue{Path: cleanPath, Issue: "import local apunta a archivo inexistente: " + specifier[1]})
+				break
+			}
+		}
+	}
+	return issues
+}
+
+func isCodeFile(filePath string) bool {
+	return strings.HasSuffix(filePath, ".tsx") ||
+		strings.HasSuffix(filePath, ".ts") ||
+		strings.HasSuffix(filePath, ".jsx") ||
+		strings.HasSuffix(filePath, ".js")
+}
+
+func firstUnbalancedDelimiter(content string) string {
+	pairs := map[rune]rune{')': '(', ']': '[', '}': '{'}
+	var stack []rune
+	var quote rune
+	escaped := false
+
+	for _, r := range content {
+		if quote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if r == '\\' {
+				escaped = true
+				continue
+			}
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		if r == '\'' || r == '"' || r == '`' {
+			quote = r
+			continue
+		}
+		if r == '(' || r == '[' || r == '{' {
+			stack = append(stack, r)
+			continue
+		}
+		if expected, ok := pairs[r]; ok {
+			if len(stack) == 0 || stack[len(stack)-1] != expected {
+				return string(r)
+			}
+			stack = stack[:len(stack)-1]
+		}
+	}
+
+	if quote != 0 {
+		return "quote"
+	}
+	if len(stack) > 0 {
+		return string(stack[len(stack)-1])
+	}
+	return ""
+}
+
+func relativeImportExists(fromPath, specifier string, existing map[string]bool) bool {
+	base := path.Clean(path.Join(path.Dir(fromPath), specifier))
+	candidates := []string{
+		base,
+		base + ".tsx",
+		base + ".ts",
+		base + ".jsx",
+		base + ".js",
+		path.Join(base, "index.tsx"),
+		path.Join(base, "index.ts"),
+		path.Join(base, "index.jsx"),
+		path.Join(base, "index.js"),
+	}
+	for _, candidate := range candidates {
+		if existing[path.Clean(candidate)] {
+			return true
+		}
+	}
+	return false
+}
+
+func formatWebsiteFileIssues(issues []websiteFileIssue) string {
+	var b strings.Builder
+	for _, issue := range issues {
+		if issue.LineNo > 0 {
+			fmt.Fprintf(&b, "- %s:%d: %s\n", issue.Path, issue.LineNo, issue.Issue)
+		} else {
+			fmt.Fprintf(&b, "- %s: %s\n", issue.Path, issue.Issue)
+		}
+	}
+	return b.String()
+}
+
+func (o *Orchestrator) repairWebsiteProjectFiles(ctx context.Context, agent *model.Agent, files []model.ArtifactFile, issues []websiteFileIssue, maxTokens int) []model.ArtifactFile {
+	if o.llmClient == nil || len(issues) == 0 {
+		return files
+	}
+
+	invalidPaths := make(map[string]bool, len(issues))
+	for _, issue := range issues {
+		invalidPaths[path.Clean(issue.Path)] = true
+	}
+
+	var prompt strings.Builder
+	prompt.WriteString(`Repará SOLO los archivos inválidos de este proyecto React/Vite.
+
+REGLAS OBLIGATORIAS:
+- Respondé únicamente con bloques === FILE: path ===.
+- Devolvé el contenido COMPLETO de cada archivo reparado.
+- No uses markdown, explicaciones ni texto fuera de los bloques.
+- No renombres archivos.
+- No dejes imports, JSX, arrays, objetos, funciones o strings incompletos.
+- Si un import local apunta a un archivo inexistente, eliminá ese import y resolvélo dentro del mismo archivo o usando un archivo existente.
+- Todos los imports deben estar cerrados correctamente.
+- Mantené React 19 + TypeScript + Tailwind.
+
+Problemas detectados:
+`)
+	prompt.WriteString(formatWebsiteFileIssues(issues))
+	prompt.WriteString("\nArchivos inválidos actuales:\n")
+
+	for _, f := range files {
+		cleanPath := path.Clean(f.Path)
+		if !invalidPaths[cleanPath] {
+			continue
+		}
+		fmt.Fprintf(&prompt, "\n=== FILE: %s ===\n%s\n", cleanPath, f.Content)
+	}
+	prompt.WriteString("\n=== END ===")
+
+	repairCtx, cancel := context.WithTimeout(ctx, websiteAgentTimeout)
+	defer cancel()
+
+	content, err := o.llmClient.Complete(repairCtx, llm.Request{
+		Model:       agent.Model,
+		Messages:    []llm.Message{{Role: "system", Content: prompts.WebsiteAgent()}, {Role: "user", Content: prompt.String()}},
+		Temperature: 0.2,
+		MaxTokens:   maxTokens,
+		Stream:      false,
+	})
+	if err != nil {
+		o.log.Error("website_agent: repair request failed", logger.Error(err))
+		return files
+	}
+
+	repairedFiles := parseMultiFile(content)
+	if len(repairedFiles) == 0 {
+		o.log.Warn("website_agent: repair produced no parseable files", logger.String("preview", truncate(content, 200)))
+		return files
+	}
+
+	o.log.Info("website_agent: repaired project files",
+		logger.Int("requested", len(invalidPaths)),
+		logger.Int("received", len(repairedFiles)))
+
+	return mergeArtifactFiles(files, repairedFiles)
+}
+
+func mergeArtifactFiles(base []model.ArtifactFile, replacements []model.ArtifactFile) []model.ArtifactFile {
+	indexByPath := make(map[string]int, len(base))
+	for i, f := range base {
+		indexByPath[path.Clean(f.Path)] = i
+	}
+
+	for _, replacement := range replacements {
+		cleanPath := path.Clean(replacement.Path)
+		idx, ok := indexByPath[cleanPath]
+		if !ok {
+			continue
+		}
+
+		replacement.Path = cleanPath
+		replacement.ID = base[idx].ID
+		replacement.ArtifactID = base[idx].ArtifactID
+		replacement.FileOrder = base[idx].FileOrder
+		if replacement.Language == "" {
+			replacement.Language = detectLanguageFromPath(cleanPath)
+		}
+		base[idx] = replacement
+	}
+
+	return base
+}
+
 func detectLanguageFromPath(path string) string {
 	ext := ""
 	if idx := strings.LastIndex(path, "."); idx != -1 {
@@ -381,9 +633,9 @@ func detectLanguageFromPath(path string) string {
 		"js": "javascript", "jsx": "jsx",
 		"ts": "typescript", "tsx": "tsx",
 		"json": "json",
-		"md": "markdown",
-		"py": "python",
-		"go": "go",
+		"md":   "markdown",
+		"py":   "python",
+		"go":   "go",
 	}
 
 	if lang, ok := langMap[ext]; ok {
@@ -395,6 +647,7 @@ func detectLanguageFromPath(path string) string {
 const websiteAgentTimeout = 180 * time.Second // 3 minutos para landing pages completas
 const firstChunkTimeout = 45 * time.Second
 const maxWebsiteContinuations = 2
+const maxWebsiteRepairAttempts = 2
 
 // websiteAgentLoop streams one or more LLM responses without tools, then extracts a website artifact.
 func (o *Orchestrator) websiteAgentLoop(
@@ -478,6 +731,44 @@ func (o *Orchestrator) websiteAgentLoop(
 		o.log.Info("website_agent: multi-file project detected",
 			logger.Int("file_count", len(files)),
 			logger.String("files", strings.Join(getFilePaths(files), ", ")))
+
+		for attempt := 1; attempt <= maxWebsiteRepairAttempts; attempt++ {
+			issues := validateWebsiteProjectFiles(files)
+			if len(issues) == 0 {
+				break
+			}
+
+			o.log.Warn("website_agent: project has invalid files, requesting repair",
+				logger.Int("attempt", attempt),
+				logger.Int("issue_count", len(issues)),
+				logger.String("issues", truncate(formatWebsiteFileIssues(issues), 500)))
+			select {
+			case outCh <- llm.Chunk{Event: "progress", Content: "Reparando archivos incompletos..."}:
+			case <-ctx.Done():
+				return
+			}
+			files = o.repairWebsiteProjectFiles(ctx, agent, files, issues, maxTokens)
+		}
+
+		if remaining := validateWebsiteProjectFiles(files); len(remaining) > 0 {
+			o.log.Warn("website_agent: project rejected after repair",
+				logger.Int("issue_count", len(remaining)),
+				logger.String("issues", truncate(formatWebsiteFileIssues(remaining), 500)))
+
+			message := "No pude completar un proyecto web válido. Detecté archivos incompletos después de reparar; probá pedirlo con menos secciones o un alcance más chico."
+			o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, message, "")
+
+			select {
+			case outCh <- llm.Chunk{Event: "error", Content: "No pude completar un proyecto web válido. Detecté archivos incompletos; probá pedirlo más simple o con menos secciones."}:
+			case <-ctx.Done():
+				return
+			}
+			select {
+			case outCh <- llm.Chunk{Done: true}:
+			case <-ctx.Done():
+			}
+			return
+		}
 
 		// Find entry HTML file
 		for _, f := range files {

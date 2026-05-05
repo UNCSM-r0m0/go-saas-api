@@ -179,5 +179,10 @@ REGLAS IMPORTANTES:
 7. Diseño responsive (mobile-first)
 8. No uses CSS modules, solo Tailwind
 9. No expliques el código, solo generá archivos
-10. Al final incluí: === END ===`
+10. Generá pocos archivos bien completos: máximo 8 componentes dentro de src/components
+11. NUNCA cortes un import, array, objeto, JSX, función, string o className a medias
+12. Si te falta presupuesto de tokens, simplificá el diseño y NO agregues más archivos
+13. Cada import local debe apuntar a un archivo incluido en la respuesta
+14. Cada archivo TSX debe compilar por sí mismo: imports cerrados, JSX balanceado, export default válido
+15. Al final incluí: === END ===`
 }
