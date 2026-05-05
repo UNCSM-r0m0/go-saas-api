@@ -79,13 +79,13 @@ func (m *AIModel) WebsiteAgentMaxTokens() int {
 		configInt(m.Config, "website_agent_max_tokens"),
 		configInt(m.Config, "max_output_tokens"),
 		m.MaxTokens,
-		12000,
+		16000,
 	)
 	if maxTokens < 4096 {
 		return 4096
 	}
-	if maxTokens > 24000 {
-		return 24000
+	if maxTokens > 64000 {
+		return 64000
 	}
 	return maxTokens
 }

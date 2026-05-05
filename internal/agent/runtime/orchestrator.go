@@ -289,7 +289,7 @@ type websiteAgentCapability struct {
 }
 
 func (o *Orchestrator) resolveWebsiteAgentCapability(ctx context.Context, modelName string) (websiteAgentCapability, error) {
-	const fallbackMaxTokens = 12000
+	const fallbackMaxTokens = 16000
 	if o.providers == nil {
 		return websiteAgentCapability{MaxTokens: fallbackMaxTokens}, nil
 	}
@@ -644,9 +644,9 @@ func detectLanguageFromPath(path string) string {
 	return "text"
 }
 
-const websiteAgentTimeout = 180 * time.Second // 3 minutos para landing pages completas
+const websiteAgentTimeout = 300 * time.Second // 5 minutos para landing pages con Framer Motion + animaciones
 const firstChunkTimeout = 45 * time.Second
-const maxWebsiteContinuations = 2
+const maxWebsiteContinuations = 4
 const maxWebsiteRepairAttempts = 2
 
 // websiteAgentLoop streams one or more LLM responses without tools, then extracts a website artifact.
