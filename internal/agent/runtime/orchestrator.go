@@ -567,8 +567,13 @@ Problemas detectados:
 	}
 	prompt.WriteString("\n=== END ===")
 
-	repairCtx, cancel := context.WithTimeout(ctx, websiteAgentTimeout)
+repairCtx, cancel := context.WithTimeout(ctx, websiteAgentTimeout)
 	defer cancel()
+
+	o.log.Info("🔧 website_agent: calling LLM for repair",
+		logger.String("model", agent.Model),
+		logger.Int("max_tokens", maxTokens),
+		logger.Int("invalid_file_count", len(invalidPaths)))
 
 	content, err := o.llmClient.Complete(repairCtx, llm.Request{
 		Model:       agent.Model,
@@ -578,19 +583,21 @@ Problemas detectados:
 		Stream:      false,
 	})
 	if err != nil {
-		o.log.Error("website_agent: repair request failed", logger.Error(err))
+		o.log.Error("❌ website_agent: repair request FAILED", logger.Error(err))
 		return files
 	}
 
 	repairedFiles := parseMultiFile(content)
 	if len(repairedFiles) == 0 {
-		o.log.Warn("website_agent: repair produced no parseable files", logger.String("preview", truncate(content, 200)))
+		o.log.Warn("⚠️ website_agent: repair produced no parseable files",
+			logger.String("content_preview", truncate(content, 300)),
+			logger.Int("content_length", len(content)))
 		return files
 	}
 
-	o.log.Info("website_agent: repaired project files",
-		logger.Int("requested", len(invalidPaths)),
-		logger.Int("received", len(repairedFiles)))
+	o.log.Info("✅ website_agent: repair SUCCESS",
+		logger.Int("files_requested", len(invalidPaths)),
+		logger.Int("files_repaired", len(repairedFiles)))
 
 	return mergeArtifactFiles(files, repairedFiles)
 }
@@ -665,6 +672,12 @@ func (o *Orchestrator) websiteAgentLoop(
 		return
 	}
 
+	o.log.Info("🚀 website_agent: START",
+		logger.String("model", agent.Model),
+		logger.Int("max_tokens", maxTokens),
+		logger.Int("max_attempts", 1+maxWebsiteContinuations),
+		logger.String("conversation_id", conversationID.String()))
+
 	var contentBuilder strings.Builder
 	attemptMessages := append([]llm.Message(nil), messages...)
 	totalChunks := 0
@@ -682,7 +695,10 @@ func (o *Orchestrator) websiteAgentLoop(
 		chunks, gotFirstChunk, err := o.streamWebsiteAgentAttempt(ctx, outCh, &contentBuilder, agent, attemptMessages, conversationID, maxTokens, attempt)
 		totalChunks += chunks
 		if err != nil {
-			o.log.Error("website_agent: stream attempt failed", logger.Error(err), logger.Int("attempt", attempt))
+			o.log.Error("❌ website_agent: stream attempt FAILED",
+				logger.Error(err),
+				logger.Int("attempt", attempt),
+				logger.Int("total_chunks_so_far", totalChunks))
 			select {
 			case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("Error generando sitio web: %v", err)}:
 			case <-ctx.Done():
@@ -690,7 +706,8 @@ func (o *Orchestrator) websiteAgentLoop(
 			return
 		}
 		if !gotFirstChunk {
-			o.log.Warn("website_agent: stream closed without chunks", logger.Int("attempt", attempt))
+			o.log.Warn("⚠️ website_agent: stream closed without ANY chunks",
+				logger.Int("attempt", attempt))
 			select {
 			case outCh <- llm.Chunk{Event: "error", Content: "El agente no devolvió contenido. Reintentá con una instrucción más corta."}:
 			case <-ctx.Done():
@@ -700,20 +717,38 @@ func (o *Orchestrator) websiteAgentLoop(
 
 		fullContent := contentBuilder.String()
 		htmlContent, _ := extractWebsiteHTML(fullContent)
-		if htmlContent != "" && !needsWebsiteContinuation(htmlContent) {
+		needsMore := htmlContent != "" && needsWebsiteContinuation(htmlContent)
+
+		o.log.Info("📝 website_agent: attempt result",
+			logger.Int("attempt", attempt),
+			logger.Int("chunks_this_attempt", chunks),
+			logger.Int("total_content_length", len(fullContent)),
+			logger.Bool("needs_continuation", needsMore))
+
+		if !needsMore {
+			o.log.Info("✅ website_agent: content complete, stopping",
+				logger.Int("attempt", attempt))
 			break
 		}
 		if attempt == maxAttempts {
+			o.log.Warn("⚠️ website_agent: max attempts reached, using what we have",
+				logger.Int("max_attempts", maxAttempts),
+				logger.Int("content_length", len(fullContent)))
 			break
 		}
+
+		o.log.Info("🔄 website_agent: requesting continuation",
+			logger.Int("next_attempt", attempt+1),
+			logger.Int("content_length_so_far", len(fullContent)))
 
 		attemptMessages = continuationMessages(messages, fullContent)
 	}
 
 	fullContent := contentBuilder.String()
-	o.log.Info("website_agent: stream complete",
-		logger.Int("chunks", totalChunks),
-		logger.Int("content_length", len(fullContent)))
+	o.log.Info("📊 website_agent: STREAM COMPLETE",
+		logger.Int("total_chunks", totalChunks),
+		logger.Int("content_length", len(fullContent)),
+		logger.Int("content_length_kb", len(fullContent)/1024))
 
 	select {
 	case outCh <- llm.Chunk{Event: "progress", Content: "Extrayendo archivos..."}:
@@ -724,21 +759,26 @@ func (o *Orchestrator) websiteAgentLoop(
 
 	// Try multi-file format first
 	files := parseMultiFile(fullContent)
+
+	o.log.Info("📦 website_agent: EXTRACTING FILES",
+		logger.Bool("is_multi_file", len(files) > 0),
+		logger.Int("file_count", len(files)))
 	var htmlContent string
 	var artifactID string
 
 	if len(files) > 0 {
-		o.log.Info("website_agent: multi-file project detected",
+		o.log.Info("📁 website_agent: multi-file project detected",
 			logger.Int("file_count", len(files)),
 			logger.String("files", strings.Join(getFilePaths(files), ", ")))
 
 		for attempt := 1; attempt <= maxWebsiteRepairAttempts; attempt++ {
 			issues := validateWebsiteProjectFiles(files)
 			if len(issues) == 0 {
+				o.log.Info("✅ website_agent: all files valid, no repair needed")
 				break
 			}
 
-			o.log.Warn("website_agent: project has invalid files, requesting repair",
+			o.log.Warn("🔧 website_agent: REPAIR needed",
 				logger.Int("attempt", attempt),
 				logger.Int("issue_count", len(issues)),
 				logger.String("issues", truncate(formatWebsiteFileIssues(issues), 500)))
@@ -748,11 +788,14 @@ func (o *Orchestrator) websiteAgentLoop(
 				return
 			}
 			files = o.repairWebsiteProjectFiles(ctx, agent, files, issues, maxTokens)
+			o.log.Info("🔧 website_agent: repair attempt done",
+				logger.Int("attempt", attempt),
+				logger.Int("file_count_after_repair", len(files)))
 		}
 
 		if remaining := validateWebsiteProjectFiles(files); len(remaining) > 0 {
-			o.log.Warn("website_agent: project rejected after repair",
-				logger.Int("issue_count", len(remaining)),
+			o.log.Error("❌ website_agent: REPAIR FAILED — files still invalid after all attempts",
+				logger.Int("remaining_issues", len(remaining)),
 				logger.String("issues", truncate(formatWebsiteFileIssues(remaining), 500)))
 
 			message := "No pude completar un proyecto web válido. Detecté archivos incompletos después de reparar; probá pedirlo con menos secciones o un alcance más chico."
@@ -779,19 +822,27 @@ func (o *Orchestrator) websiteAgentLoop(
 		}
 
 		artifactID = o.saveWebsiteArtifact(ctx, conversationID, htmlContent, files)
+
+		o.log.Info("🎉 website_agent: PROJECT COMPLETE",
+			logger.String("artifact_id", artifactID),
+			logger.Int("file_count", len(files)),
+			logger.String("files", strings.Join(getFilePaths(files), ", ")))
 	} else {
 		// Fallback to single HTML extraction
 		htmlContent, matchType := extractWebsiteHTML(fullContent)
 		if htmlContent != "" {
-			o.log.Info("website_agent: HTML extracted",
+			o.log.Info("📄 website_agent: single HTML extracted",
 				logger.String("match_type", matchType),
 				logger.Int("html_length", len(htmlContent)),
 				logger.String("html_preview", truncate(htmlContent, 80)))
 		} else {
-			o.log.Warn("website_agent: no HTML pattern matched", logger.String("preview", truncate(fullContent, 200)))
+			o.log.Warn("⚠️ website_agent: no HTML pattern matched", logger.String("preview", truncate(fullContent, 200)))
 		}
 
 		artifactID = o.saveWebsiteArtifact(ctx, conversationID, htmlContent, nil)
+		o.log.Info("🎉 website_agent: SINGLE HTML COMPLETE",
+			logger.String("artifact_id", artifactID),
+			logger.Int("html_length", len(htmlContent)))
 	}
 
 	// Generate clean summary for chat message
@@ -824,7 +875,7 @@ func (o *Orchestrator) streamWebsiteAgentAttempt(
 		Stream:      true,
 	}
 
-	o.log.Info("website_agent: calling LLM Stream",
+	o.log.Info("🌐 website_agent: calling LLM Stream",
 		logger.String("model", agent.Model),
 		logger.Int("msg_count", len(messages)),
 		logger.Int("max_tokens", maxTokens),
@@ -844,9 +895,10 @@ func (o *Orchestrator) streamWebsiteAgentAttempt(
 	for chunk := range llmCh {
 		if !firstChunkReceived {
 			firstChunkReceived = true
-			o.log.Info("website_agent: received first chunk",
+			o.log.Info("📨 website_agent: FIRST chunk received",
 				logger.Int("attempt", attempt),
-				logger.String("content_preview", truncate(chunk.Content, 50)))
+				logger.Int("chunk_number", chunkCount),
+				logger.String("preview", truncate(chunk.Content, 80)))
 		}
 		chunkCount++
 
@@ -857,10 +909,17 @@ func (o *Orchestrator) streamWebsiteAgentAttempt(
 		select {
 		case outCh <- llm.Chunk{Content: chunk.Content}:
 		case <-ctx.Done():
-			o.log.Warn("website_agent: context cancelled during streaming")
+			o.log.Warn("⚠️ website_agent: context cancelled during streaming",
+			logger.Int("attempt", attempt),
+			logger.Int("chunks_received", chunkCount))
 			return chunkCount, firstChunkReceived, ctx.Err()
 		}
 	}
+
+	o.log.Info("📡 website_agent: stream ended",
+		logger.Int("attempt", attempt),
+		logger.Int("total_chunks", chunkCount),
+		logger.Int("content_length", contentBuilder.Len()))
 
 	return chunkCount, firstChunkReceived, nil
 }
