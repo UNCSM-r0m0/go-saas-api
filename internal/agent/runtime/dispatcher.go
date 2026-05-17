@@ -1,57 +1,66 @@
 package runtime
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
-// BuildRequest constructs an LLM request for the given agent, history, and user message.
-func BuildRequest(agent *model.Agent, history []model.Message, userMessage string, toolList []tools.Tool) llm.Request {
+func BuildMessages(agent *model.Agent, history []model.Message, userMessage string, userContext string) []llm.Message {
 	var messages []llm.Message
 
-	// System prompt
 	systemContent := agent.SystemPrompt
 	if systemContent == "" {
 		systemContent = string(agent.Role)
 	}
-
-	// Append available tools to system prompt
-	if len(toolList) > 0 {
-		var desc strings.Builder
-		desc.WriteString("\n\nYou have access to the following tools:\n")
-		for _, t := range toolList {
-			desc.WriteString(fmt.Sprintf("- %s: %s\n", t.Name(), t.Description()))
-		}
-		desc.WriteString("\nTo use a tool, respond exactly with:\n" +
-			"TOOL_CALL: {\"tool\":\"name\",\"args\":{...}} :END_TOOL_CALL\n" +
-			"Otherwise respond normally.")
-		systemContent += desc.String()
+	if userContext != "" {
+		systemContent += userContext
 	}
-
 	messages = append(messages, llm.Message{Role: "system", Content: systemContent})
 
-	// History
 	for _, h := range history {
-		role := string(h.Role)
-		content := h.Content
-		if len(h.ToolCalls) > 0 {
-			content += "\n[tool calls]"
+		switch h.Role {
+		case model.MessageRoleUser, model.MessageRoleSystem:
+			messages = append(messages, llm.Message{Role: string(h.Role), Content: h.Content})
+		case model.MessageRoleAssistant:
+			if len(h.ToolCalls) > 0 {
+				toolCalls := make([]llm.ToolCall, len(h.ToolCalls))
+				for i, tc := range h.ToolCalls {
+					toolCalls[i] = llm.ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments}
+				}
+				messages = append(messages, llm.Message{
+					Role:      "assistant",
+					Content:   h.Content,
+					ToolCalls: toolCalls,
+				})
+			} else {
+				messages = append(messages, llm.Message{Role: "assistant", Content: h.Content})
+			}
+		case model.MessageRoleTool:
+			messages = append(messages, llm.Message{
+				Role:       "tool",
+				Content:    h.Content,
+				ToolCallID: h.ToolCallID,
+				Name:       h.ToolName,
+			})
 		}
-		messages = append(messages, llm.Message{Role: role, Content: content})
 	}
 
-	// User message
 	messages = append(messages, llm.Message{Role: "user", Content: userMessage})
+	return messages
+}
 
-	return llm.Request{
-		Model:       agent.Model,
-		Messages:    messages,
-		Temperature: 0.7,
-		MaxTokens:   4096,
-		Stream:      true,
+func BuildToolDefinitions(toolList []tools.Tool) []llm.ToolDefinition {
+	var toolDefs []llm.ToolDefinition
+	for _, t := range toolList {
+		toolDefs = append(toolDefs, llm.ToolDefinition{
+			Type: "function",
+			Function: llm.FunctionSchema{
+				Name:        t.Name(),
+				Description: t.Description(),
+				Parameters:  t.Schema(),
+			},
+		})
 	}
+	return toolDefs
 }

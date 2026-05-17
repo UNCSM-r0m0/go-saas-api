@@ -27,6 +27,20 @@ func (f *FileWriteTool) Description() string {
 	return "Write a file with the given name, type, language, and content. Creates an artifact."
 }
 
+// Schema returns the JSON Schema for the tool's parameters.
+func (f *FileWriteTool) Schema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name":     map[string]any{"type": "string", "description": "File name including extension"},
+			"content":  map[string]any{"type": "string", "description": "File content"},
+			"type":     map[string]any{"type": "string", "description": "File MIME type"},
+			"language": map[string]any{"type": "string", "description": "Programming language"},
+		},
+		"required": []string{"name", "content"},
+	}
+}
+
 // Execute writes the file to the artifact store.
 func (f *FileWriteTool) Execute(ctx context.Context, args map[string]any) (Result, error) {
 	name, ok := args["name"].(string)
@@ -37,13 +51,11 @@ func (f *FileWriteTool) Execute(ctx context.Context, args map[string]any) (Resul
 	fileType, _ := args["type"].(string)
 	language, _ := args["language"].(string)
 
-	// Extract tenant_id and conversation_id from context (injected by runtime)
-	tenantID, _ := ctx.Value("tenant_id").(uuid.UUID)
+	// Extract conversation_id from context (injected by runtime)
 	convID, _ := ctx.Value("conversation_id").(uuid.UUID)
 
 	art := &model.Artifact{
 		ID:             uuid.New(),
-		TenantID:       tenantID,
 		ConversationID: convID,
 		Name:           name,
 		Type:           fileType,

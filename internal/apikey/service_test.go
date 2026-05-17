@@ -21,7 +21,7 @@ func (m *memStore) GetByKeyHash(_ context.Context, hash string) (*APIKey, error)
 	return m.keys[hash], nil
 }
 
-func (m *memStore) ListByUser(_ context.Context, _, userID uuid.UUID) ([]APIKey, error) {
+func (m *memStore) ListByUser(_ context.Context, userID uuid.UUID) ([]APIKey, error) {
 	var list []APIKey
 	for _, k := range m.keys {
 		if k.UserID == userID && k.RevokedAt == nil {
@@ -31,7 +31,7 @@ func (m *memStore) ListByUser(_ context.Context, _, userID uuid.UUID) ([]APIKey,
 	return list, nil
 }
 
-func (m *memStore) Revoke(_ context.Context, _, id uuid.UUID) error {
+func (m *memStore) Revoke(_ context.Context, id uuid.UUID) error {
 	for _, k := range m.keys {
 		if k.ID == id {
 			now := time.Now()
@@ -47,10 +47,9 @@ func TestGenerateKey(t *testing.T) {
 	store := &memStore{keys: make(map[string]*APIKey)}
 	svc := NewService(store)
 
-	tenantID := uuid.New()
 	userID := uuid.New()
 
-	plainKey, key, err := svc.GenerateKey(context.Background(), tenantID, userID, "test-key", nil)
+	plainKey, key, err := svc.GenerateKey(context.Background(), userID, "test-key", nil)
 	if err != nil {
 		t.Fatalf("generate key failed: %v", err)
 	}
@@ -69,10 +68,9 @@ func TestValidateKey(t *testing.T) {
 	store := &memStore{keys: make(map[string]*APIKey)}
 	svc := NewService(store)
 
-	tenantID := uuid.New()
 	userID := uuid.New()
 
-	plainKey, _, err := svc.GenerateKey(context.Background(), tenantID, userID, "test-key", nil)
+	plainKey, _, err := svc.GenerateKey(context.Background(), userID, "test-key", nil)
 	if err != nil {
 		t.Fatalf("generate key failed: %v", err)
 	}
@@ -95,15 +93,14 @@ func TestRevokeKey(t *testing.T) {
 	store := &memStore{keys: make(map[string]*APIKey)}
 	svc := NewService(store)
 
-	tenantID := uuid.New()
 	userID := uuid.New()
 
-	plainKey, key, err := svc.GenerateKey(context.Background(), tenantID, userID, "test-key", nil)
+	plainKey, key, err := svc.GenerateKey(context.Background(), userID, "test-key", nil)
 	if err != nil {
 		t.Fatalf("generate key failed: %v", err)
 	}
 
-	if err := svc.RevokeKey(context.Background(), tenantID, key.ID); err != nil {
+	if err := svc.RevokeKey(context.Background(), key.ID); err != nil {
 		t.Fatalf("revoke key failed: %v", err)
 	}
 
@@ -117,19 +114,18 @@ func TestListKeys(t *testing.T) {
 	store := &memStore{keys: make(map[string]*APIKey)}
 	svc := NewService(store)
 
-	tenantID := uuid.New()
 	userID := uuid.New()
 
-	_, _, err := svc.GenerateKey(context.Background(), tenantID, userID, "key-1", nil)
+	_, _, err := svc.GenerateKey(context.Background(), userID, "key-1", nil)
 	if err != nil {
 		t.Fatalf("generate key failed: %v", err)
 	}
-	_, _, err = svc.GenerateKey(context.Background(), tenantID, userID, "key-2", nil)
+	_, _, err = svc.GenerateKey(context.Background(), userID, "key-2", nil)
 	if err != nil {
 		t.Fatalf("generate key failed: %v", err)
 	}
 
-	keys, err := svc.ListKeys(context.Background(), tenantID, userID)
+	keys, err := svc.ListKeys(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("list keys failed: %v", err)
 	}

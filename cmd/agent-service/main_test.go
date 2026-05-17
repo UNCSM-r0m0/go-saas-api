@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -10,13 +10,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/agent/handler"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/internal/agent/websocket"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
-	"github.com/r0lm0/go-saas-api/pkg/jwt"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
@@ -30,10 +30,10 @@ func (m *memConversationRepo) Create(_ context.Context, conv *model.Conversation
 	m.convs[conv.ID] = conv
 	return nil
 }
-func (m *memConversationRepo) GetByID(_ context.Context, _, id uuid.UUID) (*model.Conversation, error) {
+func (m *memConversationRepo) GetByID(_ context.Context, id uuid.UUID) (*model.Conversation, error) {
 	return m.convs[id], nil
 }
-func (m *memConversationRepo) ListByUser(_ context.Context, _, userID uuid.UUID, _, _ int) ([]model.Conversation, error) {
+func (m *memConversationRepo) ListByUser(_ context.Context, userID uuid.UUID, _, _ int) ([]model.Conversation, error) {
 	var list []model.Conversation
 	for _, conv := range m.convs {
 		if conv.UserID == userID && conv.Status != model.ConversationDeleted {
@@ -43,7 +43,7 @@ func (m *memConversationRepo) ListByUser(_ context.Context, _, userID uuid.UUID,
 	return list, nil
 }
 func (m *memConversationRepo) Update(_ context.Context, _ *model.Conversation) error { return nil }
-func (m *memConversationRepo) Delete(_ context.Context, _, _ uuid.UUID) error { return nil }
+func (m *memConversationRepo) Delete(_ context.Context, _ uuid.UUID) error           { return nil }
 
 var _ repository.ConversationRepo = (*memConversationRepo)(nil)
 
@@ -55,7 +55,7 @@ func (m *memMessageRepo) Create(_ context.Context, msg *model.Message) error {
 	m.msgs = append(m.msgs, *msg)
 	return nil
 }
-func (m *memMessageRepo) ListByConversation(_ context.Context, _, _ uuid.UUID, _ int) ([]model.Message, error) {
+func (m *memMessageRepo) ListByConversation(_ context.Context, _ uuid.UUID, _ int) ([]model.Message, error) {
 	return m.msgs, nil
 }
 
@@ -69,10 +69,13 @@ func (m *memArtifactRepo) Create(_ context.Context, art *model.Artifact) error {
 	m.arts[art.ID] = art
 	return nil
 }
-func (m *memArtifactRepo) GetByID(_ context.Context, _, id uuid.UUID) (*model.Artifact, error) {
+func (m *memArtifactRepo) GetByID(_ context.Context, id uuid.UUID) (*model.Artifact, error) {
 	return m.arts[id], nil
 }
-func (m *memArtifactRepo) ListByConversation(_ context.Context, _, _ uuid.UUID) ([]model.Artifact, error) {
+func (m *memArtifactRepo) GetByName(_ context.Context, _ uuid.UUID, _ string) (*model.Artifact, error) {
+	return nil, nil
+}
+func (m *memArtifactRepo) ListByConversation(_ context.Context, _ uuid.UUID) ([]model.Artifact, error) {
 	return nil, nil
 }
 
@@ -80,8 +83,11 @@ var _ repository.ArtifactRepo = (*memArtifactRepo)(nil)
 
 type memAgentRepo struct{}
 
-func (m *memAgentRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*model.Agent, error) { return nil, nil }
-func (m *memAgentRepo) GetDefault(_ context.Context, _ uuid.UUID) (*model.Agent, error) { return nil, nil }
+func (m *memAgentRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.Agent, error) { return nil, nil }
+func (m *memAgentRepo) GetByRole(_ context.Context, _ model.AgentRole) (*model.Agent, error) {
+	return nil, nil
+}
+func (m *memAgentRepo) GetDefault(_ context.Context) (*model.Agent, error) { return nil, nil }
 
 var _ repository.AgentRepo = (*memAgentRepo)(nil)
 
@@ -103,13 +109,24 @@ func (m *mockLLM) Stream(_ context.Context, _ llm.Request) (<-chan llm.Chunk, er
 	return ch, m.err
 }
 
+func (m *mockLLM) Complete(_ context.Context, _ llm.Request) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	var result string
+	for _, c := range m.chunks {
+		result += c.Content
+	}
+	return result, nil
+}
+
 func (m *mockLLM) HealthCheck(_ context.Context) error { return nil }
 
 var _ llm.Client = (*mockLLM)(nil)
 
 // ---- test setup ----
 
-func setupTestServer() *Server {
+func setupTestRouter() (*gin.Engine, *memConversationRepo, *memMessageRepo, *memArtifactRepo) {
 	gin.SetMode(gin.TestMode)
 	log := logger.New("error")
 
@@ -128,18 +145,22 @@ func setupTestServer() *Server {
 
 	registry := tools.NewRegistry()
 	sessions := runtime.NewSessionManager(convRepo, msgRepo)
-	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, nil)
+	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, artRepo, nil, nil, nil, nil)
 
 	multiClient := llm.NewMultiClient()
 	wsManager := websocket.NewManager(orch, log)
-	return newServer(orch, convRepo, msgRepo, artRepo, nil, log, multiClient, nil, nil, wsManager)
+
+	h := handler.NewHandler(orch, convRepo, msgRepo, artRepo, log, multiClient, wsManager, nil, nil)
+	r := gin.New()
+	r.Use(gin.Recovery())
+	h.RegisterRoutes(r)
+	return r, convRepo, msgRepo, artRepo
 }
 
 // ---- tests ----
 
 func TestHealth(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, _, _, _ := setupTestRouter()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/health", nil)
@@ -154,8 +175,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestAgentChat_MissingAuth(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, _, _, _ := setupTestRouter()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/agent/chat", strings.NewReader(`{"message":"hi"}`))
@@ -168,14 +188,12 @@ func TestAgentChat_MissingAuth(t *testing.T) {
 }
 
 func TestAgentChat_Success(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, _, _, _ := setupTestRouter()
 
 	body := `{"message":"hello"}`
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/agent/chat", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Tenant-ID", uuid.New().String())
 	req.Header.Set("X-User-ID", uuid.New().String())
 	r.ServeHTTP(w, req)
 
@@ -191,52 +209,47 @@ func TestAgentChat_Success(t *testing.T) {
 	}
 }
 
-func TestCreateArtifact_MissingAuth(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+func TestCreateArtifact_BadRequest(t *testing.T) {
+	r, _, _, _ := setupTestRouter()
 
-	body := `{"conversation_id":"` + uuid.New().String() + `","name":"test.html","type":"html","content":"<h1>hi</h1>"}`
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/artifacts", strings.NewReader(body))
+	req, _ := http.NewRequest("POST", "/artifacts", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }
 
 func TestCreateArtifact_Success(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, _, _, _ := setupTestRouter()
 
-	tenantID := uuid.New()
 	body := `{"conversation_id":"` + uuid.New().String() + `","name":"test.html","type":"html","content":"<h1>hi</h1>"}`
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/artifacts", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Tenant-ID", tenantID.String())
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var art model.Artifact
-	if err := json.Unmarshal(w.Body.Bytes(), &art); err != nil {
-		t.Fatalf("failed to decode artifact: %v", err)
+	var resp struct {
+		Data    model.Artifact `json:"data"`
+		Message string         `json:"message"`
+		Success bool           `json:"success"`
 	}
-	if art.Name != "test.html" {
-		t.Fatalf("expected name test.html, got %s", art.Name)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
 	}
-	if art.TenantID != tenantID {
-		t.Fatalf("expected tenant_id %s, got %s", tenantID, art.TenantID)
+	if resp.Data.Name != "test.html" {
+		t.Fatalf("expected name test.html, got %s", resp.Data.Name)
 	}
 }
 
 func TestListConversations_MissingAuth(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, _, _, _ := setupTestRouter()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/conversations", nil)
@@ -248,23 +261,19 @@ func TestListConversations_MissingAuth(t *testing.T) {
 }
 
 func TestListConversations_Success(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, convRepo, _, _ := setupTestRouter()
 
-	tenantID := uuid.New()
 	userID := uuid.New()
 	convID := uuid.New()
-	srv.convRepo.(*memConversationRepo).convs[convID] = &model.Conversation{
-		ID:       convID,
-		TenantID: tenantID,
-		UserID:   userID,
-		Title:    "Test Conv",
-		Status:   model.ConversationActive,
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		UserID: userID,
+		Title:  "Test Conv",
+		Status: model.ConversationActive,
 	}
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/conversations", nil)
-	req.Header.Set("X-Tenant-ID", tenantID.String())
 	req.Header.Set("X-User-ID", userID.String())
 	r.ServeHTTP(w, req)
 
@@ -277,21 +286,17 @@ func TestListConversations_Success(t *testing.T) {
 }
 
 func TestGetConversation_Success(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, convRepo, _, _ := setupTestRouter()
 
-	tenantID := uuid.New()
 	convID := uuid.New()
-	srv.convRepo.(*memConversationRepo).convs[convID] = &model.Conversation{
-		ID:       convID,
-		TenantID: tenantID,
-		Title:    "Test Conv",
-		Status:   model.ConversationActive,
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		Title:  "Test Conv",
+		Status: model.ConversationActive,
 	}
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/conversations/"+convID.String(), nil)
-	req.Header.Set("X-Tenant-ID", tenantID.String())
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -303,23 +308,19 @@ func TestGetConversation_Success(t *testing.T) {
 }
 
 func TestUpdateConversation_Success(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, convRepo, _, _ := setupTestRouter()
 
-	tenantID := uuid.New()
 	convID := uuid.New()
-	srv.convRepo.(*memConversationRepo).convs[convID] = &model.Conversation{
-		ID:       convID,
-		TenantID: tenantID,
-		Title:    "Old Title",
-		Status:   model.ConversationActive,
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		Title:  "Old Title",
+		Status: model.ConversationActive,
 	}
 
 	body := `{"title":"New Title","status":"archived"}`
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PATCH", "/conversations/"+convID.String(), strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Tenant-ID", tenantID.String())
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -334,21 +335,17 @@ func TestUpdateConversation_Success(t *testing.T) {
 }
 
 func TestDeleteConversation_Success(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, convRepo, _, _ := setupTestRouter()
 
-	tenantID := uuid.New()
 	convID := uuid.New()
-	srv.convRepo.(*memConversationRepo).convs[convID] = &model.Conversation{
-		ID:       convID,
-		TenantID: tenantID,
-		Title:    "Test Conv",
-		Status:   model.ConversationActive,
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		Title:  "Test Conv",
+		Status: model.ConversationActive,
 	}
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/conversations/"+convID.String(), nil)
-	req.Header.Set("X-Tenant-ID", tenantID.String())
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -357,19 +354,16 @@ func TestDeleteConversation_Success(t *testing.T) {
 }
 
 func TestListMessages_Success(t *testing.T) {
-	srv := setupTestServer()
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
+	r, _, msgRepo, _ := setupTestRouter()
 
-	tenantID := uuid.New()
 	convID := uuid.New()
-	srv.msgRepo.(*memMessageRepo).msgs = []model.Message{
-		{ID: uuid.New(), TenantID: tenantID, ConversationID: convID, Role: model.MessageRoleUser, Content: "hello"},
-		{ID: uuid.New(), TenantID: tenantID, ConversationID: convID, Role: model.MessageRoleAssistant, Content: "hi there"},
+	msgRepo.msgs = []model.Message{
+		{ID: uuid.New(), ConversationID: convID, Role: model.MessageRoleUser, Content: "hello"},
+		{ID: uuid.New(), ConversationID: convID, Role: model.MessageRoleAssistant, Content: "hi there"},
 	}
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/conversations/"+convID.String()+"/messages", nil)
-	req.Header.Set("X-Tenant-ID", tenantID.String())
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -381,20 +375,15 @@ func TestListMessages_Success(t *testing.T) {
 }
 
 func TestPreviewArtifact_Success(t *testing.T) {
-	srv := setupTestServer()
-	// seed artifact
-	tenantID := uuid.New()
+	r, _, _, artRepo := setupTestRouter()
 	artID := uuid.New()
-	srv.artRepo.(*memArtifactRepo).arts[artID] = &model.Artifact{
-		ID:       artID,
-		TenantID: tenantID,
-		Content:  "preview content",
+	artRepo.arts[artID] = &model.Artifact{
+		ID:      artID,
+		Content: "preview content",
 	}
 
-	r := srv.setupRouter(jwt.NewManager("test-secret"))
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/artifacts/"+artID.String()+"/preview", nil)
-	req.Header.Set("X-Tenant-ID", tenantID.String())
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {

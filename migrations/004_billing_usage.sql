@@ -66,8 +66,8 @@ CREATE TABLE IF NOT EXISTS usage_daily (
 INSERT INTO plans (slug, name, description, amount_cents, interval, messages_per_day, max_tokens_per_request, features)
 VALUES
     ('free', 'Free', 'Limited access for anonymous and unauthenticated users', 0, 'month', 3, 2048, '{"streaming": false, "images": false}'),
-    ('registered', 'Registered', 'Standard access for authenticated users', 0, 'month', 50, 4096, '{"streaming": true, "images": false}'),
-    ('premium', 'Premium', 'Full access with higher limits', 999, 'month', 1000, 8192, '{"streaming": true, "images": true, "priority": true}')
+    ('registered', 'Registered', 'Standard access for authenticated users', 0, 'month', 10, 4096, '{"streaming": true, "images": false}'),
+    ('premium', 'Premium', 'Full access with higher limits', 999, 'month', 100, 8192, '{"streaming": true, "images": true, "priority": true}')
 ON CONFLICT (slug) DO NOTHING;
 
 -- Indexes

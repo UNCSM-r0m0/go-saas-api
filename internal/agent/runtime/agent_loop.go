@@ -1,0 +1,207 @@
+package runtime
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/agent/model"
+	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/pkg/llm"
+)
+
+type contextKey string
+
+const (
+	contextKeyConversationID contextKey = "conversation_id"
+	MaxAgentIterations                  = 10
+)
+
+// agentLoop runs the ReAct (Reason-Act) loop:
+//  1. Send conversation to LLM with tools available
+//  2. If LLM returns tool calls → execute them → add results to history → loop
+//  3. If LLM returns text only → save and finish
+//
+// All events (content chunks, tool_start, tool_result, done) are sent to outCh.
+func (o *Orchestrator) agentLoop(
+	ctx context.Context,
+	outCh chan<- llm.Chunk,
+	agent *model.Agent,
+	initialMessages []llm.Message,
+	toolDefs []llm.ToolDefinition,
+	toolList []tools.Tool,
+	conversationID uuid.UUID,
+) {
+	messages := make([]llm.Message, len(initialMessages))
+	copy(messages, initialMessages)
+
+	var allContent strings.Builder
+	var allToolCalls []model.ToolCall
+
+	for i := 0; i < MaxAgentIterations; i++ {
+		req := llm.Request{
+			Model:       agent.Model,
+			Messages:    messages,
+			Tools:       toolDefs,
+			Temperature: 0.7,
+			MaxTokens:   4096,
+			Stream:      true,
+		}
+
+		llmCh, err := o.llmClient.Stream(ctx, req)
+		if err != nil {
+			select {
+			case outCh <- llm.Chunk{Event: "error", Content: fmt.Sprintf("LLM error: %v", err), Done: true}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		var assistantContent strings.Builder
+		var toolCalls []llm.ToolCall
+
+		for chunk := range llmCh {
+			if chunk.Content != "" {
+				assistantContent.WriteString(chunk.Content)
+				select {
+				case outCh <- llm.Chunk{Content: chunk.Content}:
+				case <-ctx.Done():
+					return
+				}
+			}
+			if chunk.ToolCall != nil {
+				toolCalls = append(toolCalls, *chunk.ToolCall)
+			}
+			if chunk.Done {
+				break
+			}
+		}
+
+		if len(toolCalls) == 0 {
+			allContent.WriteString(assistantContent.String())
+			msg := &model.Message{
+				ID:             uuid.New(),
+				ConversationID: conversationID,
+				Role:           model.MessageRoleAssistant,
+				Content:        allContent.String(),
+				Model:          agent.Model,
+				ToolCalls:      allToolCalls,
+				CreatedAt:      time.Now(),
+			}
+			_ = o.sessions.AddMessage(ctx, msg)
+
+			select {
+			case outCh <- llm.Chunk{Done: true}:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		allContent.WriteString(assistantContent.String())
+
+		var toolResultMessages []llm.Message
+		for _, tc := range toolCalls {
+			if tc.ID == "" {
+				tc.ID = uuid.New().String()
+			}
+
+			select {
+			case outCh <- llm.Chunk{Event: "tool_start", ToolName: tc.Name, ToolCall: &tc}:
+			case <-ctx.Done():
+				return
+			}
+
+			toolCtx := context.WithValue(ctx, contextKeyConversationID, conversationID)
+			result, execErr := o.registry.Execute(toolCtx, tc.Name, tc.Arguments)
+
+			resultContent := result.Content
+			if execErr != nil {
+				resultContent = fmt.Sprintf("Error: %v", execErr)
+			} else if result.Error != "" {
+				resultContent = fmt.Sprintf("Error: %s", result.Error)
+			}
+
+			select {
+			case outCh <- llm.Chunk{Event: "tool_result", ToolName: tc.Name, Content: resultContent}:
+			case <-ctx.Done():
+				return
+			}
+
+			allToolCalls = append(allToolCalls, model.ToolCall{
+				ID:        tc.ID,
+				Name:      tc.Name,
+				Arguments: tc.Arguments,
+			})
+
+			toolResultMessages = append(toolResultMessages, llm.Message{
+				Role:       "tool",
+				Content:    resultContent,
+				ToolCallID: tc.ID,
+				Name:       tc.Name,
+			})
+		}
+
+		// Add assistant message (with tool calls) + tool results to history
+		messages = append(messages, llm.Message{
+			Role:      "assistant",
+			Content:   assistantContent.String(),
+			ToolCalls: toolCalls,
+		})
+		messages = append(messages, toolResultMessages...)
+
+		// Save intermediate messages to DB for conversation continuity
+		assistantMsg := &model.Message{
+			ID:             uuid.New(),
+			ConversationID: conversationID,
+			Role:           model.MessageRoleAssistant,
+			Content:        assistantContent.String(),
+			Model:          agent.Model,
+			ToolCalls: []model.ToolCall{{
+				ID:        toolCalls[0].ID,
+				Name:      toolCalls[0].Name,
+				Arguments: toolCalls[0].Arguments,
+			}},
+			CreatedAt: time.Now(),
+		}
+		_ = o.sessions.AddMessage(ctx, assistantMsg)
+
+		for i, tc := range toolCalls {
+			resultContent := ""
+			if i < len(toolResultMessages) {
+				resultContent = toolResultMessages[i].Content
+			}
+			toolMsg := &model.Message{
+				ID:             uuid.New(),
+				ConversationID: conversationID,
+				Role:           model.MessageRoleTool,
+				Content:        resultContent,
+				ToolCallID:     tc.ID,
+				ToolName:       tc.Name,
+				CreatedAt:      time.Now(),
+			}
+			_ = o.sessions.AddMessage(ctx, toolMsg)
+		}
+	}
+
+	// Max iterations reached
+	finalContent := "\n\nI've reached the maximum number of reasoning steps. Please continue the conversation if you need more work done."
+	allContent.WriteString(finalContent)
+
+	select {
+	case outCh <- llm.Chunk{Content: finalContent, Done: true}:
+	case <-ctx.Done():
+	}
+
+	msg := &model.Message{
+		ID:             uuid.New(),
+		ConversationID: conversationID,
+		Role:           model.MessageRoleAssistant,
+		Content:        allContent.String(),
+		Model:          agent.Model,
+		ToolCalls:      allToolCalls,
+		CreatedAt:      time.Now(),
+	}
+	_ = o.sessions.AddMessage(ctx, msg)
+}

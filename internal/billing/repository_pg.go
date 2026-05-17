@@ -1,8 +1,7 @@
-﻿package billing
+package billing
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,18 +19,13 @@ func NewPostgresBillingStore(pool *pgxpool.Pool) *PostgresBillingStore {
 	return &PostgresBillingStore{pool: pool}
 }
 
-func (s *PostgresBillingStore) setTenant(ctx context.Context, tenantID uuid.UUID) error {
-	_, err := s.pool.Exec(ctx, "SELECT set_config('app.current_tenant', $1, false)", tenantID.String())
-	return err
-}
-
 // ---- PlanRepository ----
 
 // ListPlans returns all active plans.
 func (s *PostgresBillingStore) ListPlans(ctx context.Context) ([]Plan, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, slug, name, description, stripe_price_id, amount_cents, currency, interval,
-		       messages_per_day, max_tokens_per_request, features, is_active, created_at, updated_at
+		       messages_per_month, max_tokens_per_request, features, is_active, created_at, updated_at
 		FROM plans WHERE is_active = true ORDER BY amount_cents ASC
 	`)
 	if err != nil {
@@ -43,7 +37,7 @@ func (s *PostgresBillingStore) ListPlans(ctx context.Context) ([]Plan, error) {
 	for rows.Next() {
 		var p Plan
 		if err := rows.Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.StripePriceID, &p.AmountCents,
-			&p.Currency, &p.Interval, &p.MessagesPerDay, &p.MaxTokensPerRequest, &p.Features,
+			&p.Currency, &p.Interval, &p.MessagesPerMonth, &p.MaxTokensPerRequest, &p.Features,
 			&p.IsActive, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -57,10 +51,10 @@ func (s *PostgresBillingStore) GetPlanBySlug(ctx context.Context, slug string) (
 	var p Plan
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, slug, name, description, stripe_price_id, amount_cents, currency, interval,
-		       messages_per_day, max_tokens_per_request, features, is_active, created_at, updated_at
+		       messages_per_month, max_tokens_per_request, features, is_active, created_at, updated_at
 		FROM plans WHERE slug = $1
 	`, slug).Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.StripePriceID, &p.AmountCents,
-		&p.Currency, &p.Interval, &p.MessagesPerDay, &p.MaxTokensPerRequest, &p.Features,
+		&p.Currency, &p.Interval, &p.MessagesPerMonth, &p.MaxTokensPerRequest, &p.Features,
 		&p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -73,10 +67,10 @@ func (s *PostgresBillingStore) GetPlanByID(ctx context.Context, id uuid.UUID) (*
 	var p Plan
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, slug, name, description, stripe_price_id, amount_cents, currency, interval,
-		       messages_per_day, max_tokens_per_request, features, is_active, created_at, updated_at
+		       messages_per_month, max_tokens_per_request, features, is_active, created_at, updated_at
 		FROM plans WHERE id = $1
 	`, id).Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.StripePriceID, &p.AmountCents,
-		&p.Currency, &p.Interval, &p.MessagesPerDay, &p.MaxTokensPerRequest, &p.Features,
+		&p.Currency, &p.Interval, &p.MessagesPerMonth, &p.MaxTokensPerRequest, &p.Features,
 		&p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -89,10 +83,10 @@ func (s *PostgresBillingStore) GetPlanByStripePriceID(ctx context.Context, price
 	var p Plan
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, slug, name, description, stripe_price_id, amount_cents, currency, interval,
-		       messages_per_day, max_tokens_per_request, features, is_active, created_at, updated_at
+		       messages_per_month, max_tokens_per_request, features, is_active, created_at, updated_at
 		FROM plans WHERE stripe_price_id = $1
 	`, priceID).Scan(&p.ID, &p.Slug, &p.Name, &p.Description, &p.StripePriceID, &p.AmountCents,
-		&p.Currency, &p.Interval, &p.MessagesPerDay, &p.MaxTokensPerRequest, &p.Features,
+		&p.Currency, &p.Interval, &p.MessagesPerMonth, &p.MaxTokensPerRequest, &p.Features,
 		&p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -104,14 +98,11 @@ func (s *PostgresBillingStore) GetPlanByStripePriceID(ctx context.Context, price
 
 // CreateSubscription inserts a new subscription.
 func (s *PostgresBillingStore) CreateSubscription(ctx context.Context, sub *Subscription) error {
-	if err := s.setTenant(ctx, sub.TenantID); err != nil {
-		return fmt.Errorf("set tenant: %w", err)
-	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO subscriptions (id, tenant_id, user_id, plan_id, stripe_customer_id, stripe_subscription_id,
+		INSERT INTO subscriptions (id, user_id, plan_id, stripe_customer_id, stripe_subscription_id,
 			status, current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, sub.ID, sub.TenantID, sub.UserID, sub.PlanID, sub.StripeCustomerID, sub.StripeSubscriptionID,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, sub.ID, sub.UserID, sub.PlanID, sub.StripeCustomerID, sub.StripeSubscriptionID,
 		sub.Status, sub.CurrentPeriodStart, sub.CurrentPeriodEnd, sub.CancelAtPeriodEnd, sub.CreatedAt, sub.UpdatedAt)
 	return err
 }
@@ -120,10 +111,10 @@ func (s *PostgresBillingStore) CreateSubscription(ctx context.Context, sub *Subs
 func (s *PostgresBillingStore) GetSubscriptionByID(ctx context.Context, id uuid.UUID) (*Subscription, error) {
 	var sub Subscription
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, user_id, plan_id, stripe_customer_id, stripe_subscription_id,
+		SELECT id, user_id, plan_id, stripe_customer_id, stripe_subscription_id,
 			status, current_period_start, current_period_end, canceled_at, cancel_at_period_end, created_at, updated_at
 		FROM subscriptions WHERE id = $1
-	`, id).Scan(&sub.ID, &sub.TenantID, &sub.UserID, &sub.PlanID, &sub.StripeCustomerID, &sub.StripeSubscriptionID,
+	`, id).Scan(&sub.ID, &sub.UserID, &sub.PlanID, &sub.StripeCustomerID, &sub.StripeSubscriptionID,
 		&sub.Status, &sub.CurrentPeriodStart, &sub.CurrentPeriodEnd, &sub.CanceledAt, &sub.CancelAtPeriodEnd, &sub.CreatedAt, &sub.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -132,18 +123,15 @@ func (s *PostgresBillingStore) GetSubscriptionByID(ctx context.Context, id uuid.
 }
 
 // GetSubscriptionByUser fetches the active subscription for a user.
-func (s *PostgresBillingStore) GetSubscriptionByUser(ctx context.Context, tenantID, userID uuid.UUID) (*Subscription, error) {
-	if err := s.setTenant(ctx, tenantID); err != nil {
-		return nil, fmt.Errorf("set tenant: %w", err)
-	}
+func (s *PostgresBillingStore) GetSubscriptionByUser(ctx context.Context, userID uuid.UUID) (*Subscription, error) {
 	var sub Subscription
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, user_id, plan_id, stripe_customer_id, stripe_subscription_id,
+		SELECT id, user_id, plan_id, stripe_customer_id, stripe_subscription_id,
 			status, current_period_start, current_period_end, canceled_at, cancel_at_period_end, created_at, updated_at
 		FROM subscriptions
-		WHERE tenant_id = $1 AND user_id = $2
+		WHERE user_id = $1
 		ORDER BY created_at DESC LIMIT 1
-	`, tenantID, userID).Scan(&sub.ID, &sub.TenantID, &sub.UserID, &sub.PlanID, &sub.StripeCustomerID, &sub.StripeSubscriptionID,
+	`, userID).Scan(&sub.ID, &sub.UserID, &sub.PlanID, &sub.StripeCustomerID, &sub.StripeSubscriptionID,
 		&sub.Status, &sub.CurrentPeriodStart, &sub.CurrentPeriodEnd, &sub.CanceledAt, &sub.CancelAtPeriodEnd, &sub.CreatedAt, &sub.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -158,10 +146,10 @@ func (s *PostgresBillingStore) GetSubscriptionByUser(ctx context.Context, tenant
 func (s *PostgresBillingStore) GetSubscriptionByStripeID(ctx context.Context, stripeSubID string) (*Subscription, error) {
 	var sub Subscription
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, user_id, plan_id, stripe_customer_id, stripe_subscription_id,
+		SELECT id, user_id, plan_id, stripe_customer_id, stripe_subscription_id,
 			status, current_period_start, current_period_end, canceled_at, cancel_at_period_end, created_at, updated_at
 		FROM subscriptions WHERE stripe_subscription_id = $1
-	`, stripeSubID).Scan(&sub.ID, &sub.TenantID, &sub.UserID, &sub.PlanID, &sub.StripeCustomerID, &sub.StripeSubscriptionID,
+	`, stripeSubID).Scan(&sub.ID, &sub.UserID, &sub.PlanID, &sub.StripeCustomerID, &sub.StripeSubscriptionID,
 		&sub.Status, &sub.CurrentPeriodStart, &sub.CurrentPeriodEnd, &sub.CanceledAt, &sub.CancelAtPeriodEnd, &sub.CreatedAt, &sub.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -171,9 +159,6 @@ func (s *PostgresBillingStore) GetSubscriptionByStripeID(ctx context.Context, st
 
 // UpdateSubscription saves changes to a subscription.
 func (s *PostgresBillingStore) UpdateSubscription(ctx context.Context, sub *Subscription) error {
-	if err := s.setTenant(ctx, sub.TenantID); err != nil {
-		return fmt.Errorf("set tenant: %w", err)
-	}
 	_, err := s.pool.Exec(ctx, `
 		UPDATE subscriptions SET
 			plan_id = $1, stripe_customer_id = $2, stripe_subscription_id = $3,
@@ -200,28 +185,20 @@ func (s *PostgresBillingStore) CancelSubscription(ctx context.Context, id uuid.U
 
 // LogUsage records a single usage event.
 func (s *PostgresBillingStore) LogUsage(ctx context.Context, log *UsageLog) error {
-	if err := s.setTenant(ctx, log.TenantID); err != nil {
-		return fmt.Errorf("set tenant: %w", err)
-	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO usage_logs (id, tenant_id, user_id, conversation_id, model, provider,
-			tokens_input, tokens_output, latency_ms, cost_usd, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, log.ID, log.TenantID, log.UserID, log.ConversationID, log.Model, log.Provider,
-		log.TokensInput, log.TokensOutput, log.LatencyMs, log.CostUSD, log.CreatedAt)
+		INSERT INTO usage_logs (id, user_id, conversation_id, model, tokens_input, tokens_output, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, log.ID, log.UserID, log.ConversationID, log.Model, log.TokensInput, log.TokensOutput, log.CreatedAt)
 	return err
 }
 
 // GetDailyUsage fetches the daily rollup for a user.
-func (s *PostgresBillingStore) GetDailyUsage(ctx context.Context, tenantID, userID uuid.UUID, date time.Time) (*DailyUsage, error) {
-	if err := s.setTenant(ctx, tenantID); err != nil {
-		return nil, fmt.Errorf("set tenant: %w", err)
-	}
+func (s *PostgresBillingStore) GetDailyUsage(ctx context.Context, userID uuid.UUID, date time.Time) (*DailyUsage, error) {
 	var du DailyUsage
 	err := s.pool.QueryRow(ctx, `
-		SELECT tenant_id, user_id, date, requests, tokens_input, tokens_output, cost_usd
-		FROM usage_daily WHERE tenant_id = $1 AND user_id = $2 AND date = $3
-	`, tenantID, userID, date).Scan(&du.TenantID, &du.UserID, &du.Date, &du.Requests, &du.TokensInput, &du.TokensOutput, &du.CostUSD)
+		SELECT user_id, date, message_count, tokens_input, tokens_output, 0::float8
+		FROM usage_daily WHERE user_id = $1 AND date = $2
+	`, userID, date).Scan(&du.UserID, &du.Date, &du.Requests, &du.TokensInput, &du.TokensOutput, &du.CostUSD)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -232,35 +209,29 @@ func (s *PostgresBillingStore) GetDailyUsage(ctx context.Context, tenantID, user
 }
 
 // IncrementDailyUsage upserts daily usage counters.
-func (s *PostgresBillingStore) IncrementDailyUsage(ctx context.Context, tenantID, userID uuid.UUID, date time.Time, tokensIn, tokensOut int, costUSD float64) error {
-	if err := s.setTenant(ctx, tenantID); err != nil {
-		return fmt.Errorf("set tenant: %w", err)
-	}
+func (s *PostgresBillingStore) IncrementDailyUsage(ctx context.Context, userID uuid.UUID, date time.Time, tokensIn, tokensOut int, costUSD float64) error {
+	_ = costUSD
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO usage_daily (tenant_id, user_id, date, requests, tokens_input, tokens_output, cost_usd)
-		VALUES ($1, $2, $3, 1, $4, $5, $6)
-		ON CONFLICT (tenant_id, user_id, date)
+		INSERT INTO usage_daily (user_id, date, message_count, tokens_input, tokens_output)
+		VALUES ($1, $2, 1, $3, $4)
+		ON CONFLICT (user_id, date)
 		DO UPDATE SET
-			requests = usage_daily.requests + 1,
-			tokens_input = usage_daily.tokens_input + $4,
-			tokens_output = usage_daily.tokens_output + $5,
-			cost_usd = usage_daily.cost_usd + $6
-	`, tenantID, userID, date, tokensIn, tokensOut, costUSD)
+			message_count = usage_daily.message_count + 1,
+			tokens_input = usage_daily.tokens_input + $3,
+			tokens_output = usage_daily.tokens_output + $4
+	`, userID, date, tokensIn, tokensOut)
 	return err
 }
 
 // GetUsageStats aggregates usage over a date range.
-func (s *PostgresBillingStore) GetUsageStats(ctx context.Context, tenantID, userID uuid.UUID, from, to time.Time) (*UsageStats, error) {
-	if err := s.setTenant(ctx, tenantID); err != nil {
-		return nil, fmt.Errorf("set tenant: %w", err)
-	}
+func (s *PostgresBillingStore) GetUsageStats(ctx context.Context, userID uuid.UUID, from, to time.Time) (*UsageStats, error) {
 	var stats UsageStats
 	err := s.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(requests), 0), COALESCE(SUM(tokens_input), 0),
-		       COALESCE(SUM(tokens_output), 0), COALESCE(SUM(cost_usd), 0)
+		SELECT COALESCE(SUM(message_count), 0), COALESCE(SUM(tokens_input), 0),
+		       COALESCE(SUM(tokens_output), 0), 0::float8
 		FROM usage_daily
-		WHERE tenant_id = $1 AND user_id = $2 AND date >= $3 AND date <= $4
-	`, tenantID, userID, from, to).Scan(&stats.TotalRequests, &stats.TokensInput, &stats.TokensOutput, &stats.TotalCostUSD)
+		WHERE user_id = $1 AND date >= $2 AND date <= $3
+	`, userID, from, to).Scan(&stats.TotalRequests, &stats.TokensInput, &stats.TokensOutput, &stats.TotalCostUSD)
 	if err != nil {
 		return nil, err
 	}
@@ -270,4 +241,3 @@ func (s *PostgresBillingStore) GetUsageStats(ctx context.Context, tenantID, user
 var _ PlanRepository = (*PostgresBillingStore)(nil)
 var _ SubscriptionRepository = (*PostgresBillingStore)(nil)
 var _ UsageRepository = (*PostgresBillingStore)(nil)
-

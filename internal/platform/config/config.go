@@ -9,66 +9,48 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	// Server
-	Port    string `mapstructure:"PORT"`
-	Env     string `mapstructure:"ENV"`
+	Port     string `mapstructure:"PORT"`
+	Env      string `mapstructure:"ENV"`
 	LogLevel string `mapstructure:"LOG_LEVEL"`
 
-	// Database
 	DatabaseURL string `mapstructure:"DATABASE_URL"`
+	RedisURL    string `mapstructure:"REDIS_URL"`
+	NATSURL     string `mapstructure:"NATS_URL"`
 
-	// Redis
-	RedisURL string `mapstructure:"REDIS_URL"`
-
-	// NATS
-	NATSURL string `mapstructure:"NATS_URL"`
-
-	// JWT
 	JWTSecret     string        `mapstructure:"JWT_SECRET"`
 	JWTExpiration time.Duration `mapstructure:"JWT_EXPIRATION"`
 
-	// OAuth
 	GoogleClientID     string `mapstructure:"GOOGLE_CLIENT_ID"`
 	GoogleClientSecret string `mapstructure:"GOOGLE_CLIENT_SECRET"`
 	GitHubClientID     string `mapstructure:"GITHUB_CLIENT_ID"`
 	GitHubClientSecret string `mapstructure:"GITHUB_CLIENT_SECRET"`
 
-	// Stripe
 	StripeSecretKey      string `mapstructure:"STRIPE_SECRET_KEY"`
 	StripeWebhookSecret  string `mapstructure:"STRIPE_WEBHOOK_SECRET"`
 	StripePremiumPriceID string `mapstructure:"STRIPE_PREMIUM_PRICE_ID"`
 
-	// AI Providers
-	OllamaURL      string `mapstructure:"OLLAMA_URL"`
-	OllamaProxyURL string `mapstructure:"OLLAMA_PROXY_URL"`
-	OllamaProxyKey string `mapstructure:"OLLAMA_PROXY_API_KEY"`
-	OpenAIAPIKey   string `mapstructure:"OPENAI_API_KEY"`
-	OpenAIBaseURL  string `mapstructure:"OPENAI_BASE_URL"`
-	GeminiAPIKey   string `mapstructure:"GEMINI_API_KEY"`
-	DeepSeekAPIKey string `mapstructure:"DEEPSEEK_API_KEY"`
-	LMStudioURL    string `mapstructure:"LM_STUDIO_URL"`
-	LMStudioAPIKey string `mapstructure:"LM_STUDIO_API_KEY"`
-	SandboxServiceURL string `mapstructure:"SANDBOX_SERVICE_URL"`
+	MasterEncryptionKey string `mapstructure:"MASTER_ENCRYPTION_KEY"`
 
-	// Frontend
+	SandboxServiceURL  string `mapstructure:"SANDBOX_SERVICE_URL"`
+	DocumentServiceURL string `mapstructure:"DOCUMENT_SERVICE_URL"`
+
 	FrontendURL string `mapstructure:"FRONTEND_URL"`
+	PublicURL   string `mapstructure:"PUBLIC_URL"`
 
-	// Service URLs (for internal communication)
 	AgentServiceURL    string `mapstructure:"AGENT_SERVICE_URL"`
 	AuthServiceURL    string `mapstructure:"AUTH_SERVICE_URL"`
 	BillingServiceURL string `mapstructure:"BILLING_SERVICE_URL"`
 	UsageServiceURL   string `mapstructure:"USAGE_SERVICE_URL"`
 
-	// Rate Limiting
-	FreeMessageLimit      int `mapstructure:"FREE_USER_MESSAGE_LIMIT"`
 	RegisteredMessageLimit int `mapstructure:"REGISTERED_USER_MESSAGE_LIMIT"`
 	PremiumMessageLimit    int `mapstructure:"PREMIUM_USER_MESSAGE_LIMIT"`
 
-	// File Upload
-	UploadPath     string `mapstructure:"UPLOAD_PATH"`
-	MaxUploadSize  int64  `mapstructure:"MAX_UPLOAD_SIZE"`
+	UploadPath    string `mapstructure:"UPLOAD_PATH"`
+	MaxUploadSize int64  `mapstructure:"MAX_UPLOAD_SIZE"`
 
-	// SMTP / Email
+	SandboxRateLimit  int  `mapstructure:"SANDBOX_RATE_LIMIT"`
+	NATSEventsEnabled bool `mapstructure:"NATS_EVENTS_ENABLED"`
+
 	SMTPHost     string `mapstructure:"SMTP_HOST"`
 	SMTPPort     string `mapstructure:"SMTP_PORT"`
 	SMTPUser     string `mapstructure:"SMTP_USER"`
@@ -94,26 +76,21 @@ func Load() (*Config, error) {
 		StripeSecretKey:   getEnv("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		StripePremiumPriceID: getEnv("STRIPE_PREMIUM_PRICE_ID", ""),
-		OllamaURL:         getEnv("OLLAMA_URL", "http://localhost:11434"),
-		OllamaProxyURL:    getEnv("OLLAMA_PROXY_URL", ""),
-		OllamaProxyKey:    getEnv("OLLAMA_PROXY_API_KEY", ""),
-		OpenAIAPIKey:      getEnv("OPENAI_API_KEY", ""),
-		OpenAIBaseURL:     getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		GeminiAPIKey:      getEnv("GEMINI_API_KEY", ""),
-		DeepSeekAPIKey:    getEnv("DEEPSEEK_API_KEY", ""),
-		LMStudioURL:       getEnv("LM_STUDIO_URL", ""),
-		LMStudioAPIKey:    getEnv("LM_STUDIO_API_KEY", ""),
-		SandboxServiceURL: getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
+		MasterEncryptionKey: getEnv("MASTER_ENCRYPTION_KEY", ""),
+		SandboxServiceURL:  getEnv("SANDBOX_SERVICE_URL", "http://localhost:3006"),
+		DocumentServiceURL: getEnv("DOCUMENT_SERVICE_URL", "http://localhost:3007"),
 		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:5173"),
+		PublicURL:         getEnv("PUBLIC_URL", "http://localhost:3000"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://localhost:3002"),
-		AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://localhost:3003"),
-		BillingServiceURL: getEnv("BILLING_SERVICE_URL", "http://localhost:3004"),
-		UsageServiceURL:   getEnv("USAGE_SERVICE_URL", "http://localhost:3005"),
-		FreeMessageLimit:      getInt("FREE_USER_MESSAGE_LIMIT", 3),
-		RegisteredMessageLimit: getInt("REGISTERED_USER_MESSAGE_LIMIT", 50),
-		PremiumMessageLimit:    getInt("PREMIUM_USER_MESSAGE_LIMIT", 1000),
+		AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://localhost:3001"),
+		BillingServiceURL: getEnv("BILLING_SERVICE_URL", "http://localhost:3003"),
+		UsageServiceURL:   getEnv("USAGE_SERVICE_URL", "http://localhost:3004"),
+		RegisteredMessageLimit: getInt("REGISTERED_USER_MESSAGE_LIMIT", 10),
+		PremiumMessageLimit:    getInt("PREMIUM_USER_MESSAGE_LIMIT", 100),
 		UploadPath:            getEnv("UPLOAD_PATH", "./uploads"),
-		MaxUploadSize:         getInt64("MAX_UPLOAD_SIZE", 10*1024*1024), // 10MB
+		MaxUploadSize:         getInt64("MAX_UPLOAD_SIZE", 10*1024*1024),
+		SandboxRateLimit:      getInt("SANDBOX_RATE_LIMIT", 5),
+		NATSEventsEnabled:     getEnv("NATS_EVENTS_ENABLED", "true") == "true",
 		SMTPHost:              getEnv("SMTP_HOST", ""),
 		SMTPPort:              getEnv("SMTP_PORT", "587"),
 		SMTPUser:              getEnv("SMTP_USER", ""),

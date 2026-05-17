@@ -1,4 +1,4 @@
-﻿package websocket
+package websocket
 
 import (
 	"context"
@@ -25,20 +25,19 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a single WebSocket connection.
 type Client struct {
-	conn     *websocket.Conn
-	userID   uuid.UUID
-	tenantID uuid.UUID
-	sendCh   chan []byte
-	manager  *Manager
+	conn    *websocket.Conn
+	userID  uuid.UUID
+	sendCh  chan []byte
+	manager *Manager
 
 	// active generation cancellation
-	mu         sync.Mutex
-	cancelGen  context.CancelFunc
+	mu        sync.Mutex
+	cancelGen context.CancelFunc
 }
 
 // Manager manages WebSocket clients.
 type Manager struct {
-	clients    map[string]*Client // key: tenantID:userID
+	clients    map[string]*Client // key: userID
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
@@ -63,7 +62,7 @@ func (m *Manager) run() {
 	for {
 		select {
 		case client := <-m.register:
-			key := clientKey(client.tenantID, client.userID)
+			key := clientKey(client.userID)
 			m.mu.Lock()
 			// Close existing connection for same user
 			if old, ok := m.clients[key]; ok {
@@ -75,9 +74,9 @@ func (m *Manager) run() {
 			m.log.Info("websocket client connected", logger.String("user", client.userID.String()))
 
 		case client := <-m.unregister:
-			key := clientKey(client.tenantID, client.userID)
+			key := clientKey(client.userID)
 			m.mu.Lock()
-			if _, ok := m.clients[key]; ok {
+			if current, ok := m.clients[key]; ok && current == client {
 				delete(m.clients, key)
 				close(client.sendCh)
 				client.conn.Close()
@@ -88,24 +87,18 @@ func (m *Manager) run() {
 	}
 }
 
-func clientKey(tenantID, userID uuid.UUID) string {
-	return tenantID.String() + ":" + userID.String()
+func clientKey(userID uuid.UUID) string {
+	return userID.String()
 }
 
 // HandleUpgrade upgrades an HTTP connection to WebSocket.
 func (m *Manager) HandleUpgrade(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID or X-User-ID"})
+	if userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-User-ID"})
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
@@ -119,11 +112,10 @@ func (m *Manager) HandleUpgrade(c *gin.Context) {
 	}
 
 	client := &Client{
-		conn:     conn,
-		userID:   userID,
-		tenantID: tenantID,
-		sendCh:   make(chan []byte, 256),
-		manager:  m,
+		conn:    conn,
+		userID:  userID,
+		sendCh:  make(chan []byte, 256),
+		manager: m,
 	}
 
 	m.register <- client
@@ -210,12 +202,12 @@ func (c *Client) handleChat(msg Message) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.mu.Lock()
 	if c.cancelGen != nil {
-		c.cancelGen() // cancel previous generation
+		c.cancelGen()
 	}
 	c.cancelGen = cancel
 	c.mu.Unlock()
 
-	streamCh, err := c.manager.orch.Chat(ctx, c.tenantID, c.userID, msg.ConversationID, msg.Content, msg.FileIDs)
+	streamCh, err := c.manager.orch.Chat(ctx, c.userID, msg.ConversationID, msg.Content, msg.FileIDs, msg.Model, "", "")
 	if err != nil {
 		c.sendError(fmt.Sprintf("chat failed: %v", err))
 		c.clearCancel()
@@ -225,22 +217,47 @@ func (c *Client) handleChat(msg Message) {
 	messageID := uuid.New().String()
 	var tokens int
 	for chunk := range streamCh {
-		tokens += len(chunk.Content) // rough estimate
-		resp := Message{
-			Type:      TypeChunk,
-			MessageID: messageID,
-			Content:   chunk.Content,
-			Done:      chunk.Done,
+		tokens += len(chunk.Content)
+
+		switch chunk.Event {
+		case "tool_start":
+			c.send(Message{
+				Type:       TypeToolStart,
+				MessageID:  messageID,
+				ToolName:   chunk.ToolName,
+				ToolCallID: chunk.ToolCall.ID,
+				ToolArgs:   chunk.ToolCall.Arguments,
+			})
+		case "tool_result":
+			c.send(Message{
+				Type:      TypeToolResult,
+				MessageID: messageID,
+				ToolName:  chunk.ToolName,
+				Content:   chunk.Content,
+			})
+		case "error":
+			c.send(Message{
+				Type:      TypeError,
+				MessageID: messageID,
+				Error:     chunk.Content,
+			})
+		default:
+			resp := Message{
+				Type:      TypeChunk,
+				MessageID: messageID,
+				Content:   chunk.Content,
+				Done:      chunk.Done,
+			}
+			if !c.send(resp) {
+				break
+			}
 		}
-		if !c.send(resp) {
-			break
-		}
+
 		if chunk.Done {
 			break
 		}
 	}
 
-	// Send done message
 	c.send(Message{
 		Type:       TypeDone,
 		MessageID:  messageID,

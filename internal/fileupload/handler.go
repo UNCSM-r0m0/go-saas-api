@@ -34,15 +34,9 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 
 // Upload handles POST /files.
 func (h *Handler) Upload(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID or X-User-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+	if userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-User-ID"})
 		return
 	}
 	userID, err := uuid.Parse(userIDStr)
@@ -64,7 +58,7 @@ func (h *Handler) Upload(c *gin.Context) {
 	}
 	defer file.Close()
 
-	upload, err := h.service.Save(c.Request.Context(), tenantID, userID, fh.Filename, fh.Header.Get("Content-Type"), fh.Size, file)
+	upload, err := h.service.Save(c.Request.Context(), userID, fh.Filename, fh.Header.Get("Content-Type"), fh.Size, file)
 	if err != nil {
 		h.log.Error("upload failed", logger.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -76,15 +70,9 @@ func (h *Handler) Upload(c *gin.Context) {
 
 // List handles GET /files.
 func (h *Handler) List(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID or X-User-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+	if userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-User-ID"})
 		return
 	}
 	userID, err := uuid.Parse(userIDStr)
@@ -105,7 +93,7 @@ func (h *Handler) List(c *gin.Context) {
 		limit = 100
 	}
 
-	uploads, err := h.service.ListByUser(c.Request.Context(), tenantID, userID, limit, offset)
+	uploads, err := h.service.ListByUser(c.Request.Context(), userID, limit, offset)
 	if err != nil {
 		h.log.Error("list uploads failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list files"})
@@ -117,24 +105,13 @@ func (h *Handler) List(c *gin.Context) {
 
 // Get handles GET /files/:id.
 func (h *Handler) Get(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	upload, err := h.service.Get(c.Request.Context(), tenantID, id)
+	upload, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 		return
@@ -145,24 +122,13 @@ func (h *Handler) Get(c *gin.Context) {
 
 // Download handles GET /files/:id/download.
 func (h *Handler) Download(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	upload, err := h.service.Get(c.Request.Context(), tenantID, id)
+	upload, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 		return
@@ -181,24 +147,13 @@ func (h *Handler) Download(c *gin.Context) {
 
 // Delete handles DELETE /files/:id.
 func (h *Handler) Delete(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
-	if tenantIDStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing X-Tenant-ID"})
-		return
-	}
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
 
-	if err := h.service.Delete(c.Request.Context(), tenantID, id); err != nil {
+	if err := h.service.Delete(c.Request.Context(), id); err != nil {
 		h.log.Error("delete file failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete file"})
 		return

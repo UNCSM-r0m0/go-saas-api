@@ -23,14 +23,14 @@ type OAuthStateStore interface {
 
 // OAuthService handles OAuth 2.0 flows
 type OAuthService struct {
-	users       UserRepository
-	refresh     RefreshTokenStore
-	jwtManager  *jwt.Manager
-	stateStore  OAuthStateStore
-	googleCfg   *oauth2.Config
-	githubCfg   *oauth2.Config
-	accessTTL   time.Duration
-	refreshTTL  time.Duration
+	users      UserRepository
+	refresh    RefreshTokenStore
+	jwtManager *jwt.Manager
+	stateStore OAuthStateStore
+	googleCfg  *oauth2.Config
+	githubCfg  *oauth2.Config
+	accessTTL  time.Duration
+	refreshTTL time.Duration
 }
 
 // NewOAuthService creates a new OAuth service
@@ -80,20 +80,28 @@ func (s *OAuthService) GetGoogleAuthURL(ctx context.Context) (string, error) {
 func (s *OAuthService) HandleGoogleCallback(ctx context.Context, code, state string) (*TokenPair, *User, error) {
 	valid, err := s.stateStore.ValidateState(ctx, state)
 	if err != nil || !valid {
+		fmt.Println("[AUTH] Google callback: invalid state, err:", err, "valid:", valid)
 		return nil, nil, fmt.Errorf("invalid state")
 	}
 
 	token, err := s.googleCfg.Exchange(ctx, code)
 	if err != nil {
+		fmt.Println("[AUTH] Google callback: exchange code failed:", err)
 		return nil, nil, fmt.Errorf("exchange code: %w", err)
 	}
 
 	userInfo, err := s.fetchGoogleUserInfo(ctx, token.AccessToken)
 	if err != nil {
+		fmt.Println("[AUTH] Google callback: fetch user info failed:", err)
 		return nil, nil, fmt.Errorf("fetch user info: %w", err)
 	}
 
-	return s.findOrCreateOAuthUser(ctx, "google", userInfo.ID, userInfo.Email, userInfo.Name)
+	fmt.Println("[AUTH] Google callback: user info fetched, email:", userInfo.Email)
+	pair, user, err := s.findOrCreateOAuthUser(ctx, "google", userInfo.ID, userInfo.Email, userInfo.Name)
+	if err != nil {
+		fmt.Println("[AUTH] Google callback: findOrCreateOAuthUser failed:", err)
+	}
+	return pair, user, err
 }
 
 // GetGitHubAuthURL returns the URL to redirect the user to for GitHub OAuth
@@ -131,15 +139,16 @@ func (s *OAuthService) findOrCreateOAuthUser(ctx context.Context, provider, subj
 		// Create new user
 		now := time.Now().UTC()
 		user = &User{
-			ID:            uuid.New(),
-			TenantID:      uuid.MustParse("00000000-0000-0000-0000-000000000001"),
-			Email:         email,
-			Name:          name,
-			Role:          "member",
-			OAuthProvider: provider,
-			OAuthSubject:  subject,
-			CreatedAt:     now,
-			UpdatedAt:     now,
+			ID:                    uuid.New(),
+			Email:                 email,
+			Name:                  name,
+			Role:                  "registered",
+			IsAdmin:               false,
+			MessagesUsedThisMonth: 0,
+			OAuthProvider:         provider,
+			OAuthSubject:          subject,
+			CreatedAt:             now,
+			UpdatedAt:             now,
 		}
 		if err := s.users.Create(ctx, user); err != nil {
 			return nil, nil, fmt.Errorf("create user: %w", err)
@@ -155,7 +164,7 @@ func (s *OAuthService) findOrCreateOAuthUser(ctx context.Context, provider, subj
 }
 
 func (s *OAuthService) generateOAuthTokenPair(ctx context.Context, user *User) (*TokenPair, error) {
-	accessToken, err := s.jwtManager.GenerateToken(user.ID.String(), user.TenantID.String(), user.Role, s.accessTTL)
+	accessToken, err := s.jwtManager.GenerateToken(user.ID.String(), user.Role, s.accessTTL)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}

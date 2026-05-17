@@ -2,6 +2,7 @@
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -150,6 +151,83 @@ func TestNewDeepSeekClient(t *testing.T) {
 	}
 	if c.baseURL != "https://api.deepseek.com/v1" {
 		t.Fatalf("expected DeepSeek base URL, got %s", c.baseURL)
+	}
+}
+
+func TestOpenAICompatibleClient_Stream_ToolCall(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+
+		// Verify tools are passed in request
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		tools, ok := body["tools"].([]any)
+		if !ok || len(tools) == 0 {
+			http.Error(w, "missing tools", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+
+		lines := []string{
+			`data: {"choices":[{"delta":{"content":"I will "}}]}` + "\n\n",
+			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"echo","arguments":""}}]}}]}` + "\n\n",
+			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"msg\":\""}}]}}]}` + "\n\n",
+			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ping\"}"}}]}}]}` + "\n\n",
+			`data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}` + "\n\n",
+		}
+		for _, line := range lines {
+			w.Write([]byte(line))
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer ts.Close()
+
+	client := NewOpenAICompatibleClient(ts.URL, "test-key")
+	ch, err := client.Stream(context.Background(), Request{
+		Model:    "gpt-4o-mini",
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Tools: []ToolDefinition{
+			{Type: "function", Function: FunctionSchema{Name: "echo", Description: "echo", Parameters: map[string]any{"type": "object"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result string
+	var toolCall *ToolCall
+	for chunk := range ch {
+		result += chunk.Content
+		if chunk.ToolCall != nil {
+			toolCall = chunk.ToolCall
+		}
+		if chunk.Done {
+			break
+		}
+	}
+
+	if result != "I will " {
+		t.Fatalf("expected 'I will ', got %q", result)
+	}
+	if toolCall == nil {
+		t.Fatal("expected tool call in stream")
+	}
+	if toolCall.Name != "echo" {
+		t.Fatalf("expected tool name echo, got %s", toolCall.Name)
+	}
+	if toolCall.Arguments["msg"] != "ping" {
+		t.Fatalf("expected arg msg=ping, got %v", toolCall.Arguments)
 	}
 }
 

@@ -8,16 +8,17 @@ import (
 
 // User represents an authenticated user in the system
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	TenantID     uuid.UUID `json:"tenant_id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"` // never serialized
-	Name         string    `json:"name"`
-	Role         string    `json:"role"`
-	OAuthProvider string   `json:"oauth_provider,omitempty"`
-	OAuthSubject  string   `json:"oauth_subject,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                    uuid.UUID `json:"id"`
+	Email                 string    `json:"email"`
+	PasswordHash          string    `json:"-"` // never serialized
+	Name                  string    `json:"name"`
+	Role                  string    `json:"role"`
+	IsAdmin               bool      `json:"is_admin"`
+	MessagesUsedThisMonth int       `json:"messages_used_this_month"`
+	OAuthProvider         string    `json:"oauth_provider,omitempty"`
+	OAuthSubject          string    `json:"oauth_subject,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 
 // RegisterRequest represents a user registration payload

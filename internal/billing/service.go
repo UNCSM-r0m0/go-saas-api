@@ -1,4 +1,4 @@
-﻿package billing
+package billing
 
 import (
 	"context"
@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	natsio "github.com/nats-io/nats.go"
 	"github.com/stripe/stripe-go/v81"
+	portal "github.com/stripe/stripe-go/v81/billingportal/session"
 	"github.com/stripe/stripe-go/v81/checkout/session"
 	"github.com/stripe/stripe-go/v81/customer"
 	"github.com/stripe/stripe-go/v81/subscription"
@@ -16,15 +18,16 @@ import (
 
 // BillingService handles Stripe integration and subscription logic.
 type BillingService struct {
-	plans        PlanRepository
-	subs         SubscriptionRepository
-	stripeKey    string
+	plans         PlanRepository
+	subs          SubscriptionRepository
+	stripeKey     string
 	webhookSecret string
-	frontendURL  string
+	frontendURL   string
+	natsConn      *natsio.Conn
 }
 
 // NewBillingService creates a new billing service.
-func NewBillingService(plans PlanRepository, subs SubscriptionRepository, stripeKey, webhookSecret, frontendURL string) *BillingService {
+func NewBillingService(plans PlanRepository, subs SubscriptionRepository, stripeKey, webhookSecret, frontendURL string, nc *natsio.Conn) *BillingService {
 	stripe.Key = stripeKey
 	return &BillingService{
 		plans:         plans,
@@ -32,16 +35,17 @@ func NewBillingService(plans PlanRepository, subs SubscriptionRepository, stripe
 		stripeKey:     stripeKey,
 		webhookSecret: webhookSecret,
 		frontendURL:   frontendURL,
+		natsConn:      nc,
 	}
 }
 
 // CreateCheckoutSession creates a Stripe checkout session for a plan.
-func (s *BillingService) CreateCheckoutSession(ctx context.Context, tenantID, userID uuid.UUID, email, planSlug string) (string, error) {
+func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID uuid.UUID, email, planSlug string) (string, error) {
 	plan, err := s.plans.GetPlanBySlug(ctx, planSlug)
 	if err != nil {
 		return "", fmt.Errorf("plan not found: %w", err)
 	}
-	if plan.StripePriceID == "" {
+	if plan.StripePriceID == nil || *plan.StripePriceID == "" {
 		return "", fmt.Errorf("plan %s has no stripe price id", planSlug)
 	}
 
@@ -49,8 +53,7 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, tenantID, us
 	cusParams := &stripe.CustomerParams{
 		Email: stripe.String(email),
 		Metadata: map[string]string{
-			"tenant_id": tenantID.String(),
-			"user_id":   userID.String(),
+			"user_id": userID.String(),
 		},
 	}
 	cus, err := customer.New(cusParams)
@@ -59,10 +62,10 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, tenantID, us
 	}
 
 	params := &stripe.CheckoutSessionParams{
-		Customer:   stripe.String(cus.ID),
+		Customer: stripe.String(cus.ID),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
-				Price:    stripe.String(plan.StripePriceID),
+				Price:    stripe.String(*plan.StripePriceID),
 				Quantity: stripe.Int64(1),
 			},
 		},
@@ -71,9 +74,8 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, tenantID, us
 		CancelURL:  stripe.String(s.frontendURL + "/billing/cancel"),
 		SubscriptionData: &stripe.CheckoutSessionSubscriptionDataParams{
 			Metadata: map[string]string{
-				"tenant_id": tenantID.String(),
-				"user_id":   userID.String(),
-				"plan_id":   plan.ID.String(),
+				"user_id": userID.String(),
+				"plan_id": plan.ID.String(),
 			},
 		},
 	}
@@ -86,7 +88,6 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, tenantID, us
 	// Pre-create subscription record (incomplete until webhook confirms)
 	sub := &Subscription{
 		ID:               uuid.New(),
-		TenantID:         tenantID,
 		UserID:           userID,
 		PlanID:           plan.ID,
 		StripeCustomerID: cus.ID,
@@ -102,14 +103,14 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, tenantID, us
 }
 
 // GetSubscription returns the current subscription for a user.
-func (s *BillingService) GetSubscription(ctx context.Context, tenantID, userID uuid.UUID) (*Subscription, *Plan, error) {
-	sub, err := s.subs.GetSubscriptionByUser(ctx, tenantID, userID)
+func (s *BillingService) GetSubscription(ctx context.Context, userID uuid.UUID) (*Subscription, *Plan, error) {
+	sub, err := s.subs.GetSubscriptionByUser(ctx, userID)
 	if err != nil {
 		return nil, nil, err
 	}
 	if sub == nil {
-		// Return free plan as default
-		plan, err := s.plans.GetPlanBySlug(ctx, "free")
+		// Registered is the baseline authenticated plan.
+		plan, err := s.plans.GetPlanBySlug(ctx, "registered")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -123,8 +124,8 @@ func (s *BillingService) GetSubscription(ctx context.Context, tenantID, userID u
 }
 
 // CancelSubscription cancels via Stripe and updates local record.
-func (s *BillingService) CancelSubscription(ctx context.Context, tenantID, userID uuid.UUID) error {
-	sub, err := s.subs.GetSubscriptionByUser(ctx, tenantID, userID)
+func (s *BillingService) CancelSubscription(ctx context.Context, userID uuid.UUID) error {
+	sub, err := s.subs.GetSubscriptionByUser(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -167,6 +168,20 @@ func (s *BillingService) HandleWebhook(ctx context.Context, p WebhookPayload) er
 	return nil
 }
 
+func (s *BillingService) publishSubscriptionChanged(userID uuid.UUID, planSlug, status string) {
+	if s.natsConn == nil {
+		return
+	}
+	event := map[string]interface{}{
+		"user_id":   userID.String(),
+		"plan_slug": planSlug,
+		"status":    status,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+	data, _ := json.Marshal(event)
+	_ = s.natsConn.Publish("subscription.changed", data)
+}
+
 func (s *BillingService) handleCheckoutCompleted(ctx context.Context, event stripe.Event) error {
 	var sess stripe.CheckoutSession
 	if err := json.Unmarshal(event.Data.Raw, &sess); err != nil {
@@ -187,7 +202,11 @@ func (s *BillingService) handleCheckoutCompleted(ctx context.Context, event stri
 	sub.StripeSubscriptionID = sess.Subscription.ID
 	sub.Status = string(stripe.SubscriptionStatusActive)
 	sub.UpdatedAt = time.Now().UTC()
-	return s.subs.UpdateSubscription(ctx, sub)
+	if err := s.subs.UpdateSubscription(ctx, sub); err != nil {
+		return err
+	}
+	s.publishSubscriptionChanged(sub.UserID, "premium", sub.Status)
+	return nil
 }
 
 func (s *BillingService) handleInvoicePaid(ctx context.Context, event stripe.Event) error {
@@ -209,7 +228,11 @@ func (s *BillingService) handleInvoicePaid(ctx context.Context, event stripe.Eve
 
 	sub.Status = string(stripe.SubscriptionStatusActive)
 	sub.UpdatedAt = time.Now().UTC()
-	return s.subs.UpdateSubscription(ctx, sub)
+	if err := s.subs.UpdateSubscription(ctx, sub); err != nil {
+		return err
+	}
+	s.publishSubscriptionChanged(sub.UserID, "premium", sub.Status)
+	return nil
 }
 
 func (s *BillingService) handleSubscriptionUpdated(ctx context.Context, event stripe.Event) error {
@@ -237,7 +260,11 @@ func (s *BillingService) handleSubscriptionUpdated(ctx context.Context, event st
 	}
 	sub.CancelAtPeriodEnd = stripeSub.CancelAtPeriodEnd
 	sub.UpdatedAt = time.Now().UTC()
-	return s.subs.UpdateSubscription(ctx, sub)
+	if err := s.subs.UpdateSubscription(ctx, sub); err != nil {
+		return err
+	}
+	s.publishSubscriptionChanged(sub.UserID, "premium", sub.Status)
+	return nil
 }
 
 func (s *BillingService) handleSubscriptionDeleted(ctx context.Context, event stripe.Event) error {
@@ -255,5 +282,24 @@ func (s *BillingService) handleSubscriptionDeleted(ctx context.Context, event st
 	}
 
 	now := time.Now().UTC()
-	return s.subs.CancelSubscription(ctx, sub.ID, now, false)
+	if err := s.subs.CancelSubscription(ctx, sub.ID, now, false); err != nil {
+		return err
+	}
+	s.publishSubscriptionChanged(sub.UserID, "registered", "cancelled")
+	return nil
+}
+
+// CreatePortalSession creates a Stripe customer portal session.
+func (s *BillingService) CreatePortalSession(ctx context.Context, customerID string) (string, error) {
+	params := &stripe.BillingPortalSessionParams{
+		Customer:  stripe.String(customerID),
+		ReturnURL: stripe.String(s.frontendURL + "/billing"),
+	}
+
+	ps, err := portal.New(params)
+	if err != nil {
+		return "", fmt.Errorf("create portal session: %w", err)
+	}
+
+	return ps.URL, nil
 }

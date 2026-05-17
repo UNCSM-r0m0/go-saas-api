@@ -24,11 +24,11 @@ func (m *memStore) CreateProvider(_ context.Context, p *AIProvider) error {
 	return nil
 }
 
-func (m *memStore) GetProvider(_ context.Context, _, id uuid.UUID) (*AIProvider, error) {
+func (m *memStore) GetProvider(_ context.Context, id uuid.UUID) (*AIProvider, error) {
 	return m.providers[id], nil
 }
 
-func (m *memStore) ListProviders(_ context.Context, _ uuid.UUID) ([]AIProvider, error) {
+func (m *memStore) ListProviders(_ context.Context) ([]AIProvider, error) {
 	var list []AIProvider
 	for _, p := range m.providers {
 		list = append(list, *p)
@@ -36,7 +36,7 @@ func (m *memStore) ListProviders(_ context.Context, _ uuid.UUID) ([]AIProvider, 
 	return list, nil
 }
 
-func (m *memStore) ListActiveProviders(_ context.Context, _ uuid.UUID) ([]AIProvider, error) {
+func (m *memStore) ListActiveProviders(_ context.Context) ([]AIProvider, error) {
 	var list []AIProvider
 	for _, p := range m.providers {
 		if p.IsActive {
@@ -47,15 +47,15 @@ func (m *memStore) ListActiveProviders(_ context.Context, _ uuid.UUID) ([]AIProv
 }
 
 func (m *memStore) ListAllActiveProviders(_ context.Context) ([]AIProvider, error) {
-	return m.ListActiveProviders(context.Background(), uuid.UUID{})
+	return m.ListActiveProviders(context.Background())
 }
 
-func (m *memStore) UpdateProvider(_ context.Context, _ uuid.UUID, p *AIProvider) error {
+func (m *memStore) UpdateProvider(_ context.Context, p *AIProvider) error {
 	m.providers[p.ID] = p
 	return nil
 }
 
-func (m *memStore) DeleteProvider(_ context.Context, _, id uuid.UUID) error {
+func (m *memStore) DeleteProvider(_ context.Context, id uuid.UUID) error {
 	delete(m.providers, id)
 	return nil
 }
@@ -65,11 +65,11 @@ func (m *memStore) CreateModel(_ context.Context, mod *AIModel) error {
 	return nil
 }
 
-func (m *memStore) GetModel(_ context.Context, _, id uuid.UUID) (*AIModel, error) {
+func (m *memStore) GetModel(_ context.Context, id uuid.UUID) (*AIModel, error) {
 	return m.models[id], nil
 }
 
-func (m *memStore) ListModelsByProvider(_ context.Context, _, providerID uuid.UUID) ([]AIModel, error) {
+func (m *memStore) ListModelsByProvider(_ context.Context, providerID uuid.UUID) ([]AIModel, error) {
 	var list []AIModel
 	for _, mod := range m.models {
 		if mod.ProviderID == providerID {
@@ -80,10 +80,10 @@ func (m *memStore) ListModelsByProvider(_ context.Context, _, providerID uuid.UU
 }
 
 func (m *memStore) ListAllModelsByProvider(_ context.Context, providerID uuid.UUID) ([]AIModel, error) {
-	return m.ListModelsByProvider(context.Background(), uuid.UUID{}, providerID)
+	return m.ListModelsByProvider(context.Background(), providerID)
 }
 
-func (m *memStore) ListActiveModels(_ context.Context, _ uuid.UUID, _ bool) ([]AIModel, error) {
+func (m *memStore) ListActiveModels(_ context.Context, _ bool) ([]AIModel, error) {
 	var list []AIModel
 	for _, mod := range m.models {
 		if mod.IsActive {
@@ -93,22 +93,21 @@ func (m *memStore) ListActiveModels(_ context.Context, _ uuid.UUID, _ bool) ([]A
 	return list, nil
 }
 
-func (m *memStore) UpdateModel(_ context.Context, _ uuid.UUID, mod *AIModel) error {
+func (m *memStore) UpdateModel(_ context.Context, mod *AIModel) error {
 	m.models[mod.ID] = mod
 	return nil
 }
 
-func (m *memStore) DeleteModel(_ context.Context, _, id uuid.UUID) error {
+func (m *memStore) DeleteModel(_ context.Context, id uuid.UUID) error {
 	delete(m.models, id)
 	return nil
 }
 
 func TestCreateProvider(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
-	tenantID := uuid.New()
-	p, err := svc.CreateProvider(context.Background(), tenantID, "OpenAI", ProviderOpenAI, "https://api.openai.com", "sk-test", 100, true)
+	p, err := svc.CreateProvider(context.Background(), "OpenAI", ProviderOpenAI, "https://api.openai.com", "sk-test", 100, true)
 	if err != nil {
 		t.Fatalf("create provider failed: %v", err)
 	}
@@ -122,13 +121,12 @@ func TestCreateProvider(t *testing.T) {
 
 func TestListProviders(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
-	tenantID := uuid.New()
-	_, _ = svc.CreateProvider(context.Background(), tenantID, "Ollama", ProviderOllama, "http://localhost:11434", "", 50, true)
-	_, _ = svc.CreateProvider(context.Background(), tenantID, "OpenAI", ProviderOpenAI, "https://api.openai.com", "sk-test", 100, true)
+	_, _ = svc.CreateProvider(context.Background(), "Ollama", ProviderOllama, "http://localhost:11434", "", 50, true)
+	_, _ = svc.CreateProvider(context.Background(), "OpenAI", ProviderOpenAI, "https://api.openai.com", "sk-test", 100, true)
 
-	providers, err := svc.ListProviders(context.Background(), tenantID)
+	providers, err := svc.ListProviders(context.Background())
 	if err != nil {
 		t.Fatalf("list providers failed: %v", err)
 	}
@@ -139,12 +137,11 @@ func TestListProviders(t *testing.T) {
 
 func TestUpdateProvider(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
-	tenantID := uuid.New()
-	p, _ := svc.CreateProvider(context.Background(), tenantID, "OpenAI", ProviderOpenAI, "https://api.openai.com", "sk-test", 100, true)
+	p, _ := svc.CreateProvider(context.Background(), "OpenAI", ProviderOpenAI, "https://api.openai.com", "sk-test", 100, true)
 
-	updated, err := svc.UpdateProvider(context.Background(), tenantID, p.ID, "OpenAI Updated", ProviderOpenAI, "https://api.openai.com", "sk-new", 90, false, true)
+	updated, err := svc.UpdateProvider(context.Background(), p.ID, "OpenAI Updated", ProviderOpenAI, "https://api.openai.com", "sk-new", 90, false, true)
 	if err != nil {
 		t.Fatalf("update provider failed: %v", err)
 	}
@@ -158,16 +155,15 @@ func TestUpdateProvider(t *testing.T) {
 
 func TestDeleteProvider(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
-	tenantID := uuid.New()
-	p, _ := svc.CreateProvider(context.Background(), tenantID, "Gemini", ProviderGemini, "https://gemini.googleapis.com", "", 80, true)
+	p, _ := svc.CreateProvider(context.Background(), "Gemini", ProviderGemini, "https://gemini.googleapis.com", "", 80, true)
 
-	if err := svc.DeleteProvider(context.Background(), tenantID, p.ID); err != nil {
+	if err := svc.DeleteProvider(context.Background(), p.ID); err != nil {
 		t.Fatalf("delete provider failed: %v", err)
 	}
 
-	providers, _ := svc.ListProviders(context.Background(), tenantID)
+	providers, _ := svc.ListProviders(context.Background())
 	if len(providers) != 0 {
 		t.Fatalf("expected 0 providers after delete, got %d", len(providers))
 	}
@@ -175,11 +171,10 @@ func TestDeleteProvider(t *testing.T) {
 
 func TestCreateModel(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
-	tenantID := uuid.New()
 	providerID := uuid.New()
-	m, err := svc.CreateModel(context.Background(), tenantID, providerID, "gpt-4o", "GPT-4o", "OpenAI flagship", 4096, 8192, true, false, true, false)
+	m, err := svc.CreateModel(context.Background(), providerID, "gpt-4o", "GPT-4o", "OpenAI flagship", 4096, 8192, true, false, true, false)
 	if err != nil {
 		t.Fatalf("create model failed: %v", err)
 	}
@@ -193,14 +188,13 @@ func TestCreateModel(t *testing.T) {
 
 func TestListModelsByProvider(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
-	tenantID := uuid.New()
 	providerID := uuid.New()
-	_, _ = svc.CreateModel(context.Background(), tenantID, providerID, "gpt-4o", "GPT-4o", "", 4096, 8192, true, false, true, false)
-	_, _ = svc.CreateModel(context.Background(), tenantID, providerID, "gpt-4o-mini", "GPT-4o Mini", "", 4096, 8192, true, false, true, false)
+	_, _ = svc.CreateModel(context.Background(), providerID, "gpt-4o", "GPT-4o", "", 4096, 8192, true, false, true, false)
+	_, _ = svc.CreateModel(context.Background(), providerID, "gpt-4o-mini", "GPT-4o Mini", "", 4096, 8192, true, false, true, false)
 
-	models, err := svc.ListModelsByProvider(context.Background(), tenantID, providerID)
+	models, err := svc.ListModelsByProvider(context.Background(), providerID)
 	if err != nil {
 		t.Fatalf("list models failed: %v", err)
 	}
@@ -211,17 +205,16 @@ func TestListModelsByProvider(t *testing.T) {
 
 func TestDeleteModel(t *testing.T) {
 	store := newMemStore()
-	svc := NewService(store)
+	svc := NewService(store, "test-master-key-32-bytes-long!!")
 
-	tenantID := uuid.New()
 	providerID := uuid.New()
-	m, _ := svc.CreateModel(context.Background(), tenantID, providerID, "gpt-3.5", "GPT-3.5", "", 4096, 4096, true, false, true, false)
+	m, _ := svc.CreateModel(context.Background(), providerID, "gpt-3.5", "GPT-3.5", "", 4096, 4096, true, false, true, false)
 
-	if err := svc.DeleteModel(context.Background(), tenantID, m.ID); err != nil {
+	if err := svc.DeleteModel(context.Background(), m.ID); err != nil {
 		t.Fatalf("delete model failed: %v", err)
 	}
 
-	models, _ := svc.ListModelsByProvider(context.Background(), tenantID, providerID)
+	models, _ := svc.ListModelsByProvider(context.Background(), providerID)
 	if len(models) != 0 {
 		t.Fatalf("expected 0 models after delete, got %d", len(models))
 	}

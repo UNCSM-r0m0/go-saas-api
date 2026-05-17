@@ -1,22 +1,25 @@
 ﻿package billing
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	natsio "github.com/nats-io/nats.go"
 )
 
 // UsageHandler holds HTTP handlers for usage endpoints.
 type UsageHandler struct {
 	usageRepo UsageRepository
 	plans     PlanRepository
+	natsConn  *natsio.Conn
 }
 
 // NewUsageHandler creates a new usage handler.
-func NewUsageHandler(usageRepo UsageRepository, plans PlanRepository) *UsageHandler {
-	return &UsageHandler{usageRepo: usageRepo, plans: plans}
+func NewUsageHandler(usageRepo UsageRepository, plans PlanRepository, nc *natsio.Conn) *UsageHandler {
+	return &UsageHandler{usageRepo: usageRepo, plans: plans, natsConn: nc}
 }
 
 // RegisterRoutes registers usage routes.
@@ -27,18 +30,12 @@ func (h *UsageHandler) RegisterRoutes(r *gin.RouterGroup) {
 }
 
 func (h *UsageHandler) handleGetStats(c *gin.Context) {
-	tenantIDStr := c.GetHeader("X-Tenant-ID")
 	userIDStr := c.GetHeader("X-User-ID")
-	if tenantIDStr == "" || userIDStr == "" {
+	if userIDStr == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing headers"})
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
@@ -48,7 +45,7 @@ func (h *UsageHandler) handleGetStats(c *gin.Context) {
 	from := time.Now().UTC().AddDate(0, 0, -30)
 	to := time.Now().UTC()
 
-	stats, err := h.usageRepo.GetUsageStats(c.Request.Context(), tenantID, userID, from, to)
+	stats, err := h.usageRepo.GetUsageStats(c.Request.Context(), userID, from, to)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -67,7 +64,7 @@ func (h *UsageHandler) handleGetLimits(c *gin.Context) {
 	limits := make(map[string]gin.H)
 	for _, p := range plans {
 		limits[p.Slug] = gin.H{
-			"messages_per_day":       p.MessagesPerDay,
+			"messages_per_month":     p.MessagesPerMonth,
 			"max_tokens_per_request": p.MaxTokensPerRequest,
 			"features":               p.Features,
 		}
@@ -78,7 +75,6 @@ func (h *UsageHandler) handleGetLimits(c *gin.Context) {
 
 func (h *UsageHandler) handleTrackUsage(c *gin.Context) {
 	var req struct {
-		TenantID       uuid.UUID  `json:"tenant_id" binding:"required"`
 		UserID         uuid.UUID  `json:"user_id" binding:"required"`
 		ConversationID *uuid.UUID `json:"conversation_id"`
 		Model          string     `json:"model" binding:"required"`
@@ -95,7 +91,6 @@ func (h *UsageHandler) handleTrackUsage(c *gin.Context) {
 
 	log := &UsageLog{
 		ID:             uuid.New(),
-		TenantID:       req.TenantID,
 		UserID:         req.UserID,
 		ConversationID: req.ConversationID,
 		Model:          req.Model,
@@ -114,10 +109,23 @@ func (h *UsageHandler) handleTrackUsage(c *gin.Context) {
 
 	// Update daily rollup
 	today := time.Now().UTC().Truncate(24 * time.Hour)
-	if err := h.usageRepo.IncrementDailyUsage(c.Request.Context(), req.TenantID, req.UserID, today,
+	if err := h.usageRepo.IncrementDailyUsage(c.Request.Context(), req.UserID, today,
 		req.TokensInput, req.TokensOutput, req.CostUSD); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Publish usage.recorded event if NATS is enabled
+	if h.natsConn != nil {
+		event := map[string]interface{}{
+			"user_id":       req.UserID.String(),
+			"tokens_input":  req.TokensInput,
+			"tokens_output": req.TokensOutput,
+			"cost_usd":      req.CostUSD,
+			"timestamp":     time.Now().UTC().Format(time.RFC3339),
+		}
+		data, _ := json.Marshal(event)
+		_ = h.natsConn.Publish("usage.recorded", data)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"status": "tracked"})

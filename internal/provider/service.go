@@ -9,36 +9,43 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/platform/crypto"
 )
 
 // Service provides business logic for AI provider management.
 type Service struct {
-	store Store
+	store     Store
+	masterKey string
 }
 
 // NewService creates a new provider service.
-func NewService(store Store) *Service {
-	return &Service{store: store}
+func NewService(store Store, masterKey string) *Service {
+	return &Service{store: store, masterKey: masterKey}
 }
 
 // CreateProvider creates a new AI provider.
-func (s *Service) CreateProvider(ctx context.Context, tenantID uuid.UUID, name string, pType ProviderType, baseURL, apiKey string, priority int, isPublic bool) (*AIProvider, error) {
+func (s *Service) CreateProvider(ctx context.Context, name string, pType ProviderType, baseURL, apiKey string, priority int, isPublic bool) (*AIProvider, error) {
 	p := &AIProvider{
-		ID:       uuid.New(),
-		TenantID: tenantID,
-		Name:     name,
-		Type:     pType,
-		BaseURL:  baseURL,
-		IsActive: true,
-		IsPublic: isPublic,
-		Priority: priority,
-		Config:   map[string]any{},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:                   uuid.New(),
+		Name:                 name,
+		Type:                 pType,
+		BaseURL:              baseURL,
+		IsActive:             true,
+		IsPublic:             isPublic,
+		Priority:             priority,
+		Config:               map[string]any{},
+		EncryptionKeyVersion: 1,
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
 	}
 	if apiKey != "" {
-		p.APIKeyEncrypted = apiKey // TODO: encrypt with AES-256
-		p.APIKeyHash = hashString(apiKey)
+		encrypted, err := crypto.EncryptAPIKey(apiKey, s.masterKey)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt api key: %w", err)
+		}
+		p.APIKeyEncrypted = &encrypted
+		hash := hashString(apiKey)
+		p.APIKeyHash = &hash
 	}
 	if err := s.store.CreateProvider(ctx, p); err != nil {
 		return nil, fmt.Errorf("create provider: %w", err)
@@ -47,27 +54,27 @@ func (s *Service) CreateProvider(ctx context.Context, tenantID uuid.UUID, name s
 }
 
 // GetProvider retrieves a provider by ID.
-func (s *Service) GetProvider(ctx context.Context, tenantID, id uuid.UUID) (*AIProvider, error) {
-	p, err := s.store.GetProvider(ctx, tenantID, id)
+func (s *Service) GetProvider(ctx context.Context, id uuid.UUID) (*AIProvider, error) {
+	p, err := s.store.GetProvider(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get provider: %w", err)
 	}
 	return p, nil
 }
 
-// ListProviders lists all providers for a tenant.
-func (s *Service) ListProviders(ctx context.Context, tenantID uuid.UUID) ([]AIProvider, error) {
-	return s.store.ListProviders(ctx, tenantID)
+// ListProviders lists all providers.
+func (s *Service) ListProviders(ctx context.Context) ([]AIProvider, error) {
+	return s.store.ListProviders(ctx)
 }
 
-// ListActiveProviders lists active providers for a tenant.
-func (s *Service) ListActiveProviders(ctx context.Context, tenantID uuid.UUID) ([]AIProvider, error) {
-	return s.store.ListActiveProviders(ctx, tenantID)
+// ListActiveProviders lists active providers.
+func (s *Service) ListActiveProviders(ctx context.Context) ([]AIProvider, error) {
+	return s.store.ListActiveProviders(ctx)
 }
 
 // UpdateProvider updates an existing provider.
-func (s *Service) UpdateProvider(ctx context.Context, tenantID uuid.UUID, id uuid.UUID, name string, pType ProviderType, baseURL, apiKey string, priority int, isActive, isPublic bool) (*AIProvider, error) {
-	p, err := s.store.GetProvider(ctx, tenantID, id)
+func (s *Service) UpdateProvider(ctx context.Context, id uuid.UUID, name string, pType ProviderType, baseURL, apiKey string, priority int, isActive, isPublic bool) (*AIProvider, error) {
+	p, err := s.store.GetProvider(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get provider: %w", err)
 	}
@@ -79,23 +86,28 @@ func (s *Service) UpdateProvider(ctx context.Context, tenantID uuid.UUID, id uui
 	p.IsPublic = isPublic
 	p.UpdatedAt = time.Now()
 	if apiKey != "" {
-		p.APIKeyEncrypted = apiKey // TODO: encrypt with AES-256
-		p.APIKeyHash = hashString(apiKey)
+		encrypted, err := crypto.EncryptAPIKey(apiKey, s.masterKey)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt api key: %w", err)
+		}
+		p.APIKeyEncrypted = &encrypted
+		hash := hashString(apiKey)
+		p.APIKeyHash = &hash
 	}
-	if err := s.store.UpdateProvider(ctx, tenantID, p); err != nil {
+	if err := s.store.UpdateProvider(ctx, p); err != nil {
 		return nil, fmt.Errorf("update provider: %w", err)
 	}
 	return p, nil
 }
 
 // DeleteProvider deletes a provider and its models.
-func (s *Service) DeleteProvider(ctx context.Context, tenantID, id uuid.UUID) error {
-	return s.store.DeleteProvider(ctx, tenantID, id)
+func (s *Service) DeleteProvider(ctx context.Context, id uuid.UUID) error {
+	return s.store.DeleteProvider(ctx, id)
 }
 
 // TestProviderConnection attempts a health check against the provider's base URL.
-func (s *Service) TestProviderConnection(ctx context.Context, tenantID, id uuid.UUID) error {
-	p, err := s.store.GetProvider(ctx, tenantID, id)
+func (s *Service) TestProviderConnection(ctx context.Context, id uuid.UUID) error {
+	p, err := s.store.GetProvider(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get provider: %w", err)
 	}
@@ -117,13 +129,17 @@ func (s *Service) TestProviderConnection(ctx context.Context, tenantID, id uuid.
 }
 
 // CreateModel creates a new AI model.
-func (s *Service) CreateModel(ctx context.Context, tenantID uuid.UUID, providerID uuid.UUID, name, displayName, description string, maxTokens, contextWindow int, supportsStreaming, supportsImages, isPublic, isPremium bool) (*AIModel, error) {
+func (s *Service) CreateModel(ctx context.Context, providerID uuid.UUID, name, displayName, description string, maxTokens, contextWindow int, supportsStreaming, supportsImages, isPublic, isPremium bool) (*AIModel, error) {
+	var descPtr *string
+	if description != "" {
+		descPtr = &description
+	}
 	m := &AIModel{
 		ID:                uuid.New(),
 		ProviderID:        providerID,
 		Name:              name,
 		DisplayName:       displayName,
-		Description:       description,
+		Description:       descPtr,
 		MaxTokens:         maxTokens,
 		ContextWindow:     contextWindow,
 		SupportsStreaming: supportsStreaming,
@@ -142,28 +158,28 @@ func (s *Service) CreateModel(ctx context.Context, tenantID uuid.UUID, providerI
 }
 
 // GetModel retrieves a model by ID.
-func (s *Service) GetModel(ctx context.Context, tenantID, id uuid.UUID) (*AIModel, error) {
-	return s.store.GetModel(ctx, tenantID, id)
+func (s *Service) GetModel(ctx context.Context, id uuid.UUID) (*AIModel, error) {
+	return s.store.GetModel(ctx, id)
 }
 
 // ListModelsByProvider lists models for a provider.
-func (s *Service) ListModelsByProvider(ctx context.Context, tenantID, providerID uuid.UUID) ([]AIModel, error) {
-	return s.store.ListModelsByProvider(ctx, tenantID, providerID)
+func (s *Service) ListModelsByProvider(ctx context.Context, providerID uuid.UUID) ([]AIModel, error) {
+	return s.store.ListModelsByProvider(ctx, providerID)
 }
 
 // ListActiveModels lists active models visible to users.
-func (s *Service) ListActiveModels(ctx context.Context, tenantID uuid.UUID, isPublicOnly bool) ([]AIModel, error) {
-	return s.store.ListActiveModels(ctx, tenantID, isPublicOnly)
+func (s *Service) ListActiveModels(ctx context.Context, isPublicOnly bool) ([]AIModel, error) {
+	return s.store.ListActiveModels(ctx, isPublicOnly)
 }
 
 // UpdateModel updates a model.
-func (s *Service) UpdateModel(ctx context.Context, tenantID uuid.UUID, m *AIModel) error {
-	return s.store.UpdateModel(ctx, tenantID, m)
+func (s *Service) UpdateModel(ctx context.Context, m *AIModel) error {
+	return s.store.UpdateModel(ctx, m)
 }
 
 // DeleteModel deletes a model.
-func (s *Service) DeleteModel(ctx context.Context, tenantID, id uuid.UUID) error {
-	return s.store.DeleteModel(ctx, tenantID, id)
+func (s *Service) DeleteModel(ctx context.Context, id uuid.UUID) error {
+	return s.store.DeleteModel(ctx, id)
 }
 
 func hashString(s string) string {

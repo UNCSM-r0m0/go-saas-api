@@ -10,11 +10,6 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 )
 
-func setTenant(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID) error {
-	_, err := pool.Exec(ctx, "SELECT set_config('app.current_tenant', $1, false)", tenantID.String())
-	return err
-}
-
 // ---- ConversationStore ----
 
 type ConversationStore struct {
@@ -26,26 +21,23 @@ func NewConversationStore(pool *pgxpool.Pool) *ConversationStore {
 }
 
 func (s *ConversationStore) Create(ctx context.Context, conv *model.Conversation) error {
-	if err := setTenant(ctx, s.pool, conv.TenantID); err != nil {
-		return err
+	if conv.Metadata == nil {
+		conv.Metadata = map[string]any{}
 	}
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO conversations (id, tenant_id, user_id, title, agent_id, status, metadata, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		conv.ID, conv.TenantID, conv.UserID, conv.Title, conv.AgentID, conv.Status, conv.Metadata, conv.CreatedAt, conv.UpdatedAt)
+		`INSERT INTO conversations (id, user_id, title, agent_id, status, metadata, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		conv.ID, conv.UserID, conv.Title, conv.AgentID, conv.Status, conv.Metadata, conv.CreatedAt, conv.UpdatedAt)
 	return err
 }
 
-func (s *ConversationStore) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*model.Conversation, error) {
-	if err := setTenant(ctx, s.pool, tenantID); err != nil {
-		return nil, err
-	}
+func (s *ConversationStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Conversation, error) {
 	var conv model.Conversation
 	var agentID *uuid.UUID
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, user_id, title, agent_id, status, metadata, created_at, updated_at
+		`SELECT id, user_id, title, agent_id, status, metadata, created_at, updated_at
 		 FROM conversations WHERE id = $1`, id).Scan(
-		&conv.ID, &conv.TenantID, &conv.UserID, &conv.Title, &agentID, &conv.Status, &conv.Metadata, &conv.CreatedAt, &conv.UpdatedAt)
+		&conv.ID, &conv.UserID, &conv.Title, &agentID, &conv.Status, &conv.Metadata, &conv.CreatedAt, &conv.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -53,12 +45,9 @@ func (s *ConversationStore) GetByID(ctx context.Context, tenantID, id uuid.UUID)
 	return &conv, nil
 }
 
-func (s *ConversationStore) ListByUser(ctx context.Context, tenantID, userID uuid.UUID, limit, offset int) ([]model.Conversation, error) {
-	if err := setTenant(ctx, s.pool, tenantID); err != nil {
-		return nil, err
-	}
+func (s *ConversationStore) ListByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]model.Conversation, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, tenant_id, user_id, title, agent_id, status, metadata, created_at, updated_at
+		`SELECT id, user_id, title, agent_id, status, metadata, created_at, updated_at
 		 FROM conversations WHERE user_id = $1 AND status != 'deleted' ORDER BY updated_at DESC LIMIT $2 OFFSET $3`,
 		userID, limit, offset)
 	if err != nil {
@@ -70,7 +59,7 @@ func (s *ConversationStore) ListByUser(ctx context.Context, tenantID, userID uui
 	for rows.Next() {
 		var conv model.Conversation
 		var agentID *uuid.UUID
-		if err := rows.Scan(&conv.ID, &conv.TenantID, &conv.UserID, &conv.Title, &agentID, &conv.Status, &conv.Metadata, &conv.CreatedAt, &conv.UpdatedAt); err != nil {
+		if err := rows.Scan(&conv.ID, &conv.UserID, &conv.Title, &agentID, &conv.Status, &conv.Metadata, &conv.CreatedAt, &conv.UpdatedAt); err != nil {
 			return nil, err
 		}
 		conv.AgentID = agentID
@@ -80,19 +69,13 @@ func (s *ConversationStore) ListByUser(ctx context.Context, tenantID, userID uui
 }
 
 func (s *ConversationStore) Update(ctx context.Context, conv *model.Conversation) error {
-	if err := setTenant(ctx, s.pool, conv.TenantID); err != nil {
-		return err
-	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE conversations SET title = $1, agent_id = $2, status = $3, metadata = $4, updated_at = $5 WHERE id = $6`,
 		conv.Title, conv.AgentID, conv.Status, conv.Metadata, conv.UpdatedAt, conv.ID)
 	return err
 }
 
-func (s *ConversationStore) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	if err := setTenant(ctx, s.pool, tenantID); err != nil {
-		return err
-	}
+func (s *ConversationStore) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `UPDATE conversations SET status = 'deleted' WHERE id = $1`, id)
 	return err
 }
@@ -110,22 +93,16 @@ func NewMessageStore(pool *pgxpool.Pool) *MessageStore {
 }
 
 func (s *MessageStore) Create(ctx context.Context, msg *model.Message) error {
-	if err := setTenant(ctx, s.pool, msg.TenantID); err != nil {
-		return err
-	}
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO messages (id, tenant_id, conversation_id, role, content, tool_calls, model, tokens_input, tokens_output, latency_ms, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		msg.ID, msg.TenantID, msg.ConversationID, msg.Role, msg.Content, msg.ToolCalls, msg.Model, msg.TokensInput, msg.TokensOutput, msg.LatencyMs, msg.CreatedAt)
+		`INSERT INTO messages (id, conversation_id, role, content, tool_calls, tool_call_id, tool_name, model, tokens_input, tokens_output, latency_ms, artifact_id, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		msg.ID, msg.ConversationID, msg.Role, msg.Content, msg.ToolCalls, msg.ToolCallID, msg.ToolName, msg.Model, msg.TokensInput, msg.TokensOutput, msg.LatencyMs, msg.ArtifactID, msg.CreatedAt)
 	return err
 }
 
-func (s *MessageStore) ListByConversation(ctx context.Context, tenantID, conversationID uuid.UUID, limit int) ([]model.Message, error) {
-	if err := setTenant(ctx, s.pool, tenantID); err != nil {
-		return nil, err
-	}
+func (s *MessageStore) ListByConversation(ctx context.Context, conversationID uuid.UUID, limit int) ([]model.Message, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, tenant_id, conversation_id, role, content, tool_calls, model, tokens_input, tokens_output, latency_ms, created_at
+		`SELECT id, conversation_id, role, content, tool_calls, tool_call_id, tool_name, model, tokens_input, tokens_output, latency_ms, artifact_id, created_at
 		 FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC LIMIT $2`,
 		conversationID, limit)
 	if err != nil {
@@ -136,9 +113,11 @@ func (s *MessageStore) ListByConversation(ctx context.Context, tenantID, convers
 	var list []model.Message
 	for rows.Next() {
 		var msg model.Message
-		if err := rows.Scan(&msg.ID, &msg.TenantID, &msg.ConversationID, &msg.Role, &msg.Content, &msg.ToolCalls, &msg.Model, &msg.TokensInput, &msg.TokensOutput, &msg.LatencyMs, &msg.CreatedAt); err != nil {
+		var artifactID *uuid.UUID
+		if err := rows.Scan(&msg.ID, &msg.ConversationID, &msg.Role, &msg.Content, &msg.ToolCalls, &msg.ToolCallID, &msg.ToolName, &msg.Model, &msg.TokensInput, &msg.TokensOutput, &msg.LatencyMs, &artifactID, &msg.CreatedAt); err != nil {
 			return nil, err
 		}
+		msg.ArtifactID = artifactID
 		list = append(list, msg)
 	}
 	return list, rows.Err()
@@ -157,26 +136,53 @@ func NewArtifactStore(pool *pgxpool.Pool) *ArtifactStore {
 }
 
 func (s *ArtifactStore) Create(ctx context.Context, art *model.Artifact) error {
-	if err := setTenant(ctx, s.pool, art.TenantID); err != nil {
-		return err
-	}
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO artifacts (id, tenant_id, conversation_id, message_id, name, type, language, content, version, is_deleted, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		art.ID, art.TenantID, art.ConversationID, art.MessageID, art.Name, art.Type, art.Language, art.Content, art.Version, art.IsDeleted, art.CreatedAt, art.UpdatedAt)
+		`INSERT INTO artifacts (id, conversation_id, message_id, name, type, language, content, entry_file, is_complete, version, is_deleted, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		art.ID, art.ConversationID, art.MessageID, art.Name, art.Type, art.Language, art.Content, art.EntryFile, art.IsComplete, art.Version, art.IsDeleted, art.CreatedAt, art.UpdatedAt)
 	return err
 }
 
-func (s *ArtifactStore) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*model.Artifact, error) {
-	if err := setTenant(ctx, s.pool, tenantID); err != nil {
-		return nil, err
-	}
+func (s *ArtifactStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Artifact, error) {
 	var art model.Artifact
 	var msgID *uuid.UUID
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, conversation_id, message_id, name, type, language, content, version, is_deleted, created_at, updated_at
+		`SELECT id, conversation_id, message_id, name, type, language, content, entry_file, is_complete, version, is_deleted, created_at, updated_at
 		 FROM artifacts WHERE id = $1`, id).Scan(
-		&art.ID, &art.TenantID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt)
+		&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.EntryFile, &art.IsComplete, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	art.MessageID = msgID
+	
+	// Load files if it's a multi-file project
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, artifact_id, path, language, content, file_order, created_at, updated_at
+		 FROM artifact_files WHERE artifact_id = $1 ORDER BY file_order ASC, path ASC`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	for rows.Next() {
+		var f model.ArtifactFile
+		if err := rows.Scan(&f.ID, &f.ArtifactID, &f.Path, &f.Language, &f.Content, &f.FileOrder, &f.CreatedAt, &f.UpdatedAt); err != nil {
+			return nil, err
+		}
+		art.Files = append(art.Files, f)
+	}
+	
+	return &art, rows.Err()
+}
+
+func (s *ArtifactStore) GetByName(ctx context.Context, conversationID uuid.UUID, name string) (*model.Artifact, error) {
+	var art model.Artifact
+	var msgID *uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, conversation_id, message_id, name, type, language, content, entry_file, is_complete, version, is_deleted, created_at, updated_at
+		 FROM artifacts WHERE conversation_id = $1 AND name = $2 AND is_deleted = false`,
+		conversationID, name).Scan(
+		&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.EntryFile, &art.IsComplete, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -184,12 +190,9 @@ func (s *ArtifactStore) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*m
 	return &art, nil
 }
 
-func (s *ArtifactStore) ListByConversation(ctx context.Context, tenantID, conversationID uuid.UUID) ([]model.Artifact, error) {
-	if err := setTenant(ctx, s.pool, tenantID); err != nil {
-		return nil, err
-	}
+func (s *ArtifactStore) ListByConversation(ctx context.Context, conversationID uuid.UUID) ([]model.Artifact, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, tenant_id, conversation_id, message_id, name, type, language, content, version, is_deleted, created_at, updated_at
+		`SELECT id, conversation_id, message_id, name, type, language, content, entry_file, is_complete, version, is_deleted, created_at, updated_at
 		 FROM artifacts WHERE conversation_id = $1 AND is_deleted = false ORDER BY created_at DESC`,
 		conversationID)
 	if err != nil {
@@ -201,7 +204,7 @@ func (s *ArtifactStore) ListByConversation(ctx context.Context, tenantID, conver
 	for rows.Next() {
 		var art model.Artifact
 		var msgID *uuid.UUID
-		if err := rows.Scan(&art.ID, &art.TenantID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt); err != nil {
+		if err := rows.Scan(&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.EntryFile, &art.IsComplete, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt); err != nil {
 			return nil, err
 		}
 		art.MessageID = msgID
@@ -222,16 +225,13 @@ func NewAgentStore(pool *pgxpool.Pool) *AgentStore {
 	return &AgentStore{pool: pool}
 }
 
-func (s *AgentStore) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*model.Agent, error) {
-	if err := setTenant(ctx, s.pool, tenantID); err != nil {
-		return nil, err
-	}
+func (s *AgentStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Agent, error) {
 	var agent model.Agent
 	var userID, parentID *uuid.UUID
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, user_id, name, role, model, system_prompt, tools_enabled, settings, parent_agent_id, is_active, created_at, updated_at
+		`SELECT id, user_id, name, role, model, system_prompt, tools_enabled, settings, parent_agent_id, is_active, created_at, updated_at
 		 FROM agents WHERE id = $1`, id).Scan(
-		&agent.ID, &agent.TenantID, &userID, &agent.Name, &agent.Role, &agent.Model, &agent.SystemPrompt, &agent.ToolsEnabled, &agent.Settings, &parentID, &agent.IsActive, &agent.CreatedAt, &agent.UpdatedAt)
+		&agent.ID, &userID, &agent.Name, &agent.Role, &agent.Model, &agent.SystemPrompt, &agent.ToolsEnabled, &agent.Settings, &parentID, &agent.IsActive, &agent.CreatedAt, &agent.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -240,16 +240,32 @@ func (s *AgentStore) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*mode
 	return &agent, nil
 }
 
-func (s *AgentStore) GetDefault(ctx context.Context, tenantID uuid.UUID) (*model.Agent, error) {
-	if err := setTenant(ctx, s.pool, tenantID); err != nil {
-		return nil, err
-	}
+func (s *AgentStore) GetByRole(ctx context.Context, role model.AgentRole) (*model.Agent, error) {
 	var agent model.Agent
 	var userID, parentID *uuid.UUID
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, user_id, name, role, model, system_prompt, tools_enabled, settings, parent_agent_id, is_active, created_at, updated_at
-		 FROM agents WHERE tenant_id = $1 AND role = 'system' AND is_active = true LIMIT 1`, tenantID).Scan(
-		&agent.ID, &agent.TenantID, &userID, &agent.Name, &agent.Role, &agent.Model, &agent.SystemPrompt, &agent.ToolsEnabled, &agent.Settings, &parentID, &agent.IsActive, &agent.CreatedAt, &agent.UpdatedAt)
+		`SELECT id, user_id, name, role, model, system_prompt, tools_enabled, settings, parent_agent_id, is_active, created_at, updated_at
+		 FROM agents WHERE role = $1 AND is_active = true ORDER BY created_at DESC LIMIT 1`,
+		role).Scan(
+		&agent.ID, &userID, &agent.Name, &agent.Role, &agent.Model, &agent.SystemPrompt, &agent.ToolsEnabled, &agent.Settings, &parentID, &agent.IsActive, &agent.CreatedAt, &agent.UpdatedAt)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	agent.UserID = userID
+	agent.ParentAgentID = parentID
+	return &agent, nil
+}
+
+func (s *AgentStore) GetDefault(ctx context.Context) (*model.Agent, error) {
+	var agent model.Agent
+	var userID, parentID *uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, user_id, name, role, model, system_prompt, tools_enabled, settings, parent_agent_id, is_active, created_at, updated_at
+		 FROM agents WHERE role = 'system' AND is_active = true LIMIT 1`).Scan(
+		&agent.ID, &userID, &agent.Name, &agent.Role, &agent.Model, &agent.SystemPrompt, &agent.ToolsEnabled, &agent.Settings, &parentID, &agent.IsActive, &agent.CreatedAt, &agent.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("no default agent found: %w", err)
 	}

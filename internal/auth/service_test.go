@@ -19,7 +19,7 @@ type mockUserStore struct {
 
 func (m *mockUserStore) Create(ctx context.Context, user *User) error {
 	for _, u := range m.users {
-		if u.TenantID == user.TenantID && u.Email == user.Email {
+		if u.Email == user.Email {
 			return errors.New("duplicate")
 		}
 	}
@@ -36,9 +36,9 @@ func (m *mockUserStore) GetByID(ctx context.Context, id uuid.UUID) (*User, error
 	return nil, errors.New("not found")
 }
 
-func (m *mockUserStore) GetByEmail(ctx context.Context, tenantID uuid.UUID, email string) (*User, error) {
+func (m *mockUserStore) GetByEmail(ctx context.Context, email string) (*User, error) {
 	for _, u := range m.users {
-		if u.TenantID == tenantID && u.Email == email {
+		if u.Email == email {
 			return &u, nil
 		}
 	}
@@ -133,14 +133,14 @@ func (m *mockResetTokenStore) Delete(ctx context.Context, token string) error {
 // mockEmailSender is an in-memory EmailSender for testing
 type mockEmailSender struct {
 	sent []struct {
-		Email   string
+		Email    string
 		ResetURL string
 	}
 }
 
 func (m *mockEmailSender) SendPasswordReset(email, resetURL string) error {
 	m.sent = append(m.sent, struct {
-		Email   string
+		Email    string
 		ResetURL string
 	}{Email: email, ResetURL: resetURL})
 	return nil
@@ -159,9 +159,8 @@ func newTestService() (*Service, *mockUserStore, *mockRefreshStore, *mockResetTo
 func TestService_Register(t *testing.T) {
 	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	user, err := svc.Register(ctx, tenantID, &RegisterRequest{
+	user, err := svc.Register(ctx, &RegisterRequest{
 		Email:    "test@example.com",
 		Password: "securepassword123",
 		Name:     "Test User",
@@ -169,23 +168,22 @@ func TestService_Register(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test@example.com", user.Email)
 	assert.Equal(t, "Test User", user.Name)
-	assert.Equal(t, "member", user.Role)
+	assert.Equal(t, "registered", user.Role)
 	assert.NotEqual(t, uuid.Nil, user.ID)
 }
 
 func TestService_Register_Duplicate(t *testing.T) {
 	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+	_, err := svc.Register(ctx, &RegisterRequest{
 		Email:    "dup@example.com",
 		Password: "password123",
 		Name:     "First",
 	})
 	require.NoError(t, err)
 
-	_, err = svc.Register(ctx, tenantID, &RegisterRequest{
+	_, err = svc.Register(ctx, &RegisterRequest{
 		Email:    "dup@example.com",
 		Password: "password456",
 		Name:     "Second",
@@ -196,16 +194,15 @@ func TestService_Register_Duplicate(t *testing.T) {
 func TestService_Login(t *testing.T) {
 	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+	_, err := svc.Register(ctx, &RegisterRequest{
 		Email:    "login@example.com",
 		Password: "mypassword",
 		Name:     "Login User",
 	})
 	require.NoError(t, err)
 
-	pair, user, err := svc.Login(ctx, tenantID, &LoginRequest{
+	pair, user, err := svc.Login(ctx, &LoginRequest{
 		Email:    "login@example.com",
 		Password: "mypassword",
 	})
@@ -219,16 +216,15 @@ func TestService_Login(t *testing.T) {
 func TestService_Login_InvalidCredentials(t *testing.T) {
 	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+	_, err := svc.Register(ctx, &RegisterRequest{
 		Email:    "bad@example.com",
 		Password: "correct",
 		Name:     "Bad User",
 	})
 	require.NoError(t, err)
 
-	_, _, err = svc.Login(ctx, tenantID, &LoginRequest{
+	_, _, err = svc.Login(ctx, &LoginRequest{
 		Email:    "bad@example.com",
 		Password: "wrong",
 	})
@@ -238,16 +234,15 @@ func TestService_Login_InvalidCredentials(t *testing.T) {
 func TestService_Refresh(t *testing.T) {
 	svc, _, _, _, _ := newTestService()
 	ctx := context.Background()
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+	_, err := svc.Register(ctx, &RegisterRequest{
 		Email:    "refresh@example.com",
 		Password: "password",
 		Name:     "Refresh User",
 	})
 	require.NoError(t, err)
 
-	pair, _, err := svc.Login(ctx, tenantID, &LoginRequest{
+	pair, _, err := svc.Login(ctx, &LoginRequest{
 		Email:    "refresh@example.com",
 		Password: "password",
 	})
@@ -271,16 +266,15 @@ func TestService_Refresh_InvalidToken(t *testing.T) {
 func TestService_Logout(t *testing.T) {
 	svc, _, refresh, _, _ := newTestService()
 	ctx := context.Background()
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+	_, err := svc.Register(ctx, &RegisterRequest{
 		Email:    "logout@example.com",
 		Password: "password",
 		Name:     "Logout User",
 	})
 	require.NoError(t, err)
 
-	pair, _, err := svc.Login(ctx, tenantID, &LoginRequest{
+	pair, _, err := svc.Login(ctx, &LoginRequest{
 		Email:    "logout@example.com",
 		Password: "password",
 	})
@@ -296,16 +290,15 @@ func TestService_Logout(t *testing.T) {
 func TestService_RequestPasswordReset(t *testing.T) {
 	svc, _, _, reset, email := newTestService()
 	ctx := context.Background()
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+	_, err := svc.Register(ctx, &RegisterRequest{
 		Email:    "reset@example.com",
 		Password: "oldpassword123",
 		Name:     "Reset User",
 	})
 	require.NoError(t, err)
 
-	err = svc.RequestPasswordReset(ctx, tenantID, "reset@example.com")
+	err = svc.RequestPasswordReset(ctx, "reset@example.com")
 	require.NoError(t, err)
 
 	assert.Len(t, reset.tokens, 1)
@@ -314,7 +307,7 @@ func TestService_RequestPasswordReset(t *testing.T) {
 	assert.Contains(t, email.sent[0].ResetURL, "http://localhost:5173/reset-password?token=")
 
 	// Request for non-existent email should not error (security)
-	err = svc.RequestPasswordReset(ctx, tenantID, "nonexistent@example.com")
+	err = svc.RequestPasswordReset(ctx, "nonexistent@example.com")
 	require.NoError(t, err)
 	assert.Len(t, reset.tokens, 1) // no new token created
 }
@@ -322,9 +315,8 @@ func TestService_RequestPasswordReset(t *testing.T) {
 func TestService_ResetPassword(t *testing.T) {
 	svc, _, _, reset, _ := newTestService()
 	ctx := context.Background()
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	_, err := svc.Register(ctx, tenantID, &RegisterRequest{
+	_, err := svc.Register(ctx, &RegisterRequest{
 		Email:    "reset@example.com",
 		Password: "oldpassword123",
 		Name:     "Reset User",
@@ -332,7 +324,7 @@ func TestService_ResetPassword(t *testing.T) {
 	require.NoError(t, err)
 
 	// Simulate requesting a reset
-	err = svc.RequestPasswordReset(ctx, tenantID, "reset@example.com")
+	err = svc.RequestPasswordReset(ctx, "reset@example.com")
 	require.NoError(t, err)
 
 	// Extract the token
@@ -351,14 +343,14 @@ func TestService_ResetPassword(t *testing.T) {
 	assert.Len(t, reset.tokens, 0)
 
 	// Old password should not work
-	_, _, err = svc.Login(ctx, tenantID, &LoginRequest{
+	_, _, err = svc.Login(ctx, &LoginRequest{
 		Email:    "reset@example.com",
 		Password: "oldpassword123",
 	})
 	assert.ErrorIs(t, err, ErrInvalidCredentials)
 
 	// New password should work
-	pair, user, err := svc.Login(ctx, tenantID, &LoginRequest{
+	pair, user, err := svc.Login(ctx, &LoginRequest{
 		Email:    "reset@example.com",
 		Password: "newsecurepassword456",
 	})

@@ -17,7 +17,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d:ro
     ports:
-      - "5432:5432"
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
@@ -70,9 +70,9 @@ services:
     container_name: saas-api-gateway
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3000:3000"
     environment:
-      - PORT=3001
+      - PORT=3000
       - ENV=${ENV:-development}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-saas_db}?sslmode=disable
@@ -84,6 +84,8 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3003
       - BILLING_SERVICE_URL=http://billing-service:3004
       - USAGE_SERVICE_URL=http://usage-service:3005
+      - SANDBOX_SERVICE_URL=http://sandbox-service:3006
+      - DOCUMENT_SERVICE_URL=http://document-service:8000
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,6 +114,8 @@ services:
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
       - OLLAMA_PROXY_URL=${OLLAMA_PROXY_URL:-}
       - OLLAMA_PROXY_API_KEY=${OLLAMA_PROXY_API_KEY:-}
+      - KIMI_API_KEY=${KIMI_API_KEY:-}
+      - DOCUMENT_SERVICE_URL=http://document-service:8000
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,6 +140,19 @@ services:
       - PORT=3006
       - ENV=${ENV:-development}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+    networks:
+      - saas-network
+
+  document-service:
+    build:
+      context: ./cmd/document-service
+      dockerfile: Dockerfile
+    container_name: saas-document-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
     networks:
       - saas-network
 
@@ -215,8 +232,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - NATS_URL=nats://nats:4222
       - FREE_USER_MESSAGE_LIMIT=${FREE_USER_MESSAGE_LIMIT:-3}
-      - REGISTERED_USER_MESSAGE_LIMIT=${REGISTERED_USER_MESSAGE_LIMIT:-50}
-      - PREMIUM_USER_MESSAGE_LIMIT=${PREMIUM_USER_MESSAGE_LIMIT:-1000}
+      - REGISTERED_USER_MESSAGE_LIMIT=${REGISTERED_USER_MESSAGE_LIMIT:-10}
+      - PREMIUM_USER_MESSAGE_LIMIT=${PREMIUM_USER_MESSAGE_LIMIT:-100}
     depends_on:
       postgres:
         condition: service_healthy

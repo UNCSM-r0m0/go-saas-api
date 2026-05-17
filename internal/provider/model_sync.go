@@ -41,19 +41,19 @@ type ollamaModelDetails struct {
 // ---------------------------------------------------------------------------
 
 type lmStudioModelResponse struct {
-	Object string            `json:"object"`
+	Object string          `json:"object"`
 	Data   []lmStudioModel `json:"data"`
 }
 
 type lmStudioModel struct {
-	ID               string `json:"id"`
-	Type             string `json:"type"`
-	Publisher        string `json:"publisher"`
-	Arch             string `json:"arch"`
+	ID                string `json:"id"`
+	Type              string `json:"type"`
+	Publisher         string `json:"publisher"`
+	Arch              string `json:"arch"`
 	CompatibilityType string `json:"compatibility_type"`
-	Quantization     string `json:"quantization"`
-	State            string `json:"state"`
-	MaxContextLength int    `json:"max_context_length"`
+	Quantization      string `json:"quantization"`
+	State             string `json:"state"`
+	MaxContextLength  int    `json:"max_context_length"`
 }
 
 // ---------------------------------------------------------------------------
@@ -70,23 +70,23 @@ type SyncResult struct {
 
 // SyncModels fetches models from a provider and syncs them with the database.
 // Supports ollama (/api/tags) and lmstudio (/api/v0/models).
-func (s *Service) SyncModels(ctx context.Context, tenantID, providerID uuid.UUID) (*SyncResult, error) {
-	p, err := s.store.GetProvider(ctx, tenantID, providerID)
+func (s *Service) SyncModels(ctx context.Context, providerID uuid.UUID) (*SyncResult, error) {
+	p, err := s.store.GetProvider(ctx, providerID)
 	if err != nil {
 		return nil, fmt.Errorf("get provider: %w", err)
 	}
 
 	switch p.Type {
 	case ProviderOllama:
-		return s.syncOllamaModels(ctx, tenantID, providerID, p.BaseURL)
+		return s.syncOllamaModels(ctx, providerID, p.BaseURL)
 	case ProviderLMStudio:
-		return s.syncLMStudioModels(ctx, tenantID, providerID, p.BaseURL)
+		return s.syncLMStudioModels(ctx, providerID, p.BaseURL)
 	default:
 		return nil, fmt.Errorf("sync not supported for provider type %s", p.Type)
 	}
 }
 
-func (s *Service) syncOllamaModels(ctx context.Context, tenantID, providerID uuid.UUID, baseURL string) (*SyncResult, error) {
+func (s *Service) syncOllamaModels(ctx context.Context, providerID uuid.UUID, baseURL string) (*SyncResult, error) {
 	tagsURL := baseURL + "/api/tags"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tagsURL, nil)
 	if err != nil {
@@ -117,10 +117,10 @@ func (s *Service) syncOllamaModels(ctx context.Context, tenantID, providerID uui
 		discovered[name] = m
 	}
 
-	return s.reconcileModels(ctx, tenantID, providerID, discovered)
+	return s.reconcileModels(ctx, providerID, discovered)
 }
 
-func (s *Service) syncLMStudioModels(ctx context.Context, tenantID, providerID uuid.UUID, baseURL string) (*SyncResult, error) {
+func (s *Service) syncLMStudioModels(ctx context.Context, providerID uuid.UUID, baseURL string) (*SyncResult, error) {
 	modelsURL := baseURL + "/api/v0/models"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
 	if err != nil {
@@ -147,12 +147,12 @@ func (s *Service) syncLMStudioModels(ctx context.Context, tenantID, providerID u
 		discovered[m.ID] = m
 	}
 
-	return s.reconcileLMStudioModels(ctx, tenantID, providerID, discovered)
+	return s.reconcileLMStudioModels(ctx, providerID, discovered)
 }
 
 // reconcileModels performs the add/deactivate logic for Ollama models.
-func (s *Service) reconcileModels(ctx context.Context, tenantID, providerID uuid.UUID, discovered map[string]ollamaModel) (*SyncResult, error) {
-	existing, err := s.store.ListModelsByProvider(ctx, tenantID, providerID)
+func (s *Service) reconcileModels(ctx context.Context, providerID uuid.UUID, discovered map[string]ollamaModel) (*SyncResult, error) {
+	existing, err := s.store.ListModelsByProvider(ctx, providerID)
 	if err != nil {
 		return nil, fmt.Errorf("list existing models: %w", err)
 	}
@@ -175,12 +175,13 @@ func (s *Service) reconcileModels(ctx context.Context, tenantID, providerID uuid
 			displayName = fmt.Sprintf("%s (%s)", name, ollamaModel.Details.ParameterSize)
 		}
 
+		desc := fmt.Sprintf("Family: %s, Quant: %s", ollamaModel.Details.Family, ollamaModel.Details.QuantizationLevel)
 		m := &AIModel{
 			ID:                uuid.New(),
 			ProviderID:        providerID,
 			Name:              name,
 			DisplayName:       displayName,
-			Description:       fmt.Sprintf("Family: %s, Quant: %s", ollamaModel.Details.Family, ollamaModel.Details.QuantizationLevel),
+			Description:       &desc,
 			MaxTokens:         4096,
 			ContextWindow:     8192,
 			SupportsStreaming: true,
@@ -206,7 +207,7 @@ func (s *Service) reconcileModels(ctx context.Context, tenantID, providerID uuid
 		if _, ok := discovered[name]; !ok && dbModel.IsActive {
 			dbModel.IsActive = false
 			dbModel.UpdatedAt = time.Now()
-			if err := s.store.UpdateModel(ctx, tenantID, &dbModel); err != nil {
+			if err := s.store.UpdateModel(ctx, &dbModel); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("deactivate %s: %v", name, err))
 				continue
 			}
@@ -218,8 +219,8 @@ func (s *Service) reconcileModels(ctx context.Context, tenantID, providerID uuid
 }
 
 // reconcileLMStudioModels performs the add/deactivate logic for LM Studio models.
-func (s *Service) reconcileLMStudioModels(ctx context.Context, tenantID, providerID uuid.UUID, discovered map[string]lmStudioModel) (*SyncResult, error) {
-	existing, err := s.store.ListModelsByProvider(ctx, tenantID, providerID)
+func (s *Service) reconcileLMStudioModels(ctx context.Context, providerID uuid.UUID, discovered map[string]lmStudioModel) (*SyncResult, error) {
+	existing, err := s.store.ListModelsByProvider(ctx, providerID)
 	if err != nil {
 		return nil, fmt.Errorf("list existing models: %w", err)
 	}
@@ -247,12 +248,13 @@ func (s *Service) reconcileLMStudioModels(ctx context.Context, tenantID, provide
 			ctxWindow = 4096
 		}
 
+		desc := fmt.Sprintf("Type: %s, Arch: %s, Publisher: %s, State: %s", lmModel.Type, lmModel.Arch, lmModel.Publisher, lmModel.State)
 		m := &AIModel{
 			ID:                uuid.New(),
 			ProviderID:        providerID,
 			Name:              name,
 			DisplayName:       displayName,
-			Description:       fmt.Sprintf("Type: %s, Arch: %s, Publisher: %s, State: %s", lmModel.Type, lmModel.Arch, lmModel.Publisher, lmModel.State),
+			Description:       &desc,
 			MaxTokens:         ctxWindow,
 			ContextWindow:     ctxWindow,
 			SupportsStreaming: true,
@@ -278,7 +280,7 @@ func (s *Service) reconcileLMStudioModels(ctx context.Context, tenantID, provide
 		if _, ok := discovered[name]; !ok && dbModel.IsActive {
 			dbModel.IsActive = false
 			dbModel.UpdatedAt = time.Now()
-			if err := s.store.UpdateModel(ctx, tenantID, &dbModel); err != nil {
+			if err := s.store.UpdateModel(ctx, &dbModel); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("deactivate %s: %v", name, err))
 				continue
 			}

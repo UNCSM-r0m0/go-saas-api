@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
+	"github.com/r0lm0/go-saas-api/internal/platform/middleware"
 )
 
 // Handler provides HTTP handlers for AI provider management.
@@ -22,7 +23,7 @@ func NewHandler(service *Service, log logger.Logger) *Handler {
 // RegisterRoutes registers provider admin endpoints.
 func (h *Handler) RegisterRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc) {
 	admin := r.Group("/admin/providers")
-	admin.Use(authMiddleware)
+	admin.Use(authMiddleware, middleware.AdminOnly())
 	{
 		admin.POST("", h.CreateProvider)
 		admin.GET("", h.ListProviders)
@@ -36,7 +37,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc) 
 	}
 
 	models := r.Group("/admin/models")
-	models.Use(authMiddleware)
+	models.Use(authMiddleware, middleware.AdminOnly())
 	{
 		models.GET("/:id", h.GetModel)
 		models.PATCH("/:id", h.UpdateModel)
@@ -44,30 +45,24 @@ func (h *Handler) RegisterRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc) 
 	}
 }
 
-func getTenantUser(c *gin.Context) (tenantID uuid.UUID, userID uuid.UUID, ok bool) {
-	tenantIDStr, _ := c.Get("tenant_id")
+func getUser(c *gin.Context) (userID uuid.UUID, ok bool) {
 	userIDStr, _ := c.Get("user_id")
-	if tenantIDStr == nil || userIDStr == nil {
+	if userIDStr == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing auth context"})
-		return uuid.UUID{}, uuid.UUID{}, false
+		return uuid.UUID{}, false
 	}
 	var err error
-	tenantID, err = uuid.Parse(tenantIDStr.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant"})
-		return uuid.UUID{}, uuid.UUID{}, false
-	}
 	userID, err = uuid.Parse(userIDStr.(string))
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user"})
-		return uuid.UUID{}, uuid.UUID{}, false
+		return uuid.UUID{}, false
 	}
-	return tenantID, userID, true
+	return userID, true
 }
 
 // CreateProvider handles POST /admin/providers.
 func (h *Handler) CreateProvider(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -85,7 +80,7 @@ func (h *Handler) CreateProvider(c *gin.Context) {
 		return
 	}
 
-	p, err := h.service.CreateProvider(c.Request.Context(), tenantID, req.Name, req.Type, req.BaseURL, req.APIKey, req.Priority, req.IsPublic)
+	p, err := h.service.CreateProvider(c.Request.Context(), req.Name, req.Type, req.BaseURL, req.APIKey, req.Priority, req.IsPublic)
 	if err != nil {
 		h.log.Error("create provider failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create provider"})
@@ -97,12 +92,12 @@ func (h *Handler) CreateProvider(c *gin.Context) {
 
 // ListProviders handles GET /admin/providers.
 func (h *Handler) ListProviders(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
 
-	providers, err := h.service.ListProviders(c.Request.Context(), tenantID)
+	providers, err := h.service.ListProviders(c.Request.Context())
 	if err != nil {
 		h.log.Error("list providers failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list providers"})
@@ -114,7 +109,7 @@ func (h *Handler) ListProviders(c *gin.Context) {
 
 // GetProvider handles GET /admin/providers/:id.
 func (h *Handler) GetProvider(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -125,7 +120,7 @@ func (h *Handler) GetProvider(c *gin.Context) {
 		return
 	}
 
-	p, err := h.service.GetProvider(c.Request.Context(), tenantID, id)
+	p, err := h.service.GetProvider(c.Request.Context(), id)
 	if err != nil {
 		h.log.Error("get provider failed", logger.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
@@ -137,7 +132,7 @@ func (h *Handler) GetProvider(c *gin.Context) {
 
 // UpdateProvider handles PATCH /admin/providers/:id.
 func (h *Handler) UpdateProvider(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -162,7 +157,7 @@ func (h *Handler) UpdateProvider(c *gin.Context) {
 		return
 	}
 
-	p, err := h.service.UpdateProvider(c.Request.Context(), tenantID, id, req.Name, req.Type, req.BaseURL, req.APIKey, req.Priority, req.IsActive, req.IsPublic)
+	p, err := h.service.UpdateProvider(c.Request.Context(), id, req.Name, req.Type, req.BaseURL, req.APIKey, req.Priority, req.IsActive, req.IsPublic)
 	if err != nil {
 		h.log.Error("update provider failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update provider"})
@@ -174,7 +169,7 @@ func (h *Handler) UpdateProvider(c *gin.Context) {
 
 // DeleteProvider handles DELETE /admin/providers/:id.
 func (h *Handler) DeleteProvider(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -185,7 +180,7 @@ func (h *Handler) DeleteProvider(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteProvider(c.Request.Context(), tenantID, id); err != nil {
+	if err := h.service.DeleteProvider(c.Request.Context(), id); err != nil {
 		h.log.Error("delete provider failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete provider"})
 		return
@@ -196,7 +191,7 @@ func (h *Handler) DeleteProvider(c *gin.Context) {
 
 // SyncModels handles POST /admin/providers/:id/sync-models.
 func (h *Handler) SyncModels(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -207,7 +202,7 @@ func (h *Handler) SyncModels(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.SyncModels(c.Request.Context(), tenantID, id)
+	result, err := h.service.SyncModels(c.Request.Context(), id)
 	if err != nil {
 		h.log.Error("sync ollama models failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -219,7 +214,7 @@ func (h *Handler) SyncModels(c *gin.Context) {
 
 // TestProvider handles POST /admin/providers/:id/test.
 func (h *Handler) TestProvider(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -230,7 +225,7 @@ func (h *Handler) TestProvider(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.TestProviderConnection(c.Request.Context(), tenantID, id); err != nil {
+	if err := h.service.TestProviderConnection(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
@@ -240,7 +235,7 @@ func (h *Handler) TestProvider(c *gin.Context) {
 
 // CreateModel handles POST /admin/providers/:id/models.
 func (h *Handler) CreateModel(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -252,25 +247,33 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	}
 
 	var req struct {
-		Name              string `json:"name" binding:"required"`
-		DisplayName       string `json:"display_name" binding:"required"`
-		Description       string `json:"description"`
-		MaxTokens         int    `json:"max_tokens"`
-		ContextWindow     int    `json:"context_window"`
-		SupportsStreaming bool   `json:"supports_streaming"`
-		SupportsImages    bool   `json:"supports_images"`
-		IsPublic          bool   `json:"is_public"`
-		IsPremium         bool   `json:"is_premium"`
+		Name                 string         `json:"name" binding:"required"`
+		DisplayName          string         `json:"display_name" binding:"required"`
+		Description          string         `json:"description"`
+		MaxTokens            int            `json:"max_tokens"`
+		ContextWindow        int            `json:"context_window"`
+		SupportsStreaming    bool           `json:"supports_streaming"`
+		SupportsImages       bool           `json:"supports_images"`
+		SupportsWebsiteAgent *bool          `json:"supports_website_agent"`
+		Config               map[string]any `json:"config"`
+		IsPublic             bool           `json:"is_public"`
+		IsPremium            bool           `json:"is_premium"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	m, err := h.service.CreateModel(c.Request.Context(), tenantID, providerID, req.Name, req.DisplayName, req.Description, req.MaxTokens, req.ContextWindow, req.SupportsStreaming, req.SupportsImages, req.IsPublic, req.IsPremium)
+	m, err := h.service.CreateModel(c.Request.Context(), providerID, req.Name, req.DisplayName, req.Description, req.MaxTokens, req.ContextWindow, req.SupportsStreaming, req.SupportsImages, req.IsPublic, req.IsPremium)
 	if err != nil {
 		h.log.Error("create model failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create model"})
+		return
+	}
+	m.Config = withWebsiteAgentConfig(req.Config, boolValue(req.SupportsWebsiteAgent, false))
+	if err := h.service.UpdateModel(c.Request.Context(), m); err != nil {
+		h.log.Error("update model config failed", logger.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update model config"})
 		return
 	}
 
@@ -279,7 +282,7 @@ func (h *Handler) CreateModel(c *gin.Context) {
 
 // ListModels handles GET /admin/providers/:id/models.
 func (h *Handler) ListModels(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -290,7 +293,7 @@ func (h *Handler) ListModels(c *gin.Context) {
 		return
 	}
 
-	models, err := h.service.ListModelsByProvider(c.Request.Context(), tenantID, providerID)
+	models, err := h.service.ListModelsByProvider(c.Request.Context(), providerID)
 	if err != nil {
 		h.log.Error("list models failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list models"})
@@ -302,7 +305,7 @@ func (h *Handler) ListModels(c *gin.Context) {
 
 // GetModel handles GET /admin/models/:id.
 func (h *Handler) GetModel(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -313,7 +316,7 @@ func (h *Handler) GetModel(c *gin.Context) {
 		return
 	}
 
-	m, err := h.service.GetModel(c.Request.Context(), tenantID, id)
+	m, err := h.service.GetModel(c.Request.Context(), id)
 	if err != nil {
 		h.log.Error("get model failed", logger.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "model not found"})
@@ -325,7 +328,7 @@ func (h *Handler) GetModel(c *gin.Context) {
 
 // UpdateModel handles PATCH /admin/models/:id.
 func (h *Handler) UpdateModel(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -337,27 +340,39 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	}
 
 	var req struct {
-		Name              string `json:"name" binding:"required"`
-		DisplayName       string `json:"display_name" binding:"required"`
-		Description       string `json:"description"`
-		MaxTokens         int    `json:"max_tokens"`
-		ContextWindow     int    `json:"context_window"`
-		SupportsStreaming bool   `json:"supports_streaming"`
-		SupportsImages    bool   `json:"supports_images"`
-		IsActive          bool   `json:"is_active"`
-		IsPublic          bool   `json:"is_public"`
-		IsPremium         bool   `json:"is_premium"`
+		Name                 string         `json:"name" binding:"required"`
+		DisplayName          string         `json:"display_name" binding:"required"`
+		Description          string         `json:"description"`
+		MaxTokens            int            `json:"max_tokens"`
+		ContextWindow        int            `json:"context_window"`
+		SupportsStreaming    bool           `json:"supports_streaming"`
+		SupportsImages       bool           `json:"supports_images"`
+		SupportsWebsiteAgent *bool          `json:"supports_website_agent"`
+		Config               map[string]any `json:"config"`
+		IsActive             bool           `json:"is_active"`
+		IsPublic             bool           `json:"is_public"`
+		IsPremium            bool           `json:"is_premium"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	existing, _ := h.service.GetModel(c.Request.Context(), id)
+	config := req.Config
+	if config == nil && existing != nil {
+		config = existing.Config
+	}
+
+	var descPtr *string
+	if req.Description != "" {
+		descPtr = &req.Description
+	}
 	m := &AIModel{
 		ID:                id,
 		Name:              req.Name,
 		DisplayName:       req.DisplayName,
-		Description:       req.Description,
+		Description:       descPtr,
 		MaxTokens:         req.MaxTokens,
 		ContextWindow:     req.ContextWindow,
 		SupportsStreaming: req.SupportsStreaming,
@@ -365,9 +380,10 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 		IsActive:          req.IsActive,
 		IsPublic:          req.IsPublic,
 		IsPremium:         req.IsPremium,
+		Config:            withWebsiteAgentConfig(config, boolValue(req.SupportsWebsiteAgent, existing != nil && existing.SupportsWebsiteAgent())),
 	}
 
-	if err := h.service.UpdateModel(c.Request.Context(), tenantID, m); err != nil {
+	if err := h.service.UpdateModel(c.Request.Context(), m); err != nil {
 		h.log.Error("update model failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update model"})
 		return
@@ -376,9 +392,25 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	c.JSON(http.StatusOK, m)
 }
 
+func withWebsiteAgentConfig(config map[string]any, supports bool) map[string]any {
+	if config == nil {
+		config = map[string]any{}
+	}
+	config["supports_website_agent"] = supports
+	config["website_agent"] = supports
+	return config
+}
+
+func boolValue(value *bool, fallback bool) bool {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
 // DeleteModel handles DELETE /admin/models/:id.
 func (h *Handler) DeleteModel(c *gin.Context) {
-	tenantID, _, ok := getTenantUser(c)
+	_, ok := getUser(c)
 	if !ok {
 		return
 	}
@@ -389,7 +421,7 @@ func (h *Handler) DeleteModel(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteModel(c.Request.Context(), tenantID, id); err != nil {
+	if err := h.service.DeleteModel(c.Request.Context(), id); err != nil {
 		h.log.Error("delete model failed", logger.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete model"})
 		return

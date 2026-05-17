@@ -1,4 +1,4 @@
-﻿package billing
+package billing
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
+
+func strPtr(s string) *string { return &s }
 
 // ---- mock repositories ----
 
@@ -43,7 +45,7 @@ func (m *mockPlanRepo) GetPlanByID(ctx context.Context, id uuid.UUID) (*Plan, er
 
 func (m *mockPlanRepo) GetPlanByStripePriceID(ctx context.Context, priceID string) (*Plan, error) {
 	for _, p := range m.plans {
-		if p.StripePriceID == priceID {
+		if p.StripePriceID != nil && *p.StripePriceID == priceID {
 			return p, nil
 		}
 	}
@@ -67,9 +69,9 @@ func (m *mockSubRepo) GetSubscriptionByID(ctx context.Context, id uuid.UUID) (*S
 	return s, nil
 }
 
-func (m *mockSubRepo) GetSubscriptionByUser(ctx context.Context, tenantID, userID uuid.UUID) (*Subscription, error) {
+func (m *mockSubRepo) GetSubscriptionByUser(ctx context.Context, userID uuid.UUID) (*Subscription, error) {
 	for _, s := range m.subs {
-		if s.TenantID == tenantID && s.UserID == userID {
+		if s.UserID == userID {
 			return s, nil
 		}
 	}
@@ -103,49 +105,46 @@ func (m *mockSubRepo) CancelSubscription(ctx context.Context, id uuid.UUID, canc
 
 func setupService() (*BillingService, *mockPlanRepo, *mockSubRepo) {
 	plans := &mockPlanRepo{plans: map[string]*Plan{
-		"free": {
-			ID:             uuid.New(),
-			Slug:           "free",
-			Name:           "Free",
-			StripePriceID:  "",
-			AmountCents:    0,
-			MessagesPerDay: 3,
+		"registered": {
+			ID:               uuid.New(),
+			Slug:             "registered",
+			Name:             "Registered",
+			StripePriceID:    nil,
+			AmountCents:      0,
+			MessagesPerMonth: 100,
 		},
 		"premium": {
-			ID:             uuid.New(),
-			Slug:           "premium",
-			Name:           "Premium",
-			StripePriceID:  "price_premium",
-			AmountCents:    999,
-			MessagesPerDay: 1000,
+			ID:               uuid.New(),
+			Slug:             "premium",
+			Name:             "Premium",
+			StripePriceID:    strPtr("price_premium"),
+			AmountCents:      999,
+			MessagesPerMonth: 10000,
 		},
 	}}
 	subs := &mockSubRepo{subs: make(map[uuid.UUID]*Subscription)}
-	svc := NewBillingService(plans, subs, "sk_test_key", "whsec_secret", "http://localhost:5173")
+	svc := NewBillingService(plans, subs, "sk_test_key", "whsec_secret", "http://localhost:5173", nil)
 	return svc, plans, subs
 }
 
 func TestBillingService_GetSubscription_NoSub(t *testing.T) {
 	svc, _, _ := setupService()
-	tenantID := uuid.New()
 	userID := uuid.New()
 
-	sub, plan, err := svc.GetSubscription(context.Background(), tenantID, userID)
+	sub, plan, err := svc.GetSubscription(context.Background(), userID)
 	assert.NoError(t, err)
 	assert.Nil(t, sub)
 	assert.NotNil(t, plan)
-	assert.Equal(t, "free", plan.Slug)
+	assert.Equal(t, "registered", plan.Slug)
 }
 
 func TestBillingService_GetSubscription_Active(t *testing.T) {
 	svc, plans, subs := setupService()
-	tenantID := uuid.New()
 	userID := uuid.New()
 	premiumPlan, _ := plans.GetPlanBySlug(context.Background(), "premium")
 
 	sub := &Subscription{
 		ID:                   uuid.New(),
-		TenantID:             tenantID,
 		UserID:               userID,
 		PlanID:               premiumPlan.ID,
 		StripeSubscriptionID: "sub_123",
@@ -155,7 +154,7 @@ func TestBillingService_GetSubscription_Active(t *testing.T) {
 	}
 	_ = subs.CreateSubscription(context.Background(), sub)
 
-	gotSub, gotPlan, err := svc.GetSubscription(context.Background(), tenantID, userID)
+	gotSub, gotPlan, err := svc.GetSubscription(context.Background(), userID)
 	assert.NoError(t, err)
 	assert.NotNil(t, gotSub)
 	assert.Equal(t, "active", gotSub.Status)
@@ -164,31 +163,29 @@ func TestBillingService_GetSubscription_Active(t *testing.T) {
 
 func TestBillingService_CreateCheckoutSession_PlanNotFound(t *testing.T) {
 	svc, _, _ := setupService()
-	_, err := svc.CreateCheckoutSession(context.Background(), uuid.New(), uuid.New(), "test@test.com", "enterprise")
+	_, err := svc.CreateCheckoutSession(context.Background(), uuid.New(), "test@test.com", "enterprise")
 	assert.Error(t, err)
 }
 
 func TestBillingService_CreateCheckoutSession_NoStripePrice(t *testing.T) {
 	svc, _, _ := setupService()
-	_, err := svc.CreateCheckoutSession(context.Background(), uuid.New(), uuid.New(), "test@test.com", "free")
+	_, err := svc.CreateCheckoutSession(context.Background(), uuid.New(), "test@test.com", "free")
 	assert.Error(t, err)
 }
 
 func TestBillingService_CancelSubscription_NoSub(t *testing.T) {
 	svc, _, _ := setupService()
-	err := svc.CancelSubscription(context.Background(), uuid.New(), uuid.New())
+	err := svc.CancelSubscription(context.Background(), uuid.New())
 	assert.Error(t, err)
 }
 
 func TestBillingService_CancelSubscription_Success(t *testing.T) {
 	svc, plans, subs := setupService()
-	tenantID := uuid.New()
 	userID := uuid.New()
 	premiumPlan, _ := plans.GetPlanBySlug(context.Background(), "premium")
 
 	sub := &Subscription{
 		ID:                   uuid.New(),
-		TenantID:             tenantID,
 		UserID:               userID,
 		PlanID:               premiumPlan.ID,
 		StripeSubscriptionID: "sub_123",
@@ -199,7 +196,7 @@ func TestBillingService_CancelSubscription_Success(t *testing.T) {
 	_ = subs.CreateSubscription(context.Background(), sub)
 
 	// This will fail because stripe key is invalid, but it tests the flow up to the stripe call
-	err := svc.CancelSubscription(context.Background(), tenantID, userID)
+	err := svc.CancelSubscription(context.Background(), userID)
 	assert.Error(t, err) // stripe error expected with test key
 }
 

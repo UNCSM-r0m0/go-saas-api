@@ -57,6 +57,7 @@ func main() {
 	// Auth layer
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 	userStore := auth.NewPostgresUserStore(pgPool)
+	prefsStore := auth.NewPostgresPreferencesStore(pgPool)
 	refreshStore := auth.NewRedisRefreshTokenStore(redisClient)
 	resetStore := auth.NewRedisPasswordResetTokenStore(redisClient)
 
@@ -75,13 +76,14 @@ func main() {
 
 	authService := auth.NewService(userStore, refreshStore, resetStore, emailSender, cfg.FrontendURL, jwtMgr, cfg.JWTExpiration, 7*24*time.Hour, 15*time.Minute)
 	authHandler := auth.NewHandler(authService, log)
+	prefsHandler := auth.NewPreferencesHandler(prefsStore, log)
 
 	// OAuth layer
 	oauthStateStore := auth.NewRedisOAuthStateStore(redisClient)
 	oauthService := auth.NewOAuthService(
 		userStore, refreshStore, jwtMgr, oauthStateStore,
-		cfg.GoogleClientID, cfg.GoogleClientSecret, fmt.Sprintf("http://localhost:%s/auth/google/callback", cfg.Port),
-		cfg.GitHubClientID, cfg.GitHubClientSecret, fmt.Sprintf("http://localhost:%s/auth/github/callback", cfg.Port),
+		cfg.GoogleClientID, cfg.GoogleClientSecret, fmt.Sprintf("%s/api/v1/auth/google/callback", cfg.PublicURL),
+		cfg.GitHubClientID, cfg.GitHubClientSecret, fmt.Sprintf("%s/api/v1/auth/github/callback", cfg.PublicURL),
 		cfg.JWTExpiration, 7*24*time.Hour,
 	)
 	oauthHandler := auth.NewOAuthHandler(oauthService, log)
@@ -110,16 +112,27 @@ func main() {
 	authHandler.RegisterRoutes(r)
 	oauthHandler.RegisterRoutes(r)
 
+	// Admin routes
+	adminHandler := auth.NewAdminHandler(userStore, log)
+	adminHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr), middleware.AdminOnly())
+
 	// API key management
 	apiKeyStore := apikey.NewPostgresStore(pgPool)
 	apiKeyService := apikey.NewService(apiKeyStore)
 	apiKeyHandler := apikey.NewHandler(apiKeyService, log)
 	apiKeyHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))
 
-	// Protected me endpoint (validates its own JWT if called directly)
-	me := r.Group("/auth")
-	me.Use(middleware.JWTAuth(jwtMgr))
-	me.GET("/me", authHandler.Me)
+	// Protected auth endpoints (validates its own JWT if called directly)
+	protectedAuth := r.Group("/auth")
+	protectedAuth.Use(middleware.JWTAuth(jwtMgr))
+	protectedAuth.GET("/me", authHandler.Me)
+	protectedAuth.GET("/profile", authHandler.Me) // alias for r3-chat frontend
+
+	// User profile routes (protected)
+	users := r.Group("/users")
+	users.Use(middleware.JWTAuth(jwtMgr))
+	users.PUT("/profile", authHandler.UpdateProfile)
+	prefsHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,

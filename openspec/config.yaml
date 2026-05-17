@@ -1,12 +1,12 @@
 schema: spec-driven
 
 context: |
-  Tech stack: Go 1.24, Gin, PostgreSQL (pgx/v5), Redis (go-redis/v9), NATS
-  Architecture: Microservices (API Gateway, Chat, Auth, Billing, Usage)
-  Testing: go test (built-in), golangci-lint
-  Style: Standard Go conventions, gofmt
+  Tech stack: Go 1.25 (Gin) + React 19 (Vite) + PostgreSQL + Redis + NATS
+  Architecture: Microservices with API Gateway (ports 3000-3005)
+  Testing: go test (backend), vitest (frontend)
+  Style: gofmt, eslint, tsc --noEmit
 
-strict_tdd: true
+strict_tdd: false
 
 rules:
   proposal:
@@ -30,37 +30,3 @@ rules:
     - Compare implementation against every spec scenario
   archive:
     - Warn before merging destructive deltas (large removals)
-
-testing:
-  strict_tdd: true
-  detected: "2026-04-22"
-
-  test_runner:
-    command: "go test ./..."
-    framework: "go test"
-
-  layers:
-    unit:
-      available: true
-      tool: "go test"
-    integration:
-      available: true
-      tool: "net/http/httptest"
-    e2e:
-      available: false
-      tool: "—"
-
-  coverage:
-    available: true
-    command: "go test -cover"
-
-  quality_tools:
-    linter:
-      available: true
-      command: "golangci-lint run ./..."
-    type_checker:
-      available: true
-      command: "go vet"
-    formatter:
-      available: true
-      command: "gofmt"
