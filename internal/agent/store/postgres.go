@@ -213,6 +213,32 @@ func (s *ArtifactStore) ListByConversation(ctx context.Context, conversationID u
 	return list, rows.Err()
 }
 
+func (s *ArtifactStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]model.Artifact, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT a.id, a.conversation_id, a.message_id, a.name, a.type, a.language, a.content, a.entry_file, a.is_complete, a.version, a.is_deleted, a.created_at, a.updated_at
+		 FROM artifacts a
+		 JOIN conversations c ON c.id = a.conversation_id
+		 WHERE c.user_id = $1 AND a.is_deleted = false
+		 ORDER BY a.created_at DESC`,
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []model.Artifact
+	for rows.Next() {
+		var art model.Artifact
+		var msgID *uuid.UUID
+		if err := rows.Scan(&art.ID, &art.ConversationID, &msgID, &art.Name, &art.Type, &art.Language, &art.Content, &art.EntryFile, &art.IsComplete, &art.Version, &art.IsDeleted, &art.CreatedAt, &art.UpdatedAt); err != nil {
+			return nil, err
+		}
+		art.MessageID = msgID
+		list = append(list, art)
+	}
+	return list, rows.Err()
+}
+
 var _ repository.ArtifactRepo = (*ArtifactStore)(nil)
 
 // ---- AgentStore ----

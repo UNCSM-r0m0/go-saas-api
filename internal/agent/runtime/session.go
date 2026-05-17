@@ -55,6 +55,11 @@ func (s *SessionManager) UpdateConversationTitle(ctx context.Context, id uuid.UU
 	return s.convRepo.Update(ctx, conv)
 }
 
+// GetConversation retrieves a conversation by ID.
+func (s *SessionManager) GetConversation(ctx context.Context, conversationID uuid.UUID) (*model.Conversation, error) {
+	return s.convRepo.GetByID(ctx, conversationID)
+}
+
 // GetHistory retrieves messages for a conversation.
 func (s *SessionManager) GetHistory(ctx context.Context, conversationID uuid.UUID, limit int) ([]model.Message, error) {
 	if limit <= 0 {

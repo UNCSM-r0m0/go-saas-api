@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
@@ -33,7 +34,11 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 
 	// Obtener preferencias del usuario para personalizar el system prompt
 	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
-	userContext := buildUserContext(prefs)
+	var contextItems []model.UserContextItem
+	if h.userCtxRepo != nil {
+		contextItems, _ = h.userCtxRepo.GetByUser(ctx, userID)
+	}
+	userContext := buildUserContext(prefs, contextItems)
 
 	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
@@ -55,6 +60,13 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 		convs, err := h.convRepo.ListByUser(ctx, userID, 1, 0)
 		if err == nil && len(convs) > 0 {
 			conversationID = convs[0].ID.String()
+		}
+	}
+
+	// Trigger background memory extraction after stream completes
+	if conversationID != "" {
+		if convUUID, err := uuid.Parse(conversationID); err == nil {
+			h.orch.ExtractMemory(ctx, userID, convUUID)
 		}
 	}
 	// NOTE: writeSSEAgentLoop already sends finished:true when chunk.Done is received.
@@ -84,7 +96,11 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 
 	// Obtener preferencias del usuario para personalizar el system prompt
 	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
-	userContext := buildUserContext(prefs)
+	var contextItems []model.UserContextItem
+	if h.userCtxRepo != nil {
+		contextItems, _ = h.userCtxRepo.GetByUser(ctx, userID)
+	}
+	userContext := buildUserContext(prefs, contextItems)
 
 	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
@@ -101,6 +117,13 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 	}
 
 	writeSSEAgentLoop(c, streamCh, conversationID)
+
+	// Trigger background memory extraction after stream completes
+	if conversationID != "" {
+		if convUUID, err := uuid.Parse(conversationID); err == nil {
+			h.orch.ExtractMemory(ctx, userID, convUUID)
+		}
+	}
 }
 
 func writeSSEAgentLoop(c *gin.Context, streamCh <-chan llm.Chunk, conversationID string) {

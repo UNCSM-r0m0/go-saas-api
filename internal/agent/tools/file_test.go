@@ -31,6 +31,10 @@ func (m *mockArtifactRepo) ListByConversation(_ context.Context, _ uuid.UUID) ([
 	return nil, nil
 }
 
+func (m *mockArtifactRepo) ListByUser(_ context.Context, _ uuid.UUID) ([]model.Artifact, error) {
+	return nil, nil
+}
+
 // Compile-time check
 var _ repository.ArtifactRepo = (*mockArtifactRepo)(nil)
 

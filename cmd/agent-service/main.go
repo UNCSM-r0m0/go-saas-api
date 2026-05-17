@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/r0lm0/go-saas-api/internal/agent/handler"
+	"github.com/r0lm0/go-saas-api/internal/agent/memory"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/store"
@@ -118,11 +119,13 @@ func main() {
 	artStore := store.NewArtifactStore(pgPool)
 	artFileStore := repository.NewArtifactFileRepo(pgPool)
 	agentStore := store.NewAgentStore(pgPool)
+	userCtxStore := store.NewUserContextStore(pgPool)
 	toolRegistry := tools.NewRegistry()
 	_ = toolRegistry.Register(tools.NewFileWriteTool(artStore))
 	_ = toolRegistry.Register(tools.NewReadFileTool(artStore))
 	_ = toolRegistry.Register(tools.NewCodeExecuteTool(tools.NewHTTPSandboxClient(cfg.SandboxServiceURL)))
 	_ = toolRegistry.Register(tools.NewWebSearchTool())
+	_ = toolRegistry.Register(tools.NewWebReaderTool())
 	sessions := runtime.NewSessionManager(convStore, msgStore)
 	fileStore := fileupload.NewPostgresStore(pgPool)
 	fileService := fileupload.NewService(fileStore, cfg.UploadPath, cfg.MaxUploadSize)
@@ -131,7 +134,8 @@ func main() {
 	if cfg.DocumentServiceURL != "" {
 		docClient = document.NewClient(cfg.DocumentServiceURL)
 	}
-	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, artStore, artFileStore, fileService, docClient, providerStore, log)
+	memoryExtractor := memory.NewExtractor(llmClient, userCtxStore, log)
+	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, artStore, artFileStore, fileService, docClient, providerStore, memoryExtractor, log)
 	wsManager := websocket.NewManager(orchestrator, log)
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -140,7 +144,7 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWTSecret)
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.RequestID(), middleware.Logger(log), middleware.CORS())
-	agentHandler := handler.NewHandler(orchestrator, convStore, msgStore, artStore, log, multiClient, providerStore, wsManager, hc, pgPool)
+	agentHandler := handler.NewHandler(orchestrator, convStore, msgStore, artStore, userCtxStore, log, multiClient, providerStore, wsManager, hc, pgPool)
 	agentHandler.RegisterRoutes(r)
 	fileHandler.RegisterRoutes(r)
 	providerHandler.RegisterRoutes(r, middleware.JWTAuth(jwtMgr))

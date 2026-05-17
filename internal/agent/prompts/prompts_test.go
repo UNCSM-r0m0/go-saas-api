@@ -7,8 +7,8 @@ import (
 
 func TestCoder(t *testing.T) {
 	p := Coder()
-	if !strings.Contains(p, "software engineer") {
-		t.Error("expected coder prompt to mention 'software engineer'")
+	if !strings.Contains(p, "senior software architect") {
+		t.Error("expected coder prompt to mention 'senior software architect'")
 	}
 	if !strings.Contains(p, "file_write") {
 		t.Error("expected coder prompt to mention file_write tool")

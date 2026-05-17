@@ -8,7 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
+	"github.com/r0lm0/go-saas-api/internal/agent/quality"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
@@ -16,13 +18,14 @@ type contextKey string
 
 const (
 	contextKeyConversationID contextKey = "conversation_id"
+	contextKeyUserID         contextKey = "user_id"
 	MaxAgentIterations                  = 10
 )
 
 // agentLoop runs the ReAct (Reason-Act) loop:
 //  1. Send conversation to LLM with tools available
 //  2. If LLM returns tool calls → execute them → add results to history → loop
-//  3. If LLM returns text only → save and finish
+//  3. If LLM returns text only → quality gate (if enabled) → save and finish
 //
 // All events (content chunks, tool_start, tool_result, done) are sent to outCh.
 func (o *Orchestrator) agentLoop(
@@ -33,12 +36,15 @@ func (o *Orchestrator) agentLoop(
 	toolDefs []llm.ToolDefinition,
 	toolList []tools.Tool,
 	conversationID uuid.UUID,
+	userID uuid.UUID,
+	userMessage string,
 ) {
 	messages := make([]llm.Message, len(initialMessages))
 	copy(messages, initialMessages)
 
 	var allContent strings.Builder
 	var allToolCalls []model.ToolCall
+	qualityRetryDone := false
 
 	for i := 0; i < MaxAgentIterations; i++ {
 		req := llm.Request{
@@ -80,7 +86,37 @@ func (o *Orchestrator) agentLoop(
 		}
 
 		if len(toolCalls) == 0 {
-			allContent.WriteString(assistantContent.String())
+			response := assistantContent.String()
+			allContent.WriteString(response)
+
+			// Quality gate: evaluate final response before saving
+			if !qualityRetryDone && o.qualityGate != nil && quality.ShouldEvaluate(agent, response) {
+				eval, err := o.qualityGate.Evaluate(ctx, userMessage, response)
+				if err == nil && eval.Regenerate && eval.Reason != "" {
+					o.log.Info("quality gate: requesting regeneration", logger.String("reason", eval.Reason))
+
+					// Notify user that we're improving the response
+					select {
+					case outCh <- llm.Chunk{Event: "progress", Content: "Revisando y mejorando la respuesta..."}:
+					case <-ctx.Done():
+						return
+					}
+
+					// Add system feedback to messages and retry once
+					messages = append(messages, llm.Message{
+						Role:    "assistant",
+						Content: response,
+					})
+					messages = append(messages, llm.Message{
+						Role:    "system",
+						Content: fmt.Sprintf("Quality feedback: %s. Please address this issue and regenerate your response.", eval.Reason),
+					})
+
+					qualityRetryDone = true
+					continue // Retry one more iteration
+				}
+			}
+
 			msg := &model.Message{
 				ID:             uuid.New(),
 				ConversationID: conversationID,
@@ -114,6 +150,7 @@ func (o *Orchestrator) agentLoop(
 			}
 
 			toolCtx := context.WithValue(ctx, contextKeyConversationID, conversationID)
+			toolCtx = context.WithValue(toolCtx, contextKeyUserID, userID)
 			result, execErr := o.registry.Execute(toolCtx, tc.Name, tc.Arguments)
 
 			resultContent := result.Content

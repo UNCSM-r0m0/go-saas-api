@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -9,7 +10,7 @@ import (
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
-// LLMClassifier uses an LLM to determine the best agent role for a user message.
+// LLMClassifier uses an LLM to determine the best agent role and flow for a user message.
 type LLMClassifier struct {
 	client llm.Client
 }
@@ -19,42 +20,77 @@ func NewLLMClassifier(client llm.Client) *LLMClassifier {
 	return &LLMClassifier{client: client}
 }
 
-// Classify determines the best agent role for a user message using an LLM.
-func (c *LLMClassifier) Classify(ctx context.Context, message string) (model.AgentRole, error) {
-	prompt := fmt.Sprintf(`Classify the user intent into ONE of these roles:
+// Classify determines the best agent role and optional flow for a user message using an LLM.
+func (c *LLMClassifier) Classify(ctx context.Context, message string) (model.ClassificationResult, error) {
+	prompt := fmt.Sprintf(`Analyze the user message and classify it.
+
+ROLES (pick one):
 - coder: writing code, creating apps, HTML, CSS, JavaScript, Python, etc.
 - researcher: finding information, investigating topics, searching
 - copywriter: writing text, articles, marketing, descriptions
+- architect: system design, architecture decisions, tech choices
 - assistant: general conversation, help, questions
 
-User message: %q
+FLOWS (pick one if the message maps to a structured workflow, otherwise null):
+- onboarding: first-time setup, getting started
+- proposal: proposal, quote, budget, presupuesto, cotización
+- contract: contract, agreement, contrato, acuerdo, NDA
+- code_review: code review, audit, revisar código
 
-Respond with ONLY the role name, nothing else.`, message)
+Output ONLY a JSON object, no explanation:
+{"role": "coder", "flow": null}
+
+User message: %q`, message)
 
 	req := llm.Request{
 		Model:       "qwen2.5-coder:7b",
 		Messages:    []llm.Message{{Role: "user", Content: prompt}},
 		Temperature: 0.0,
-		MaxTokens:   20,
+		MaxTokens:   60,
 		Stream:      false,
 	}
 
 	resp, err := c.client.Complete(ctx, req)
 	if err != nil {
-		return model.RoleAssistant, err
+		return model.ClassificationResult{Role: model.RoleAssistant}, err
 	}
 
-	roleStr := strings.TrimSpace(strings.ToLower(resp))
-	switch roleStr {
-	case "coder":
-		return model.RoleCoder, nil
-	case "researcher":
-		return model.RoleResearcher, nil
-	case "copywriter":
-		return model.RoleCopywriter, nil
-	default:
-		return model.RoleAssistant, nil
+	return parseClassification(resp), nil
+}
+
+func parseClassification(raw string) model.ClassificationResult {
+	start := strings.Index(raw, "{")
+	end := strings.LastIndex(raw, "}")
+	if start == -1 || end == -1 || end <= start {
+		return model.ClassificationResult{Role: model.RoleAssistant}
 	}
+
+	var result struct {
+		Role string `json:"role"`
+		Flow string `json:"flow"`
+	}
+	if err := json.Unmarshal([]byte(raw[start:end+1]), &result); err != nil {
+		return model.ClassificationResult{Role: model.RoleAssistant}
+	}
+
+	role := model.RoleAssistant
+	switch strings.TrimSpace(strings.ToLower(result.Role)) {
+	case "coder":
+		role = model.RoleCoder
+	case "researcher":
+		role = model.RoleResearcher
+	case "copywriter":
+		role = model.RoleCopywriter
+	case "architect":
+		role = model.RoleArchitect
+	}
+
+	flow := ""
+	if result.Flow != "" && result.Flow != "null" {
+		flow = strings.TrimSpace(strings.ToLower(result.Flow))
+	}
+
+	return model.ClassificationResult{Role: role, Flow: flow}
 }
 
 // ClassifyKeyword determines the best agent role using simple keyword matching.

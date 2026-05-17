@@ -1,21 +1,59 @@
 package runtime
 
 import (
+	"strings"
+
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
 
-func BuildMessages(agent *model.Agent, history []model.Message, userMessage string, userContext string) []llm.Message {
+// BuildSystemPrompt composes the final system prompt by combining the agent's
+// base system prompt with workspace awareness, user context, and tool discipline.
+func BuildSystemPrompt(agent *model.Agent, artifacts []string, userContext string) string {
+	var b strings.Builder
+	b.WriteString(agent.SystemPrompt)
+	if agent.SystemPrompt == "" {
+		b.WriteString(string(agent.Role))
+	}
+
+	// Workspace awareness
+	if len(artifacts) > 0 {
+		b.WriteString("\n\nWORKSPACE AWARENESS:\n")
+		b.WriteString("Before starting any coding task, check if there are existing files with read_file.\n")
+		b.WriteString("If files exist: read them first, maintain consistency with existing patterns, and explain what you're changing and why.\n")
+		b.WriteString("Current session files: ")
+		b.WriteString(strings.Join(artifacts, ", "))
+		b.WriteString("\n")
+	}
+
+	// User context
+	if userContext != "" {
+		b.WriteString("\nUSER CONTEXT:\n")
+		b.WriteString(userContext)
+		b.WriteString("\n")
+	}
+
+	// Tool discipline footer
+	b.WriteString(`
+TOOL DISCIPLINE:
+- Think before every response: "Does this task need a tool?"
+- Tasks that create something concrete → file_write
+- Tasks that verify logic → code_execute
+- Tasks needing current info → web_search
+- Pure explanation or conversation → no tool needed
+- After using a tool, always tell the user what you did and what they can do next.
+`)
+
+	return b.String()
+}
+
+// BuildMessages constructs the LLM message list from agent, history, user message,
+// and optional workspace artifacts.
+func BuildMessages(agent *model.Agent, history []model.Message, userMessage string, userContext string, artifacts []string) []llm.Message {
 	var messages []llm.Message
 
-	systemContent := agent.SystemPrompt
-	if systemContent == "" {
-		systemContent = string(agent.Role)
-	}
-	if userContext != "" {
-		systemContent += userContext
-	}
+	systemContent := BuildSystemPrompt(agent, artifacts, userContext)
 	messages = append(messages, llm.Message{Role: "system", Content: systemContent})
 
 	for _, h := range history {

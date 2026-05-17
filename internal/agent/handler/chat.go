@@ -25,6 +25,7 @@ type Handler struct {
 	convRepo      repository.ConversationRepo
 	msgRepo       repository.MessageRepo
 	artRepo       repository.ArtifactRepo
+	userCtxRepo   repository.UserContextRepo
 	log           logger.Logger
 	llmManager    *llm.MultiClient
 	providerStore provider.Store
@@ -39,6 +40,7 @@ func NewHandler(
 	convRepo repository.ConversationRepo,
 	msgRepo repository.MessageRepo,
 	artRepo repository.ArtifactRepo,
+	userCtxRepo repository.UserContextRepo,
 	log logger.Logger,
 	llmManager *llm.MultiClient,
 	providerStore provider.Store,
@@ -51,6 +53,7 @@ func NewHandler(
 		convRepo:      convRepo,
 		msgRepo:       msgRepo,
 		artRepo:       artRepo,
+		userCtxRepo:   userCtxRepo,
 		log:           log,
 		llmManager:    llmManager,
 		providerStore: providerStore,
@@ -386,7 +389,11 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 
 	// Obtener preferencias del usuario para personalizar el system prompt
 	prefs, _ := getUserPreferences(ctx, h.pgPool, userID)
-	userContext := buildUserContext(prefs)
+	var contextItems []model.UserContextItem
+	if h.userCtxRepo != nil {
+		contextItems, _ = h.userCtxRepo.GetByUser(ctx, userID)
+	}
+	userContext := buildUserContext(prefs, contextItems)
 
 	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
@@ -480,5 +487,8 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 		result["artifactId"] = artifactID
 		result["artifactType"] = "website"
 	}
+	// Trigger background memory extraction after chat completes
+	go h.orch.ExtractMemory(ctx, userID, convID)
+
 	response.OK(c, result, "message sent")
 }

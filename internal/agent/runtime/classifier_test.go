@@ -63,80 +63,112 @@ func TestClassifyKeyword(t *testing.T) {
 // ---- tests for LLMClassifier ----
 
 func TestLLMClassifier_Classify_Coder(t *testing.T) {
-	mock := &mockClassifierLLM{response: "coder"}
+	mock := &mockClassifierLLM{response: `{"role": "coder", "flow": null}`}
 	classifier := NewLLMClassifier(mock)
 
-	role, err := classifier.Classify(context.Background(), "write a python script")
+	result, err := classifier.Classify(context.Background(), "write a python script")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if role != model.RoleCoder {
-		t.Fatalf("expected coder, got %v", role)
+	if result.Role != model.RoleCoder {
+		t.Fatalf("expected coder, got %v", result.Role)
+	}
+	if result.Flow != "" {
+		t.Fatalf("expected no flow, got %q", result.Flow)
 	}
 }
 
 func TestLLMClassifier_Classify_Researcher(t *testing.T) {
-	mock := &mockClassifierLLM{response: "researcher"}
+	mock := &mockClassifierLLM{response: `{"role": "researcher", "flow": null}`}
 	classifier := NewLLMClassifier(mock)
 
-	role, err := classifier.Classify(context.Background(), "find information about golang")
+	result, err := classifier.Classify(context.Background(), "find information about golang")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if role != model.RoleResearcher {
-		t.Fatalf("expected researcher, got %v", role)
+	if result.Role != model.RoleResearcher {
+		t.Fatalf("expected researcher, got %v", result.Role)
 	}
 }
 
 func TestLLMClassifier_Classify_Copywriter(t *testing.T) {
-	mock := &mockClassifierLLM{response: "copywriter"}
+	mock := &mockClassifierLLM{response: `{"role": "copywriter", "flow": null}`}
 	classifier := NewLLMClassifier(mock)
 
-	role, err := classifier.Classify(context.Background(), "write a blog post")
+	result, err := classifier.Classify(context.Background(), "write a blog post")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if role != model.RoleCopywriter {
-		t.Fatalf("expected copywriter, got %v", role)
+	if result.Role != model.RoleCopywriter {
+		t.Fatalf("expected copywriter, got %v", result.Role)
+	}
+}
+
+func TestLLMClassifier_Classify_Architect(t *testing.T) {
+	mock := &mockClassifierLLM{response: `{"role": "architect", "flow": null}`}
+	classifier := NewLLMClassifier(mock)
+
+	result, err := classifier.Classify(context.Background(), "should I use microservices")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Role != model.RoleArchitect {
+		t.Fatalf("expected architect, got %v", result.Role)
+	}
+}
+
+func TestLLMClassifier_Classify_WithFlow(t *testing.T) {
+	mock := &mockClassifierLLM{response: `{"role": "coder", "flow": "code_review"}`}
+	classifier := NewLLMClassifier(mock)
+
+	result, err := classifier.Classify(context.Background(), "review my code")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Role != model.RoleCoder {
+		t.Fatalf("expected coder, got %v", result.Role)
+	}
+	if result.Flow != "code_review" {
+		t.Fatalf("expected flow code_review, got %q", result.Flow)
 	}
 }
 
 func TestLLMClassifier_Classify_Assistant(t *testing.T) {
-	mock := &mockClassifierLLM{response: "assistant"}
+	mock := &mockClassifierLLM{response: `{"role": "assistant", "flow": null}`}
 	classifier := NewLLMClassifier(mock)
 
-	role, err := classifier.Classify(context.Background(), "hello")
+	result, err := classifier.Classify(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if role != model.RoleAssistant {
-		t.Fatalf("expected assistant, got %v", role)
+	if result.Role != model.RoleAssistant {
+		t.Fatalf("expected assistant, got %v", result.Role)
 	}
 }
 
 func TestLLMClassifier_Classify_CaseInsensitive(t *testing.T) {
-	mock := &mockClassifierLLM{response: "  CODER  "}
+	mock := &mockClassifierLLM{response: `{"role": "  CODER  ", "flow": null}`}
 	classifier := NewLLMClassifier(mock)
 
-	role, err := classifier.Classify(context.Background(), "write code")
+	result, err := classifier.Classify(context.Background(), "write code")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if role != model.RoleCoder {
-		t.Fatalf("expected coder, got %v", role)
+	if result.Role != model.RoleCoder {
+		t.Fatalf("expected coder, got %v", result.Role)
 	}
 }
 
 func TestLLMClassifier_Classify_UnknownRole(t *testing.T) {
-	mock := &mockClassifierLLM{response: "wizard"}
+	mock := &mockClassifierLLM{response: `{"role": "wizard", "flow": null}`}
 	classifier := NewLLMClassifier(mock)
 
-	role, err := classifier.Classify(context.Background(), "cast a spell")
+	result, err := classifier.Classify(context.Background(), "cast a spell")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if role != model.RoleAssistant {
-		t.Fatalf("expected assistant fallback for unknown role, got %v", role)
+	if result.Role != model.RoleAssistant {
+		t.Fatalf("expected assistant fallback for unknown role, got %v", result.Role)
 	}
 }
 

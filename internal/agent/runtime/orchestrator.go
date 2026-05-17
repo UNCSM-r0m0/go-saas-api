@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/agent/flows"
+	"github.com/r0lm0/go-saas-api/internal/agent/memory"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/prompts"
+	"github.com/r0lm0/go-saas-api/internal/agent/quality"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/internal/document"
@@ -30,24 +33,49 @@ type Orchestrator struct {
 	fileSvc     *fileupload.Service
 	docClient   *document.Client
 	providers   provider.Store
-	classifier  *LLMClassifier
-	log         logger.Logger
+	classifier   *LLMClassifier
+	extractor    *memory.Extractor
+	qualityGate  *quality.Gate
+	flowRegistry *flows.Registry
+	log          logger.Logger
 }
 
-func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, artFileRepo repository.ArtifactFileRepo, fileSvc *fileupload.Service, docClient *document.Client, providers provider.Store, log logger.Logger) *Orchestrator {
+func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, artFileRepo repository.ArtifactFileRepo, fileSvc *fileupload.Service, docClient *document.Client, providers provider.Store, extractor *memory.Extractor, log logger.Logger) *Orchestrator {
+	flowReg := flows.NewRegistry()
+	flowReg.Register(flows.NewOnboardingFlow())
+	flowReg.Register(flows.NewProposalFlow())
+	flowReg.Register(flows.NewContractFlow())
+	flowReg.Register(flows.NewCodeReviewFlow())
+
 	return &Orchestrator{
-		llmClient:   client,
-		registry:    registry,
-		sessions:    sessions,
-		agentRepo:   agentRepo,
-		artRepo:     artRepo,
-		artFileRepo: artFileRepo,
-		fileSvc:     fileSvc,
-		docClient:   docClient,
-		providers:   providers,
-		classifier:  NewLLMClassifier(client),
-		log:         log,
+		llmClient:    client,
+		registry:     registry,
+		sessions:     sessions,
+		agentRepo:    agentRepo,
+		artRepo:      artRepo,
+		artFileRepo:  artFileRepo,
+		fileSvc:      fileSvc,
+		docClient:    docClient,
+		providers:    providers,
+		classifier:   NewLLMClassifier(client),
+		extractor:    extractor,
+		qualityGate:  quality.NewGate(client, log),
+		flowRegistry: flowReg,
+		log:          log,
 	}
+}
+
+// ExtractMemory triggers background memory extraction for a conversation.
+func (o *Orchestrator) ExtractMemory(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID) {
+	if o.extractor == nil {
+		return
+	}
+	history, err := o.sessions.GetHistory(ctx, conversationID, 50)
+	if err != nil {
+		o.log.Warn("ExtractMemory: failed to load history", logger.Error(err))
+		return
+	}
+	go o.extractor.ExtractAndSave(ctx, userID, history)
 }
 
 func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string, mode string) (<-chan llm.Chunk, error) {
@@ -60,6 +88,19 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 			return nil, fmt.Errorf("create conversation: %w", err)
 		}
 		conversationID = conv.ID
+	}
+
+	// Load workspace artifacts for this conversation
+	var artifactNames []string
+	if o.artRepo != nil {
+		arts, err := o.artRepo.ListByConversation(ctx, conversationID)
+		if err == nil {
+			for _, a := range arts {
+				if !a.IsDeleted {
+					artifactNames = append(artifactNames, a.Name)
+				}
+			}
+		}
 	}
 
 	userMsg := &model.Message{
@@ -82,19 +123,34 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		return nil, fmt.Errorf("load history: %w", err)
 	}
 
-	var role model.AgentRole
+	// Classify intent
+	var classification model.ClassificationResult
 	if o.classifier != nil {
-		classifiedRole, err := o.classifier.Classify(ctx, content)
+		classResult, err := o.classifier.Classify(ctx, content)
 		if err != nil {
-			role = ClassifyKeyword(content)
+			classification.Role = ClassifyKeyword(content)
 		} else {
-			role = classifiedRole
+			classification = classResult
 		}
 	} else {
-		role = ClassifyKeyword(content)
+		classification.Role = ClassifyKeyword(content)
 	}
 
-	agent, err := o.resolveAgent(ctx, role)
+	// Detect active flow
+	var activeFlow flows.Flow
+	if classification.Flow != "" && o.flowRegistry != nil {
+		if f, ok := o.flowRegistry.Get(classification.Flow); ok {
+			activeFlow = f
+		}
+	}
+	// Also check flow registry detection for history-length-based flows (e.g. onboarding)
+	if activeFlow == nil && o.flowRegistry != nil {
+		if f, score := o.flowRegistry.DetectAll(content, len(history)); f != nil && score >= 0.85 {
+			activeFlow = f
+		}
+	}
+
+	agent, err := o.resolveAgent(ctx, classification.Role)
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent: %w", err)
 	}
@@ -120,7 +176,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		agent.SystemPrompt = prompts.WebsiteAgent()
 		agent.Role = model.RoleWebsiteAgent
 
-		messages := BuildMessages(agent, history, userContent, userContext)
+		messages := BuildMessages(agent, history, userContent, userContext, artifactNames)
 
 		outCh := make(chan llm.Chunk)
 		go func() {
@@ -138,13 +194,18 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		}
 	}
 
-	messages := BuildMessages(agent, history, userContent, userContext)
+	var messages []llm.Message
+	if activeFlow != nil {
+		messages = activeFlow.BuildMessages(agent, history, userContent, userContext, nil)
+	} else {
+		messages = BuildMessages(agent, history, userContent, userContext, artifactNames)
+	}
 	toolDefs := BuildToolDefinitions(toolInstances)
 
 	outCh := make(chan llm.Chunk)
 	go func() {
 		defer close(outCh)
-		o.agentLoop(ctx, outCh, agent, messages, toolDefs, toolInstances, conversationID)
+		o.agentLoop(ctx, outCh, agent, messages, toolDefs, toolInstances, conversationID, userID, userContent)
 	}()
 
 	return outCh, nil
@@ -169,9 +230,11 @@ func (o *Orchestrator) createDefaultAgent(role model.AgentRole) *model.Agent {
 	case model.RoleCoder:
 		agent.SystemPrompt = prompts.Coder()
 	case model.RoleResearcher:
-		agent.SystemPrompt = prompts.Conversational() + "\nYou are a thorough researcher."
+		agent.SystemPrompt = prompts.Researcher()
 	case model.RoleCopywriter:
 		agent.SystemPrompt = prompts.Conversational() + "\nYou are a creative copywriter."
+	case model.RoleArchitect:
+		agent.SystemPrompt = prompts.Architect()
 	default:
 		agent.SystemPrompt = prompts.Conversational()
 	}

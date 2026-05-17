@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/platform/response"
 )
 
@@ -70,23 +71,33 @@ func getUserPreferences(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUI
 	return &prefs, nil
 }
 
-func buildUserContext(prefs *UserPreferences) string {
-	if prefs == nil {
-		return ""
+func buildUserContext(prefs *UserPreferences, contextItems []model.UserContextItem) string {
+	var parts []string
+
+	if prefs != nil {
+		if prefs.DisplayName != "" {
+			parts = append(parts, fmt.Sprintf("El usuario se llama %s", prefs.DisplayName))
+		}
+		if prefs.Profession != "" {
+			parts = append(parts, fmt.Sprintf("trabaja como %s", prefs.Profession))
+		}
+		if len(prefs.Traits) > 0 {
+			parts = append(parts, fmt.Sprintf("deberías ser %s", strings.Join(prefs.Traits, ", ")))
+		}
+		if prefs.AboutMe != "" {
+			parts = append(parts, fmt.Sprintf("contexto adicional: %s", prefs.AboutMe))
+		}
 	}
 
-	var parts []string
-	if prefs.DisplayName != "" {
-		parts = append(parts, fmt.Sprintf("El usuario se llama %s", prefs.DisplayName))
-	}
-	if prefs.Profession != "" {
-		parts = append(parts, fmt.Sprintf("trabaja como %s", prefs.Profession))
-	}
-	if len(prefs.Traits) > 0 {
-		parts = append(parts, fmt.Sprintf("deberías ser %s", strings.Join(prefs.Traits, ", ")))
-	}
-	if prefs.AboutMe != "" {
-		parts = append(parts, fmt.Sprintf("contexto adicional: %s", prefs.AboutMe))
+	for _, item := range contextItems {
+		if item.Key == "" || item.Value == nil {
+			continue
+		}
+		valStr := fmt.Sprintf("%v", item.Value)
+		if valStr == "" {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", item.Key, valStr))
 	}
 
 	if len(parts) == 0 {

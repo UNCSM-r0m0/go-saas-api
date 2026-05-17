@@ -8,7 +8,9 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
+	"go.uber.org/zap"
 )
 
 // ---- mocks ----
@@ -127,7 +129,7 @@ func TestOrchestrator_Chat(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil)
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 	userID := uuid.New()
 
@@ -177,7 +179,7 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil)
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
 	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
@@ -245,7 +247,7 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil)
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
 	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
@@ -275,7 +277,7 @@ func TestOrchestrator_resolveAgent_DBLookup(t *testing.T) {
 		SystemPrompt: "custom prompt",
 	}
 	agentRepo := &mockAgentRepoWithRole{agent: expectedAgent}
-	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil, nil)
+	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
 	agent, err := orch.resolveAgent(ctx, model.RoleCoder)
@@ -295,7 +297,7 @@ func TestOrchestrator_resolveAgent_DBLookup(t *testing.T) {
 
 func TestOrchestrator_resolveAgent_FallbackToDefault(t *testing.T) {
 	agentRepo := &memAgentRepo{}
-	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil, nil)
+	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
 	agent, err := orch.resolveAgent(ctx, model.RoleCoder)

@@ -40,7 +40,7 @@ func TestBuildMessages(t *testing.T) {
 		{Role: model.MessageRoleAssistant, Content: "hello"},
 	}
 
-	messages := BuildMessages(agent, history, "create html page", "")
+	messages := BuildMessages(agent, history, "create html page", "", nil)
 	toolDefs := BuildToolDefinitions([]tools.Tool{mockTool{name: "file_write", desc: "write files"}})
 
 	if len(messages) != 4 {
@@ -49,8 +49,8 @@ func TestBuildMessages(t *testing.T) {
 	if messages[0].Role != "system" {
 		t.Fatalf("expected first message role system, got %s", messages[0].Role)
 	}
-	if contains(messages[0].Content, "file_write") {
-		t.Error("expected system prompt NOT to mention file_write tool (native tool calling)")
+	if !contains(messages[0].Content, "file_write") {
+		t.Error("expected system prompt to mention file_write in tool discipline")
 	}
 	if messages[3].Content != "create html page" {
 		t.Fatalf("expected user message 'create html page', got %s", messages[3].Content)
@@ -75,7 +75,7 @@ func TestBuildMessages_ToolRoleMessages(t *testing.T) {
 		{Role: model.MessageRoleTool, Content: "File written successfully", ToolCallID: "call_1", ToolName: "file_write"},
 	}
 
-	messages := BuildMessages(agent, history, "now run it", "")
+	messages := BuildMessages(agent, history, "now run it", "", nil)
 
 	if len(messages) != 5 {
 		t.Fatalf("expected 5 messages (system + 3 history + user), got %d", len(messages))
@@ -105,7 +105,7 @@ func TestBuildMessages_ToolRoleMessages(t *testing.T) {
 
 func TestBuildMessages_NoHistory(t *testing.T) {
 	agent := &model.Agent{Role: model.RoleAssistant, Model: "default"}
-	messages := BuildMessages(agent, nil, "hello", "")
+	messages := BuildMessages(agent, nil, "hello", "", nil)
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}

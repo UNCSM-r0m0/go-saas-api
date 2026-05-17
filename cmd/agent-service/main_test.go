@@ -11,9 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/agent/handler"
+	"github.com/r0lm0/go-saas-api/internal/agent/memory"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
+	"github.com/r0lm0/go-saas-api/internal/agent/store"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
 	"github.com/r0lm0/go-saas-api/internal/agent/websocket"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
@@ -76,6 +78,10 @@ func (m *memArtifactRepo) GetByName(_ context.Context, _ uuid.UUID, _ string) (*
 	return nil, nil
 }
 func (m *memArtifactRepo) ListByConversation(_ context.Context, _ uuid.UUID) ([]model.Artifact, error) {
+	return nil, nil
+}
+
+func (m *memArtifactRepo) ListByUser(_ context.Context, _ uuid.UUID) ([]model.Artifact, error) {
 	return nil, nil
 }
 
@@ -145,12 +151,14 @@ func setupTestRouter() (*gin.Engine, *memConversationRepo, *memMessageRepo, *mem
 
 	registry := tools.NewRegistry()
 	sessions := runtime.NewSessionManager(convRepo, msgRepo)
-	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, artRepo, nil, nil, nil, nil)
+	userCtxStore := store.NewUserContextStore(nil)
+	memoryExtractor := memory.NewExtractor(llmMock, userCtxStore, log)
+	orch := runtime.NewOrchestrator(llmMock, registry, sessions, agentRepo, artRepo, nil, nil, nil, nil, memoryExtractor, log)
 
 	multiClient := llm.NewMultiClient()
 	wsManager := websocket.NewManager(orch, log)
 
-	h := handler.NewHandler(orch, convRepo, msgRepo, artRepo, log, multiClient, wsManager, nil, nil)
+	h := handler.NewHandler(orch, convRepo, msgRepo, artRepo, userCtxStore, log, multiClient, nil, wsManager, nil, nil)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	h.RegisterRoutes(r)
