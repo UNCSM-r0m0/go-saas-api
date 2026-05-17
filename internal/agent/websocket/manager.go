@@ -207,7 +207,7 @@ func (c *Client) handleChat(msg Message) {
 	c.cancelGen = cancel
 	c.mu.Unlock()
 
-	_, streamCh, err := c.manager.orch.Chat(ctx, c.userID, msg.ConversationID, msg.Content, msg.FileIDs, msg.Model, "", "")
+	convID, streamCh, err := c.manager.orch.Chat(ctx, c.userID, msg.ConversationID, msg.Content, msg.FileIDs, msg.Model, "", "")
 	if err != nil {
 		c.sendError(fmt.Sprintf("chat failed: %v", err))
 		c.clearCancel()
@@ -215,6 +215,14 @@ func (c *Client) handleChat(msg Message) {
 	}
 
 	messageID := uuid.New().String()
+
+	// Send conversation ID so the frontend can continue this session
+	c.send(Message{
+		Type:           TypeConversationID,
+		MessageID:      messageID,
+		ConversationID: &convID,
+	})
+
 	var tokens int
 	for chunk := range streamCh {
 		tokens += len(chunk.Content)

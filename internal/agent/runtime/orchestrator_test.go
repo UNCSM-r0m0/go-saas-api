@@ -317,3 +317,202 @@ func TestOrchestrator_resolveAgent_FallbackToDefault(t *testing.T) {
 		t.Fatal("expected non-empty system prompt for coder role")
 	}
 }
+
+// ---- Phase 1 Validation Tests ----
+
+func TestChat_UsesProviderUsage(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "Provider says hello."},
+			{Done: true, Usage: &llm.Usage{PromptTokens: 100, CompletionTokens: 50}},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+	userID := uuid.New()
+
+	_, ch, err := orch.Chat(ctx, userID, nil, "hi", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for range ch {
+	}
+
+	// Last message is assistant
+	var assistantMsg *model.Message
+	for i := len(msgRepo.msgs) - 1; i >= 0; i-- {
+		if msgRepo.msgs[i].Role == model.MessageRoleAssistant {
+			assistantMsg = &msgRepo.msgs[i]
+			break
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("expected assistant message")
+	}
+	if assistantMsg.TokensInput != 100 {
+		t.Errorf("expected TokensInput=100 (provider), got %d", assistantMsg.TokensInput)
+	}
+	if assistantMsg.TokensOutput != 50 {
+		t.Errorf("expected TokensOutput=50 (provider), got %d", assistantMsg.TokensOutput)
+	}
+}
+
+func TestChat_FallsBackToEstimationWhenProviderUsageMissing(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "No usage here."},
+			{Done: true},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+	userID := uuid.New()
+
+	_, ch, err := orch.Chat(ctx, userID, nil, "hi", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for range ch {
+	}
+
+	var assistantMsg *model.Message
+	for i := len(msgRepo.msgs) - 1; i >= 0; i-- {
+		if msgRepo.msgs[i].Role == model.MessageRoleAssistant {
+			assistantMsg = &msgRepo.msgs[i]
+			break
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("expected assistant message")
+	}
+	// Should be estimated (len("No usage here.") / 4 = 4)
+	if assistantMsg.TokensOutput == 0 {
+		t.Error("expected estimated TokensOutput > 0, got 0")
+	}
+}
+
+func TestChat_MultiToolLoop_AccumulatesUsage(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	_ = registry.Register(&mockTool{name: "echo", desc: "echo tool", result: tools.Result{Content: "pong"}})
+	agentRepo := &memAgentRepo{}
+
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "Using tool..."},
+			{ToolCall: &llm.ToolCall{ID: "call_1", Name: "echo", Arguments: map[string]any{"msg": "ping"}}},
+			{Done: true, Usage: &llm.Usage{PromptTokens: 50, CompletionTokens: 20}},
+		},
+		chunks2: []llm.Chunk{
+			{Content: "Done!"},
+			{Done: true, Usage: &llm.Usage{PromptTokens: 80, CompletionTokens: 30}},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+	userID := uuid.New()
+
+	_, ch, err := orch.Chat(ctx, userID, nil, "ping", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for range ch {
+	}
+
+	var assistantMsg *model.Message
+	for i := len(msgRepo.msgs) - 1; i >= 0; i-- {
+		if msgRepo.msgs[i].Role == model.MessageRoleAssistant {
+			assistantMsg = &msgRepo.msgs[i]
+			break
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("expected assistant message")
+	}
+	// 50 + 80 = 130 input, 20 + 30 = 50 output
+	if assistantMsg.TokensInput != 130 {
+		t.Errorf("expected accumulated TokensInput=130, got %d", assistantMsg.TokensInput)
+	}
+	if assistantMsg.TokensOutput != 50 {
+		t.Errorf("expected accumulated TokensOutput=50, got %d", assistantMsg.TokensOutput)
+	}
+}
+
+func TestChat_ConversationOwnership_WrongUser(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	userA := uuid.New()
+	userB := uuid.New()
+	convID := uuid.New()
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		UserID: userA,
+	}
+
+	llmMock := &mockLLM{}
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+
+	_, _, err := orch.Chat(ctx, userB, &convID, "hi", nil, "", "", "")
+	if err == nil {
+		t.Fatal("expected error for conversation ownership violation")
+	}
+	if !contains(err.Error(), "does not belong to user") {
+		t.Fatalf("expected ownership error, got: %v", err)
+	}
+}
+
+func TestChat_ConversationOwnership_CorrectUser(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	userA := uuid.New()
+	convID := uuid.New()
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		UserID: userA,
+	}
+
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "Hello!"},
+			{Done: true},
+		},
+	}
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+
+	gotConvID, ch, err := orch.Chat(ctx, userA, &convID, "hi", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotConvID != convID {
+		t.Fatalf("expected convID %s, got %s", convID, gotConvID)
+	}
+	for range ch {
+	}
+}

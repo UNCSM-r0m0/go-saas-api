@@ -44,6 +44,7 @@ func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-cha
 		"stream":      true,
 		"temperature": req.Temperature,
 		"max_tokens":  req.MaxTokens,
+		"stream_options": map[string]any{"include_usage": true},
 	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = req.Tools

@@ -84,6 +84,16 @@ func (o *Orchestrator) ExtractMemory(ctx context.Context, userID uuid.UUID, conv
 func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string, mode string) (uuid.UUID, <-chan llm.Chunk, error) {
 	var conversationID uuid.UUID
 	if convID != nil {
+		conv, err := o.sessions.GetConversation(ctx, *convID)
+		if err != nil {
+			return uuid.Nil, nil, fmt.Errorf("load conversation: %w", err)
+		}
+		if conv == nil {
+			return uuid.Nil, nil, fmt.Errorf("conversation not found")
+		}
+		if conv.UserID != userID {
+			return uuid.Nil, nil, fmt.Errorf("conversation does not belong to user")
+		}
 		conversationID = *convID
 	} else {
 		conv, err := o.sessions.CreateConversation(ctx, userID, content[:min(50, len(content))], nil)
@@ -749,6 +759,8 @@ func (o *Orchestrator) websiteAgentLoop(
 	var contentBuilder strings.Builder
 	attemptMessages := append([]llm.Message(nil), messages...)
 	totalChunks := 0
+	inputTokens := 0
+	outputTokens := 0
 	maxAttempts := 1 + maxWebsiteContinuations
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -760,8 +772,23 @@ func (o *Orchestrator) websiteAgentLoop(
 			}
 		}
 
-		chunks, gotFirstChunk, err := o.streamWebsiteAgentAttempt(ctx, outCh, &contentBuilder, agent, attemptMessages, conversationID, maxTokens, attempt)
+		chunks, gotFirstChunk, usage, err := o.streamWebsiteAgentAttempt(ctx, outCh, &contentBuilder, agent, attemptMessages, conversationID, maxTokens, attempt)
 		totalChunks += chunks
+		if usage != nil {
+			if usage.PromptTokens > 0 {
+				inputTokens += usage.PromptTokens
+			} else {
+				inputTokens += llm.EstimateRequestTokens(attemptMessages)
+			}
+			if usage.CompletionTokens > 0 {
+				outputTokens += usage.CompletionTokens
+			} else {
+				outputTokens += llm.EstimateTokens(contentBuilder.String())
+			}
+		} else {
+			inputTokens += llm.EstimateRequestTokens(attemptMessages)
+			outputTokens += llm.EstimateTokens(contentBuilder.String())
+		}
 		if err != nil {
 			o.log.Error("❌ website_agent: stream attempt FAILED",
 				logger.Error(err),
@@ -919,8 +946,6 @@ func (o *Orchestrator) websiteAgentLoop(
 	// Generate clean summary for chat message
 	summary := o.generateProjectSummary(files, htmlContent)
 	latencyMs := int(time.Since(start).Milliseconds())
-	inputTokens := llm.EstimateRequestTokens(messages)
-	outputTokens := llm.EstimateTokens(contentBuilder.String())
 	o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, summary, artifactID, inputTokens, outputTokens, latencyMs)
 
 	if o.usageTracker != nil {
@@ -954,7 +979,7 @@ func (o *Orchestrator) streamWebsiteAgentAttempt(
 	conversationID uuid.UUID,
 	maxTokens int,
 	attempt int,
-) (int, bool, error) {
+) (int, bool, *llm.Usage, error) {
 	req := llm.Request{
 		Model:       agent.Model,
 		Messages:    messages,
@@ -975,11 +1000,12 @@ func (o *Orchestrator) streamWebsiteAgentAttempt(
 
 	llmCh, err := o.llmClient.Stream(llmCtx, req)
 	if err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 
 	chunkCount := 0
 	firstChunkReceived := false
+	var chunkUsage *llm.Usage
 	for chunk := range llmCh {
 		if !firstChunkReceived {
 			firstChunkReceived = true
@@ -989,6 +1015,10 @@ func (o *Orchestrator) streamWebsiteAgentAttempt(
 				logger.String("preview", truncate(chunk.Content, 80)))
 		}
 		chunkCount++
+
+		if chunk.Usage != nil {
+			chunkUsage = chunk.Usage
+		}
 
 		if chunk.Content == "" {
 			continue
@@ -1000,7 +1030,7 @@ func (o *Orchestrator) streamWebsiteAgentAttempt(
 			o.log.Warn("⚠️ website_agent: context cancelled during streaming",
 			logger.Int("attempt", attempt),
 			logger.Int("chunks_received", chunkCount))
-			return chunkCount, firstChunkReceived, ctx.Err()
+			return chunkCount, firstChunkReceived, chunkUsage, ctx.Err()
 		}
 	}
 
@@ -1009,7 +1039,7 @@ func (o *Orchestrator) streamWebsiteAgentAttempt(
 		logger.Int("total_chunks", chunkCount),
 		logger.Int("content_length", contentBuilder.Len()))
 
-	return chunkCount, firstChunkReceived, nil
+	return chunkCount, firstChunkReceived, chunkUsage, nil
 }
 
 func continuationMessages(base []llm.Message, fullContent string) []llm.Message {

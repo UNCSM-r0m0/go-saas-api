@@ -11,12 +11,13 @@ const (
 	TypeStop  MessageType = "stop"
 
 	// Server -> Client
-	TypeChunk      MessageType = "chunk"
-	TypeToolStart  MessageType = "tool_start"
-	TypeToolResult MessageType = "tool_result"
-	TypeDone       MessageType = "done"
-	TypeError      MessageType = "error"
-	TypePong       MessageType = "pong"
+	TypeChunk          MessageType = "chunk"
+	TypeToolStart      MessageType = "tool_start"
+	TypeToolResult     MessageType = "tool_result"
+	TypeDone           MessageType = "done"
+	TypeError          MessageType = "error"
+	TypePong           MessageType = "pong"
+	TypeConversationID MessageType = "conversation_id"
 )
 
 type Message struct {
