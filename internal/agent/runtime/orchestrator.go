@@ -48,6 +48,7 @@ func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *Sess
 	flowReg.Register(flows.NewProposalFlow())
 	flowReg.Register(flows.NewContractFlow())
 	flowReg.Register(flows.NewCodeReviewFlow())
+	flowReg.Register(flows.NewAPIIntegrationFlow())
 
 	return &Orchestrator{
 		llmClient:    client,
@@ -103,6 +104,14 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		conversationID = conv.ID
 	}
 
+	// Load conversation metadata for flow state
+	var convMetadata map[string]any
+	if conversationID != uuid.Nil {
+		if conv, err := o.sessions.GetConversation(ctx, conversationID); err == nil && conv != nil {
+			convMetadata = conv.Metadata
+		}
+	}
+
 	// Load workspace artifacts for this conversation
 	var artifactNames []string
 	if o.artRepo != nil {
@@ -149,14 +158,26 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		classification.Role = ClassifyKeyword(content)
 	}
 
-	// Detect active flow
+	// Detect active flow — priority: metadata > classifier > registry detection
 	var activeFlow flows.Flow
-	if classification.Flow != "" && o.flowRegistry != nil {
+
+	// 1. Existing conversation metadata flow (continuity)
+	if convMetadata != nil {
+		if flowName, ok := convMetadata["flow"].(string); ok && flowName != "" {
+			if f, ok := o.flowRegistry.Get(flowName); ok {
+				activeFlow = f
+			}
+		}
+	}
+
+	// 2. Classifier flow
+	if activeFlow == nil && classification.Flow != "" && o.flowRegistry != nil {
 		if f, ok := o.flowRegistry.Get(classification.Flow); ok {
 			activeFlow = f
 		}
 	}
-	// Also check flow registry detection for history-length-based flows (e.g. onboarding)
+
+	// 3. Registry detection fallback (history-length-based flows like onboarding)
 	if activeFlow == nil && o.flowRegistry != nil {
 		if f, score := o.flowRegistry.DetectAll(content, len(history)); f != nil && score >= 0.85 {
 			activeFlow = f
@@ -209,7 +230,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 
 	var messages []llm.Message
 	if activeFlow != nil {
-		messages = activeFlow.BuildMessages(agent, history, userContent, userContext, nil)
+		messages = activeFlow.BuildMessages(agent, history, userContent, userContext, convMetadata)
 	} else {
 		messages = BuildMessages(agent, history, userContent, userContext, artifactNames)
 	}
@@ -218,7 +239,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 	outCh := make(chan llm.Chunk)
 	go func() {
 		defer close(outCh)
-		o.agentLoop(ctx, outCh, agent, messages, toolDefs, toolInstances, conversationID, userID, userContent)
+		o.agentLoop(ctx, outCh, agent, messages, toolDefs, toolInstances, conversationID, userID, userContent, activeFlow, convMetadata)
 	}()
 
 	return conversationID, outCh, nil

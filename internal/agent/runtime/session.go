@@ -67,3 +67,14 @@ func (s *SessionManager) GetHistory(ctx context.Context, conversationID uuid.UUI
 	}
 	return s.msgRepo.ListByConversation(ctx, conversationID, limit)
 }
+
+// UpdateConversationMetadata updates only the metadata field of a conversation.
+func (s *SessionManager) UpdateConversationMetadata(ctx context.Context, id uuid.UUID, metadata map[string]any) error {
+	conv, err := s.convRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get conversation: %w", err)
+	}
+	conv.Metadata = metadata
+	conv.UpdatedAt = time.Now()
+	return s.convRepo.Update(ctx, conv)
+}

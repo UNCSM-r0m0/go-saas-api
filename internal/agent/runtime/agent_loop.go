@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/r0lm0/go-saas-api/internal/agent/flows"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/quality"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
@@ -22,6 +23,90 @@ const (
 	contextKeyUserID         contextKey = "user_id"
 	MaxAgentIterations                  = 10
 )
+
+const flowStateMarker = "---FLOW_STATE---"
+const flowStateTailLen = len(flowStateMarker) - 1 // 15
+
+// flowStateSanitizer strips the FLOW_STATE block from streaming chunks.
+type flowStateSanitizer struct {
+	blocked    bool
+	buffer     strings.Builder
+	streamedUp int
+	collecting bool
+}
+
+func (s *flowStateSanitizer) Process(chunk string) string {
+	if s.blocked {
+		return ""
+	}
+	s.buffer.WriteString(chunk)
+	if s.collecting {
+		// Buffer everything; emit sanitized content at Flush
+		return ""
+	}
+	full := s.buffer.String()
+	if idx := strings.Index(full, flowStateMarker); idx != -1 {
+		s.blocked = true
+		visible := full[:idx]
+		if len(visible) > s.streamedUp {
+			out := visible[s.streamedUp:]
+			s.streamedUp = len(visible)
+			return out
+		}
+		return ""
+	}
+	safeLen := len(full) - flowStateTailLen
+	if safeLen < 0 {
+		safeLen = 0
+	}
+	if safeLen > s.streamedUp {
+		out := full[s.streamedUp:safeLen]
+		s.streamedUp = safeLen
+		return out
+	}
+	return ""
+}
+
+func (s *flowStateSanitizer) Flush() string {
+	if s.blocked && !s.collecting {
+		return ""
+	}
+	full := s.buffer.String()
+	var visible string
+	if idx := strings.Index(full, flowStateMarker); idx != -1 {
+		visible = full[:idx]
+	} else {
+		visible = full
+	}
+	if s.collecting {
+		visible = flows.EnforceSingleQuestion(visible, "collecting")
+	}
+	if len(visible) > s.streamedUp {
+		out := visible[s.streamedUp:]
+		s.streamedUp = len(visible)
+		return out
+	}
+	return ""
+}
+
+func (s *flowStateSanitizer) VisibleContent() string {
+	full := s.buffer.String()
+	var visible string
+	if idx := strings.Index(full, flowStateMarker); idx != -1 {
+		visible = full[:idx]
+	} else {
+		visible = full
+	}
+	if s.collecting {
+		visible = flows.EnforceSingleQuestion(visible, "collecting")
+	}
+	return visible
+}
+
+func (s *flowStateSanitizer) RawContent() string {
+	return s.buffer.String()
+}
+
 
 // agentLoop runs the ReAct (Reason-Act) loop:
 //  1. Send conversation to LLM with tools available
@@ -39,6 +124,8 @@ func (o *Orchestrator) agentLoop(
 	conversationID uuid.UUID,
 	userID uuid.UUID,
 	userMessage string,
+	activeFlow flows.Flow,
+	metadata map[string]any,
 ) {
 	messages := make([]llm.Message, len(initialMessages))
 	copy(messages, initialMessages)
@@ -49,6 +136,7 @@ func (o *Orchestrator) agentLoop(
 	var totalLatencyMs int
 	var totalInputTokens int
 	var totalOutputTokens int
+	var realDeliverables []string
 
 	for i := 0; i < MaxAgentIterations; i++ {
 		req := llm.Request{
@@ -70,17 +158,33 @@ func (o *Orchestrator) agentLoop(
 			return
 		}
 
-		var assistantContent strings.Builder
+		var sanitizer *flowStateSanitizer
+		if activeFlow != nil && activeFlow.Name() == "api_integration" {
+			sanitizer = &flowStateSanitizer{
+				collecting: flows.GetStatus(metadata) == "collecting",
+			}
+		}
+		var fallbackContent strings.Builder
 		var toolCalls []llm.ToolCall
 		var chunkUsage *llm.Usage
 
 		for chunk := range llmCh {
 			if chunk.Content != "" {
-				assistantContent.WriteString(chunk.Content)
-				select {
-				case outCh <- llm.Chunk{Content: chunk.Content}:
-				case <-ctx.Done():
-					return
+				if sanitizer != nil {
+					if out := sanitizer.Process(chunk.Content); out != "" {
+						select {
+						case outCh <- llm.Chunk{Content: out}:
+						case <-ctx.Done():
+							return
+						}
+					}
+				} else {
+					fallbackContent.WriteString(chunk.Content)
+					select {
+					case outCh <- llm.Chunk{Content: chunk.Content}:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
 			if chunk.ToolCall != nil {
@@ -94,6 +198,27 @@ func (o *Orchestrator) agentLoop(
 			}
 		}
 
+		// Flush any remaining safe tail after stream ends
+		if sanitizer != nil {
+			if out := sanitizer.Flush(); out != "" {
+				select {
+				case outCh <- llm.Chunk{Content: out}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+
+		var visibleContent string
+		var rawContent string
+		if sanitizer != nil {
+			visibleContent = sanitizer.VisibleContent()
+			rawContent = sanitizer.RawContent()
+		} else {
+			visibleContent = fallbackContent.String()
+			rawContent = visibleContent
+		}
+
 		latencyMs := int(time.Since(start).Milliseconds())
 		totalLatencyMs += latencyMs
 
@@ -102,16 +227,15 @@ func (o *Orchestrator) agentLoop(
 			totalOutputTokens += chunkUsage.CompletionTokens
 		} else {
 			totalInputTokens += llm.EstimateRequestTokens(messages)
-			totalOutputTokens += llm.EstimateTokens(assistantContent.String())
+			totalOutputTokens += llm.EstimateTokens(rawContent)
 		}
 
 		if len(toolCalls) == 0 {
-			response := assistantContent.String()
-			allContent.WriteString(response)
+			allContent.WriteString(visibleContent)
 
 			// Quality gate: evaluate final response before saving
-			if !qualityRetryDone && o.qualityGate != nil && quality.ShouldEvaluate(agent, response) {
-				eval, err := o.qualityGate.Evaluate(ctx, userMessage, response)
+			if !qualityRetryDone && o.qualityGate != nil && quality.ShouldEvaluate(agent, visibleContent) {
+				eval, err := o.qualityGate.Evaluate(ctx, userMessage, visibleContent)
 				if err == nil && eval.Regenerate && eval.Reason != "" {
 					o.log.Info("quality gate: requesting regeneration", logger.String("reason", eval.Reason))
 
@@ -125,7 +249,7 @@ func (o *Orchestrator) agentLoop(
 					// Add system feedback to messages and retry once
 					messages = append(messages, llm.Message{
 						Role:    "assistant",
-						Content: response,
+						Content: visibleContent,
 					})
 					messages = append(messages, llm.Message{
 						Role:    "system",
@@ -137,11 +261,16 @@ func (o *Orchestrator) agentLoop(
 				}
 			}
 
+			// Enforce single question for API integration flow when collecting
+			if activeFlow != nil && activeFlow.Name() == "api_integration" {
+				visibleContent = flows.EnforceSingleQuestion(visibleContent, flows.GetStatus(metadata))
+			}
+
 			msg := &model.Message{
 				ID:             uuid.New(),
 				ConversationID: conversationID,
 				Role:           model.MessageRoleAssistant,
-				Content:        allContent.String(),
+				Content:        visibleContent,
 				Model:          agent.Model,
 				ToolCalls:      allToolCalls,
 				TokensInput:    totalInputTokens,
@@ -150,6 +279,16 @@ func (o *Orchestrator) agentLoop(
 				CreatedAt:      time.Now(),
 			}
 			_ = o.sessions.AddMessage(ctx, msg)
+
+			if activeFlow != nil {
+				updatedMeta := activeFlow.UpdateState(metadata, rawContent)
+				if apiFlow, ok := activeFlow.(*flows.APIIntegrationFlow); ok && len(realDeliverables) > 0 {
+					updatedMeta = apiFlow.AddRealDeliverables(updatedMeta, realDeliverables)
+				}
+				if err := o.sessions.UpdateConversationMetadata(ctx, conversationID, updatedMeta); err != nil {
+					o.log.Warn("failed to update conversation metadata", logger.Error(err))
+				}
+			}
 
 			if o.usageTracker != nil {
 				pricing := llm.ResolvePricing(agent.Model)
@@ -172,7 +311,7 @@ func (o *Orchestrator) agentLoop(
 			return
 		}
 
-		allContent.WriteString(assistantContent.String())
+		allContent.WriteString(visibleContent)
 
 		var toolResultMessages []llm.Message
 		for _, tc := range toolCalls {
@@ -203,6 +342,15 @@ func (o *Orchestrator) agentLoop(
 				return
 			}
 
+			// Track real deliverables from successful file_write tool calls
+			if tc.Name == "file_write" {
+				if resultContent != "" && !strings.HasPrefix(resultContent, "Error:") {
+					if name, ok := tc.Arguments["name"].(string); ok && name != "" {
+						realDeliverables = append(realDeliverables, name)
+					}
+				}
+			}
+
 			allToolCalls = append(allToolCalls, model.ToolCall{
 				ID:        tc.ID,
 				Name:      tc.Name,
@@ -220,7 +368,7 @@ func (o *Orchestrator) agentLoop(
 		// Add assistant message (with tool calls) + tool results to history
 		messages = append(messages, llm.Message{
 			Role:      "assistant",
-			Content:   assistantContent.String(),
+			Content:   visibleContent,
 			ToolCalls: toolCalls,
 		})
 		messages = append(messages, toolResultMessages...)
@@ -230,7 +378,7 @@ func (o *Orchestrator) agentLoop(
 			ID:             uuid.New(),
 			ConversationID: conversationID,
 			Role:           model.MessageRoleAssistant,
-			Content:        assistantContent.String(),
+			Content:        visibleContent,
 			Model:          agent.Model,
 			ToolCalls: []model.ToolCall{{
 				ID:        toolCalls[0].ID,
@@ -268,11 +416,20 @@ func (o *Orchestrator) agentLoop(
 	case <-ctx.Done():
 	}
 
+	// Sanitize max-iterations content too
+	visibleFinal := allContent.String()
+	if activeFlow != nil {
+		if _, ok := activeFlow.(*flows.APIIntegrationFlow); ok {
+			visibleFinal = flows.StripFlowStateBlock(visibleFinal)
+			visibleFinal = flows.EnforceSingleQuestion(visibleFinal, flows.GetStatus(metadata))
+		}
+	}
+
 	msg := &model.Message{
 		ID:             uuid.New(),
 		ConversationID: conversationID,
 		Role:           model.MessageRoleAssistant,
-		Content:        allContent.String(),
+		Content:        visibleFinal,
 		Model:          agent.Model,
 		ToolCalls:      allToolCalls,
 		TokensInput:    totalInputTokens,
@@ -281,6 +438,16 @@ func (o *Orchestrator) agentLoop(
 		CreatedAt:      time.Now(),
 	}
 	_ = o.sessions.AddMessage(ctx, msg)
+
+	if activeFlow != nil {
+		updatedMeta := activeFlow.UpdateState(metadata, allContent.String())
+		if apiFlow, ok := activeFlow.(*flows.APIIntegrationFlow); ok && len(realDeliverables) > 0 {
+			updatedMeta = apiFlow.AddRealDeliverables(updatedMeta, realDeliverables)
+		}
+		if err := o.sessions.UpdateConversationMetadata(ctx, conversationID, updatedMeta); err != nil {
+			o.log.Warn("failed to update conversation metadata", logger.Error(err))
+		}
+	}
 
 	if o.usageTracker != nil {
 		pricing := llm.ResolvePricing(agent.Model)

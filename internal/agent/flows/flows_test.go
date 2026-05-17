@@ -134,6 +134,7 @@ func TestFlowMessagesStructure(t *testing.T) {
 		NewProposalFlow(),
 		NewContractFlow(),
 		NewCodeReviewFlow(),
+		NewAPIIntegrationFlow(),
 	}
 
 	agent := &model.Agent{Role: model.RoleAssistant}

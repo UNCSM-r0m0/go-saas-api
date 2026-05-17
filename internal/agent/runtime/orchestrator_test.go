@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -514,5 +515,337 @@ func TestChat_ConversationOwnership_CorrectUser(t *testing.T) {
 		t.Fatalf("expected convID %s, got %s", convID, gotConvID)
 	}
 	for range ch {
+	}
+}
+
+
+func TestChat_FlowContinuity_FromMetadata(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	userID := uuid.New()
+	convID := uuid.New()
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		UserID: userID,
+		Metadata: map[string]any{
+			"flow":             "api_integration",
+			"status":           "collecting",
+			"collected_fields": map[string]string{"target_platform": "WooCommerce"},
+		},
+	}
+
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "What is the external API name?"},
+			{Content: "\n\n---FLOW_STATE---\n{\"extracted_fields\":{},\"step\":\"collecting\"}"},
+			{Done: true},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+
+	// Message that would NOT trigger api_integration detection on its own
+	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var streamed string
+	for chunk := range ch {
+		streamed += chunk.Content
+	}
+
+	// 1. Streamed content must NOT contain FLOW_STATE
+	if strings.Contains(streamed, "---FLOW_STATE---") {
+		t.Errorf("streamed content should not contain FLOW_STATE block, got: %q", streamed)
+	}
+
+	// 2. Saved assistant message must NOT contain FLOW_STATE
+	var assistantMsg *model.Message
+	for i := range msgRepo.msgs {
+		if msgRepo.msgs[i].Role == model.MessageRoleAssistant {
+			assistantMsg = &msgRepo.msgs[i]
+			break
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("expected assistant message to be saved")
+	}
+	if strings.Contains(assistantMsg.Content, "---FLOW_STATE---") {
+		t.Errorf("saved assistant message should not contain FLOW_STATE block, got: %q", assistantMsg.Content)
+	}
+
+	// 3. Metadata should still have api_integration flow
+	updatedConv := convRepo.convs[convID]
+	if updatedConv == nil {
+		t.Fatal("conversation not found after chat")
+	}
+	if updatedConv.Metadata["flow"] != "api_integration" {
+		t.Fatalf("expected flow continuity, got %v", updatedConv.Metadata["flow"])
+	}
+}
+
+func TestChat_FlowState_SplitAcrossChunks(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	userID := uuid.New()
+	convID := uuid.New()
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		UserID: userID,
+		Metadata: map[string]any{
+			"flow":             "api_integration",
+			"status":           "collecting",
+			"collected_fields": map[string]string{"target_platform": "WooCommerce"},
+		},
+	}
+
+	// Split the FLOW_STATE marker across chunks
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "Pregunta visible "},
+			{Content: "---FLOW_"},
+			{Content: "STATE---\n{\"extracted_fields\":{},\"step\":\"collecting\"}"},
+			{Done: true},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+
+	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var streamed string
+	for chunk := range ch {
+		streamed += chunk.Content
+	}
+
+	// Stream must not contain any part of the marker
+	if strings.Contains(streamed, "---FLOW_") {
+		t.Errorf("streamed content leaked marker prefix: %q", streamed)
+	}
+	if strings.Contains(streamed, "FLOW_STATE") {
+		t.Errorf("streamed content leaked marker text: %q", streamed)
+	}
+
+	// Saved assistant message must also not contain the marker
+	var assistantMsg *model.Message
+	for i := range msgRepo.msgs {
+		if msgRepo.msgs[i].Role == model.MessageRoleAssistant {
+			assistantMsg = &msgRepo.msgs[i]
+			break
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("expected assistant message")
+	}
+	if strings.Contains(assistantMsg.Content, "---FLOW_") {
+		t.Errorf("saved message leaked marker prefix: %q", assistantMsg.Content)
+	}
+	if strings.Contains(assistantMsg.Content, "FLOW_STATE") {
+		t.Errorf("saved message leaked marker text: %q", assistantMsg.Content)
+	}
+}
+
+func TestChat_EnforceSingleQuestion_Applied(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	userID := uuid.New()
+	convID := uuid.New()
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		UserID: userID,
+		Metadata: map[string]any{
+			"flow":             "api_integration",
+			"status":           "collecting",
+			"collected_fields": map[string]string{"target_platform": "WooCommerce"},
+		},
+	}
+
+	// LLM returns 2 questions (should be sanitized to 1)
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "What is the external API name? Also, what is the integration goal?"},
+			{Content: "\n\n---FLOW_STATE---\n{\"extracted_fields\":{},\"step\":\"collecting\"}"},
+			{Done: true},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+
+	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for range ch {
+	}
+
+	var assistantMsg *model.Message
+	for i := range msgRepo.msgs {
+		if msgRepo.msgs[i].Role == model.MessageRoleAssistant {
+			assistantMsg = &msgRepo.msgs[i]
+			break
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("expected assistant message")
+	}
+	if strings.Count(assistantMsg.Content, "?") > 1 {
+		t.Errorf("stored content has %d questions, expected at most 1: %q", strings.Count(assistantMsg.Content, "?"), assistantMsg.Content)
+	}
+}
+
+
+func TestChat_FileWrite_SetsGeneratedStatus(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	_ = registry.Register(&mockTool{name: "file_write", desc: "write file", result: tools.Result{Content: "File written successfully"}})
+	agentRepo := &memAgentRepo{}
+
+	userID := uuid.New()
+	convID := uuid.New()
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		UserID: userID,
+		Metadata: map[string]any{
+			"flow":   "api_integration",
+			"status": "collecting",
+			"collected_fields": map[string]string{
+				"target_platform":    "WooCommerce",
+				"external_api_name":  "Stripe",
+				"integration_goal":   "sync payments",
+				"data_direction":     "import",
+				"auth_type":          "api_key",
+				"data_entities":      "orders",
+				"frequency":          "real_time",
+				"deliverable_type":   "plugin",
+			},
+		},
+	}
+
+	// First LLM call emits file_write, second call emits final text
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "I'll write the scope document now."},
+			{ToolCall: &llm.ToolCall{ID: "call_1", Name: "file_write", Arguments: map[string]any{"name": "01-project-scope.md", "content": "# Scope"}}},
+			{Done: true},
+		},
+		chunks2: []llm.Chunk{
+			{Content: "Scope document created successfully."},
+			{Done: true},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+
+	_, ch, err := orch.Chat(ctx, userID, &convID, "generate scope", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for range ch {
+	}
+
+	updatedConv := convRepo.convs[convID]
+	if updatedConv == nil {
+		t.Fatal("conversation not found after chat")
+	}
+	if updatedConv.Metadata["status"] != "generated" {
+		t.Fatalf("expected status 'generated', got %v", updatedConv.Metadata["status"])
+	}
+
+	deliverables, ok := updatedConv.Metadata["deliverables"].([]string)
+	if !ok {
+		// May be stored as []interface{} depending on JSON round-trip; check via reflection in real DB.
+		// In-memory it stays []string.
+		t.Fatalf("expected deliverables to be []string, got %T", updatedConv.Metadata["deliverables"])
+	}
+	found := false
+	for _, d := range deliverables {
+		if d == "01-project-scope.md" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected deliverables to contain '01-project-scope.md', got %v", deliverables)
+	}
+}
+
+func TestChat_EnforceSingleQuestion_StreamAndStore(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	userID := uuid.New()
+	convID := uuid.New()
+	convRepo.convs[convID] = &model.Conversation{
+		ID:     convID,
+		UserID: userID,
+		Metadata: map[string]any{
+			"flow":             "api_integration",
+			"status":           "collecting",
+			"collected_fields": map[string]string{"target_platform": "WooCommerce"},
+		},
+	}
+
+	// LLM returns 2 questions (should be sanitized to 1 in both stream and store)
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "What is the external API name? Also, what is the integration goal?"},
+			{Done: true},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+
+	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var streamed string
+	for chunk := range ch {
+		streamed += chunk.Content
+	}
+
+	if strings.Count(streamed, "?") > 1 {
+		t.Errorf("streamed content has %d questions, expected at most 1: %q", strings.Count(streamed, "?"), streamed)
+	}
+
+	var assistantMsg *model.Message
+	for i := range msgRepo.msgs {
+		if msgRepo.msgs[i].Role == model.MessageRoleAssistant {
+			assistantMsg = &msgRepo.msgs[i]
+			break
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("expected assistant message")
+	}
+	if strings.Count(assistantMsg.Content, "?") > 1 {
+		t.Errorf("stored content has %d questions, expected at most 1: %q", strings.Count(assistantMsg.Content, "?"), assistantMsg.Content)
 	}
 }

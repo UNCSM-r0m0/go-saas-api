@@ -36,6 +36,7 @@ FLOWS (pick one if the message maps to a structured workflow, otherwise null):
 - proposal: proposal, quote, budget, presupuesto, cotización
 - contract: contract, agreement, contrato, acuerdo, NDA
 - code_review: code review, audit, revisar código
+- api_integration: API integration, WooCommerce, Shopify, ERP sync, webhook, connect systems
 
 Output ONLY a JSON object, no explanation:
 {"role": "coder", "flow": null}
