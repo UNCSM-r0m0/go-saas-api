@@ -16,6 +16,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/quality"
 	"github.com/r0lm0/go-saas-api/internal/agent/repository"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/agent/usage"
 	"github.com/r0lm0/go-saas-api/internal/document"
 	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
@@ -36,11 +37,12 @@ type Orchestrator struct {
 	classifier   *LLMClassifier
 	extractor    *memory.Extractor
 	qualityGate  *quality.Gate
-	flowRegistry *flows.Registry
-	log          logger.Logger
+	flowRegistry  *flows.Registry
+	usageTracker  *usage.Tracker
+	log           logger.Logger
 }
 
-func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, artFileRepo repository.ArtifactFileRepo, fileSvc *fileupload.Service, docClient *document.Client, providers provider.Store, extractor *memory.Extractor, log logger.Logger) *Orchestrator {
+func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *SessionManager, agentRepo repository.AgentRepo, artRepo repository.ArtifactRepo, artFileRepo repository.ArtifactFileRepo, fileSvc *fileupload.Service, docClient *document.Client, providers provider.Store, extractor *memory.Extractor, usageTracker *usage.Tracker, log logger.Logger) *Orchestrator {
 	flowReg := flows.NewRegistry()
 	flowReg.Register(flows.NewOnboardingFlow())
 	flowReg.Register(flows.NewProposalFlow())
@@ -61,6 +63,7 @@ func NewOrchestrator(client llm.Client, registry *tools.Registry, sessions *Sess
 		extractor:    extractor,
 		qualityGate:  quality.NewGate(client, log),
 		flowRegistry: flowReg,
+		usageTracker: usageTracker,
 		log:          log,
 	}
 }
@@ -78,14 +81,14 @@ func (o *Orchestrator) ExtractMemory(ctx context.Context, userID uuid.UUID, conv
 	go o.extractor.ExtractAndSave(ctx, userID, history)
 }
 
-func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string, mode string) (<-chan llm.Chunk, error) {
+func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string, mode string) (uuid.UUID, <-chan llm.Chunk, error) {
 	var conversationID uuid.UUID
 	if convID != nil {
 		conversationID = *convID
 	} else {
 		conv, err := o.sessions.CreateConversation(ctx, userID, content[:min(50, len(content))], nil)
 		if err != nil {
-			return nil, fmt.Errorf("create conversation: %w", err)
+			return uuid.Nil, nil, fmt.Errorf("create conversation: %w", err)
 		}
 		conversationID = conv.ID
 	}
@@ -111,7 +114,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		CreatedAt:      time.Now(),
 	}
 	if err := o.sessions.AddMessage(ctx, userMsg); err != nil {
-		return nil, fmt.Errorf("save user message: %w", err)
+		return uuid.Nil, nil, fmt.Errorf("save user message: %w", err)
 	}
 
 	if convID == nil {
@@ -120,7 +123,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 
 	history, err := o.sessions.GetHistory(ctx, conversationID, 50)
 	if err != nil {
-		return nil, fmt.Errorf("load history: %w", err)
+		return uuid.Nil, nil, fmt.Errorf("load history: %w", err)
 	}
 
 	// Classify intent
@@ -152,7 +155,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 
 	agent, err := o.resolveAgent(ctx, classification.Role)
 	if err != nil {
-		return nil, fmt.Errorf("resolve agent: %w", err)
+		return uuid.Nil, nil, fmt.Errorf("resolve agent: %w", err)
 	}
 	if selectedModel != "" {
 		agent.Model = selectedModel
@@ -170,7 +173,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 	if mode == "website_agent" {
 		capability, err := o.resolveWebsiteAgentCapability(ctx, agent.Model)
 		if err != nil {
-			return nil, err
+			return uuid.Nil, nil, err
 		}
 
 		agent.SystemPrompt = prompts.WebsiteAgent()
@@ -181,9 +184,9 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		outCh := make(chan llm.Chunk)
 		go func() {
 			defer close(outCh)
-			o.websiteAgentLoop(ctx, outCh, agent, messages, conversationID, capability.MaxTokens, content)
+			o.websiteAgentLoop(ctx, outCh, agent, messages, conversationID, capability.MaxTokens, content, userID)
 		}()
-		return outCh, nil
+		return conversationID, outCh, nil
 	}
 
 	toolList := o.registry.List()
@@ -208,7 +211,7 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		o.agentLoop(ctx, outCh, agent, messages, toolDefs, toolInstances, conversationID, userID, userContent)
 	}()
 
-	return outCh, nil
+	return conversationID, outCh, nil
 }
 
 func (o *Orchestrator) resolveAgent(ctx context.Context, role model.AgentRole) (*model.Agent, error) {
@@ -728,7 +731,9 @@ func (o *Orchestrator) websiteAgentLoop(
 	conversationID uuid.UUID,
 	maxTokens int,
 	userContent string,
+	userID uuid.UUID,
 ) {
+	start := time.Now()
 	select {
 	case outCh <- llm.Chunk{Event: "progress", Content: "Generando sitio web..."}:
 	case <-ctx.Done():
@@ -862,7 +867,10 @@ func (o *Orchestrator) websiteAgentLoop(
 				logger.String("issues", truncate(formatWebsiteFileIssues(remaining), 500)))
 
 			message := "No pude completar un proyecto web válido. Detecté archivos incompletos después de reparar; probá pedirlo con menos secciones o un alcance más chico."
-			o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, message, "")
+			latencyMs := int(time.Since(start).Milliseconds())
+			inputTokens := llm.EstimateRequestTokens(messages)
+			outputTokens := llm.EstimateTokens(contentBuilder.String())
+			o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, message, "", inputTokens, outputTokens, latencyMs)
 
 			select {
 			case outCh <- llm.Chunk{Event: "error", Content: "No pude completar un proyecto web válido. Detecté archivos incompletos; probá pedirlo más simple o con menos secciones."}:
@@ -910,7 +918,24 @@ func (o *Orchestrator) websiteAgentLoop(
 
 	// Generate clean summary for chat message
 	summary := o.generateProjectSummary(files, htmlContent)
-	o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, summary, artifactID)
+	latencyMs := int(time.Since(start).Milliseconds())
+	inputTokens := llm.EstimateRequestTokens(messages)
+	outputTokens := llm.EstimateTokens(contentBuilder.String())
+	o.saveWebsiteAssistantMessage(ctx, conversationID, agent.Model, summary, artifactID, inputTokens, outputTokens, latencyMs)
+
+	if o.usageTracker != nil {
+		pricing := llm.ResolvePricing(agent.Model)
+		cost := pricing.CalculateCost(inputTokens, outputTokens)
+		_ = o.usageTracker.Record(ctx, usage.Record{
+			UserID:         userID,
+			ConversationID: conversationID,
+			Model:          agent.Model,
+			TokensInput:    inputTokens,
+			TokensOutput:   outputTokens,
+			LatencyMs:      latencyMs,
+			CostUSD:        cost,
+		})
+	}
 
 	// Generate title after successful artifact creation
 	if userContent != "" {
@@ -1068,13 +1093,16 @@ func (o *Orchestrator) saveWebsiteArtifact(ctx context.Context, conversationID u
 	return art.ID.String()
 }
 
-func (o *Orchestrator) saveWebsiteAssistantMessage(ctx context.Context, conversationID uuid.UUID, modelName, content, artifactID string) {
+func (o *Orchestrator) saveWebsiteAssistantMessage(ctx context.Context, conversationID uuid.UUID, modelName, content, artifactID string, tokensInput, tokensOutput, latencyMs int) {
 	msg := &model.Message{
 		ID:             uuid.New(),
 		ConversationID: conversationID,
 		Role:           model.MessageRoleAssistant,
 		Content:        content,
 		Model:          modelName,
+		TokensInput:    tokensInput,
+		TokensOutput:   tokensOutput,
+		LatencyMs:      latencyMs,
 		CreatedAt:      time.Now(),
 	}
 	if artifactID != "" {

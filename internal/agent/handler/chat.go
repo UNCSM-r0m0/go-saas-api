@@ -395,7 +395,7 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 	}
 	userContext := buildUserContext(prefs, contextItems)
 
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
+	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
 		h.log.Error("chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "chat failed")
@@ -427,18 +427,6 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 		if chunk.Done {
 			break
 		}
-	}
-
-	var convID uuid.UUID
-	if req.ConversationID != nil {
-		convID = *req.ConversationID
-	} else {
-		convs, err := h.convRepo.ListByUser(ctx, userID, 1, 0)
-		if err != nil || len(convs) == 0 {
-			response.Error(c, http.StatusInternalServerError, "failed to retrieve conversation")
-			return
-		}
-		convID = convs[0].ID
 	}
 
 	conv, err := h.convRepo.GetByID(ctx, convID)

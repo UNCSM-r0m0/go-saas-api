@@ -30,6 +30,12 @@ type Request struct {
 	Stream      bool             `json:"stream"`
 }
 
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
 type Chunk struct {
 	Content      string    `json:"content"`
 	Done         bool      `json:"done"`
@@ -38,6 +44,7 @@ type Chunk struct {
 	ToolName     string    `json:"tool_name,omitempty"`
 	ArtifactID   string    `json:"artifactId,omitempty"`
 	ArtifactType string    `json:"artifactType,omitempty"`
+	Usage        *Usage    `json:"usage,omitempty"`
 }
 
 type ToolCall struct {

@@ -129,11 +129,11 @@ func TestOrchestrator_Chat(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 	userID := uuid.New()
 
-	ch, err := orch.Chat(ctx, userID, nil, "hi there", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, nil, "hi there", nil, "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -179,10 +179,10 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -247,10 +247,10 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 		},
 	}
 
-	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestOrchestrator_resolveAgent_DBLookup(t *testing.T) {
 		SystemPrompt: "custom prompt",
 	}
 	agentRepo := &mockAgentRepoWithRole{agent: expectedAgent}
-	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
 	agent, err := orch.resolveAgent(ctx, model.RoleCoder)
@@ -297,7 +297,7 @@ func TestOrchestrator_resolveAgent_DBLookup(t *testing.T) {
 
 func TestOrchestrator_resolveAgent_FallbackToDefault(t *testing.T) {
 	agentRepo := &memAgentRepo{}
-	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	orch := NewOrchestrator(nil, nil, nil, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
 	agent, err := orch.resolveAgent(ctx, model.RoleCoder)

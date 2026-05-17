@@ -295,3 +295,14 @@ func (mc *MultiClient) FallbackCount() int64 {
 	defer mc.mu.RUnlock()
 	return mc.fallbackCount
 }
+
+// ResolveProvider returns the provider name assigned to a model, or empty string
+// if the model is not registered.
+func (mc *MultiClient) ResolveProvider(model string) string {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+	if name, ok := mc.modelMap[model]; ok {
+		return name
+	}
+	return ""
+}

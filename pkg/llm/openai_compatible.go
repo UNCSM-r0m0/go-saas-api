@@ -84,7 +84,7 @@ func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-cha
 			}
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
-				emitFinal(ch, ctx, accumulated)
+				emitFinal(ch, ctx, accumulated, nil)
 				return
 			}
 
@@ -104,6 +104,11 @@ func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-cha
 					} `json:"delta"`
 					FinishReason string `json:"finish_reason"`
 				} `json:"choices"`
+				Usage *struct {
+					PromptTokens     int `json:"prompt_tokens"`
+					CompletionTokens int `json:"completion_tokens"`
+					TotalTokens      int `json:"total_tokens"`
+				} `json:"usage"`
 			}
 			if err := json.Unmarshal([]byte(data), &parsed); err != nil {
 				continue
@@ -135,9 +140,19 @@ func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-cha
 				acc.arguments.WriteString(tc.Function.Arguments)
 			}
 
+			// Capture usage if present (OpenAI sends it on the final chunk when stream_options.include_usage=true)
+			var finalUsage *Usage
+			if parsed.Usage != nil {
+				finalUsage = &Usage{
+					PromptTokens:     parsed.Usage.PromptTokens,
+					CompletionTokens: parsed.Usage.CompletionTokens,
+					TotalTokens:      parsed.Usage.TotalTokens,
+				}
+			}
+
 			// Handle finish reason
 			if choice.FinishReason == "tool_calls" || choice.FinishReason == "stop" {
-				emitFinal(ch, ctx, accumulated)
+				emitFinal(ch, ctx, accumulated, finalUsage)
 				return
 			}
 		}
@@ -149,7 +164,7 @@ func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-cha
 // emitFinal sends the final chunk(s) including any accumulated tool calls.
 // Tool calls are emitted as separate chunks before the final Done chunk,
 // so consumers can accumulate all tool calls before receiving Done.
-func emitFinal(ch chan Chunk, ctx context.Context, accumulated map[int]*accumulatedToolCall) {
+func emitFinal(ch chan Chunk, ctx context.Context, accumulated map[int]*accumulatedToolCall, usage *Usage) {
 	if len(accumulated) > 0 {
 		for _, acc := range accumulated {
 			var args map[string]any
@@ -162,7 +177,7 @@ func emitFinal(ch chan Chunk, ctx context.Context, accumulated map[int]*accumula
 		}
 	}
 	select {
-	case ch <- Chunk{Done: true}:
+	case ch <- Chunk{Done: true, Usage: usage}:
 	case <-ctx.Done():
 	}
 }

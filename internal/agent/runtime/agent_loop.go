@@ -10,6 +10,7 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/quality"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/agent/usage"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
@@ -45,6 +46,8 @@ func (o *Orchestrator) agentLoop(
 	var allContent strings.Builder
 	var allToolCalls []model.ToolCall
 	qualityRetryDone := false
+	var totalLatencyMs int
+	var totalOutputTokens int
 
 	for i := 0; i < MaxAgentIterations; i++ {
 		req := llm.Request{
@@ -56,6 +59,7 @@ func (o *Orchestrator) agentLoop(
 			Stream:      true,
 		}
 
+		start := time.Now()
 		llmCh, err := o.llmClient.Stream(ctx, req)
 		if err != nil {
 			select {
@@ -84,6 +88,10 @@ func (o *Orchestrator) agentLoop(
 				break
 			}
 		}
+
+		latencyMs := int(time.Since(start).Milliseconds())
+		totalLatencyMs += latencyMs
+		totalOutputTokens += llm.EstimateTokens(assistantContent.String())
 
 		if len(toolCalls) == 0 {
 			response := assistantContent.String()
@@ -117,6 +125,7 @@ func (o *Orchestrator) agentLoop(
 				}
 			}
 
+			inputTokens := llm.EstimateRequestTokens(initialMessages)
 			msg := &model.Message{
 				ID:             uuid.New(),
 				ConversationID: conversationID,
@@ -124,9 +133,26 @@ func (o *Orchestrator) agentLoop(
 				Content:        allContent.String(),
 				Model:          agent.Model,
 				ToolCalls:      allToolCalls,
+				TokensInput:    inputTokens,
+				TokensOutput:   totalOutputTokens,
+				LatencyMs:      totalLatencyMs,
 				CreatedAt:      time.Now(),
 			}
 			_ = o.sessions.AddMessage(ctx, msg)
+
+			if o.usageTracker != nil {
+				pricing := llm.ResolvePricing(agent.Model)
+				cost := pricing.CalculateCost(inputTokens, totalOutputTokens)
+				_ = o.usageTracker.Record(ctx, usage.Record{
+					UserID:         userID,
+					ConversationID: conversationID,
+					Model:          agent.Model,
+					TokensInput:    inputTokens,
+					TokensOutput:   totalOutputTokens,
+					LatencyMs:      totalLatencyMs,
+					CostUSD:        cost,
+				})
+			}
 
 			select {
 			case outCh <- llm.Chunk{Done: true}:
@@ -231,6 +257,7 @@ func (o *Orchestrator) agentLoop(
 	case <-ctx.Done():
 	}
 
+	inputTokens := llm.EstimateRequestTokens(initialMessages)
 	msg := &model.Message{
 		ID:             uuid.New(),
 		ConversationID: conversationID,
@@ -238,7 +265,24 @@ func (o *Orchestrator) agentLoop(
 		Content:        allContent.String(),
 		Model:          agent.Model,
 		ToolCalls:      allToolCalls,
+		TokensInput:    inputTokens,
+		TokensOutput:   totalOutputTokens,
+		LatencyMs:      totalLatencyMs,
 		CreatedAt:      time.Now(),
 	}
 	_ = o.sessions.AddMessage(ctx, msg)
+
+	if o.usageTracker != nil {
+		pricing := llm.ResolvePricing(agent.Model)
+		cost := pricing.CalculateCost(inputTokens, totalOutputTokens)
+		_ = o.usageTracker.Record(ctx, usage.Record{
+			UserID:         userID,
+			ConversationID: conversationID,
+			Model:          agent.Model,
+			TokensInput:    inputTokens,
+			TokensOutput:   totalOutputTokens,
+			LatencyMs:      totalLatencyMs,
+			CostUSD:        cost,
+		})
+	}
 }

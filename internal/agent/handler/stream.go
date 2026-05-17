@@ -40,7 +40,7 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 	}
 	userContext := buildUserContext(prefs, contextItems)
 
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
+	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
 		h.log.Error("chat stream failed", logger.Error(err))
 		writeSSEError(c, http.StatusOK, "STREAM_ERROR", err.Error())
@@ -48,27 +48,10 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 	}
 
 	writeSSEHeaders(c)
-
-	var conversationID string
-	if req.ConversationID != nil {
-		conversationID = req.ConversationID.String()
-	}
-
-	writeSSEAgentLoop(c, streamCh, conversationID)
-
-	if conversationID == "" {
-		convs, err := h.convRepo.ListByUser(ctx, userID, 1, 0)
-		if err == nil && len(convs) > 0 {
-			conversationID = convs[0].ID.String()
-		}
-	}
+	writeSSEAgentLoop(c, streamCh, convID.String())
 
 	// Trigger background memory extraction after stream completes
-	if conversationID != "" {
-		if convUUID, err := uuid.Parse(conversationID); err == nil {
-			h.orch.ExtractMemory(ctx, userID, convUUID)
-		}
-	}
+	h.orch.ExtractMemory(ctx, userID, convID)
 	// NOTE: writeSSEAgentLoop already sends finished:true when chunk.Done is received.
 	// We only send a final fallback if the stream ended without a done event.
 	// This prevents double finished:true events.
@@ -102,7 +85,7 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 	}
 	userContext := buildUserContext(prefs, contextItems)
 
-	streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model, userContext, req.Mode)
+	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {
 		h.log.Error("chat failed", logger.Error(err))
 		writeSSEError(c, http.StatusInternalServerError, "STREAM_ERROR", "chat failed")
@@ -110,20 +93,10 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 	}
 
 	writeSSEHeaders(c)
-
-	var conversationID string
-	if req.ConversationID != nil {
-		conversationID = req.ConversationID.String()
-	}
-
-	writeSSEAgentLoop(c, streamCh, conversationID)
+	writeSSEAgentLoop(c, streamCh, convID.String())
 
 	// Trigger background memory extraction after stream completes
-	if conversationID != "" {
-		if convUUID, err := uuid.Parse(conversationID); err == nil {
-			h.orch.ExtractMemory(ctx, userID, convUUID)
-		}
-	}
+	h.orch.ExtractMemory(ctx, userID, convID)
 }
 
 func writeSSEAgentLoop(c *gin.Context, streamCh <-chan llm.Chunk, conversationID string) {

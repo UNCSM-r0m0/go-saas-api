@@ -11,7 +11,9 @@ import (
 	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/agent/store"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
+	"github.com/r0lm0/go-saas-api/internal/agent/usage"
 	"github.com/r0lm0/go-saas-api/internal/agent/websocket"
+	"github.com/r0lm0/go-saas-api/internal/billing"
 	"github.com/r0lm0/go-saas-api/internal/document"
 	"github.com/r0lm0/go-saas-api/internal/fileupload"
 	"github.com/r0lm0/go-saas-api/internal/platform/config"
@@ -135,7 +137,9 @@ func main() {
 		docClient = document.NewClient(cfg.DocumentServiceURL)
 	}
 	memoryExtractor := memory.NewExtractor(llmClient, userCtxStore, log)
-	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, artStore, artFileStore, fileService, docClient, providerStore, memoryExtractor, log)
+	billingStore := billing.NewPostgresBillingStore(pgPool)
+	usageTracker := usage.NewTracker(billingStore)
+	orchestrator := runtime.NewOrchestrator(llmClient, toolRegistry, sessions, agentStore, artStore, artFileStore, fileService, docClient, providerStore, memoryExtractor, usageTracker, log)
 	wsManager := websocket.NewManager(orchestrator, log)
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
