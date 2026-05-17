@@ -21,7 +21,7 @@ foreach ($svc in $serviceNames) {
 }
 
 $nodeProcs = Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object {
-    $_.CommandLine -like "*r3-chat*" -or $_.CommandLine -like "*vite*"
+    $_.CommandLine -like "*r3-chat*" -or $_.CommandLine -like "*vite*" -or $_.CommandLine -like "*pnpm*"
 }
 if ($nodeProcs) {
     $nodeProcs | Stop-Process -Force
@@ -189,9 +189,15 @@ try {
 # ===================================================================
 Write-Host "`nLevantando frontend (r3-chat)..." -ForegroundColor Cyan
 if (Test-Path "$frontend\package.json") {
+    Write-Host "  Aprobando build scripts de pnpm..." -NoNewline
+    Push-Location $frontend
+    pnpm install --config.onlyBuiltDependencies="esbuild" 2>$null | Out-Null
+    Pop-Location
+    Write-Host " OK" -ForegroundColor Green
+
     $frontendLog = "$logDir\frontend.log"
     $frontendErr = "$logDir\frontend.err.log"
-    Start-Process -FilePath "cmd" -ArgumentList "/c","npm","run","dev" -WorkingDirectory $frontend -WindowStyle Hidden -RedirectStandardOutput $frontendLog -RedirectStandardError $frontendErr
+    Start-Process -FilePath "cmd" -ArgumentList "/c","pnpm","run","dev" -WorkingDirectory $frontend -WindowStyle Hidden -RedirectStandardOutput $frontendLog -RedirectStandardError $frontendErr
     Write-Host "  Frontend iniciando en http://localhost:5173" -ForegroundColor Green
 } else {
     Write-Host "  WARN: r3-chat no encontrado en $frontend" -ForegroundColor Yellow
