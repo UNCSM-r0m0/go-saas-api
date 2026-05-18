@@ -45,7 +45,7 @@ interface Tab {
 export const SettingsLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const { getTierDisplay } = useSubscription();
-  const { usageStats, isLoading: statsLoading } = useUsageStats();
+  const { usageStats, isLoading: statsLoading, error: usageError } = useUsageStats();
   const { chats, deleteChat } = useChat();
   const [activeTab, setActiveTab] = useState<SettingsTab>('account');
   const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
@@ -431,7 +431,7 @@ export const SettingsLayout: React.FC = () => {
                 </div>
               ) : (
                 <p className="text-sm text-[var(--text-tertiary)] text-center py-2">
-                  No se pudieron cargar las estadísticas
+                  {usageError ?? 'No se pudieron cargar las estadísticas'}
                 </p>
               )}
             </div>
