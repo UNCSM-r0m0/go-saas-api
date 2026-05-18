@@ -1,0 +1,353 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* Light theme (default) - Estilo T3.Chat */
+  --bg-primary: #fafafa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f5f5f5;
+  --bg-elevated: #e5e5e5;
+  --bg-card: rgba(0, 0, 0, 0.02);
+  
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-tertiary: #71717a;
+  --text-muted: #a1a1aa;
+  
+  /* Colores acento para tema claro */
+  --accent-primary: #d46698;
+  --accent-secondary: #8b5cf6;
+  --accent-tertiary: #ec4899;
+  --accent-gradient: linear-gradient(135deg, #d46698 0%, #8b5cf6 50%, #ec4899 100%);
+  
+  /* Bordes sutiles */
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-default: rgba(0, 0, 0, 0.1);
+  --border-hover: rgba(0, 0, 0, 0.15);
+  
+  /* Sombras */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 0 40px rgba(212, 102, 152, 0.1);
+  
+  --code-bg: #f4f4f5;
+  --code-text: #3f3f46;
+  --code-border: rgba(0, 0, 0, 0.06);
+  --inline-code-bg: rgba(0, 0, 0, 0.05);
+  --inline-code-border: rgba(0, 0, 0, 0.06);
+}
+
+/* Dark theme - Estilo T3.Chat */
+.dark {
+  color-scheme: dark;
+  
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  --bg-elevated: #222222;
+  --bg-card: rgba(255, 255, 255, 0.03);
+  
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-muted: #52525b;
+  
+  /* Colores acento estilo T3.Chat - Rosa/Violeta */
+  --accent-primary: #a23b67;
+  --accent-secondary: #8b5cf6;
+  --accent-tertiary: #ec4899;
+  --accent-gradient: linear-gradient(135deg, #a23b67 0%, #8b5cf6 50%, #ec4899 100%);
+  
+  /* Bordes muy sutiles para look limpio */
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  
+  /* Sombras más sutiles */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 40px rgba(162, 59, 103, 0.15);
+  
+  --code-bg: #0d0d0d;
+  --code-text: #e5e7eb;
+  --code-border: rgba(255, 255, 255, 0.05);
+  --inline-code-bg: rgba(255, 255, 255, 0.06);
+  --inline-code-border: rgba(255, 255, 255, 0.06);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* Selection */
+::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: white;
+}
+
+/* Markdown baseline */
+.markdown-body p {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.markdown-body .inline-code {
+  background: var(--inline-code-bg);
+  color: var(--code-text);
+  padding: .15rem .4rem;
+  border-radius: .4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: .9em;
+  border: 1px solid var(--inline-code-border);
+}
+
+/* Code blocks */
+.code-pre {
+  position: relative;
+  margin: 1rem 0;
+  padding-top: 2rem;
+  border-radius: 0.875rem;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  overflow: auto;
+}
+
+.code-pre .code-lang {
+  position: absolute;
+  top: .5rem;
+  right: .75rem;
+  color: var(--text-tertiary);
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  user-select: none;
+  font-weight: 500;
+}
+
+.code-pre .code-block {
+  display: block;
+  padding: 1rem 1.25rem 1.25rem;
+  color: var(--code-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: .875rem;
+  line-height: 1.6;
+  tab-size: 2;
+  white-space: pre;
+}
+
+/* Utility classes */
+.overscroll-contain {
+  overscroll-behavior: contain;
+}
+
+.scrollbar-gutter-stable {
+  scrollbar-gutter: stable both-edges;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass effect */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Glow effects */
+.glow-blue {
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.2);
+}
+
+.glow-purple {
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.2);
+}
+
+/* Animated gradient background */
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animated-gradient {
+  background: linear-gradient(-45deg, var(--bg-primary), var(--bg-secondary), var(--bg-tertiary), var(--bg-primary));
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+/* Subtle grid pattern */
+.grid-pattern {
+  background-image: 
+    linear-gradient(var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Fade masks */
+.fade-bottom {
+  mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+}
+
+/* Input focus ring */
+input:focus, textarea:focus {
+  outline: none;
+  ring: 2px;
+  ring-color: rgba(59, 130, 246, 0.5);
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Step counters for ordered lists */
+.counter-reset-step {
+  counter-reset: step;
+}
+
+.step-item {
+  counter-increment: step;
+}
+
+.step-number::before {
+  content: counter(step);
+}
+
+/* Enhanced list styles */
+.markdown-body ol {
+  list-style: none;
+  padding-left: 0;
+  counter-reset: step;
+}
+
+.markdown-body ol li {
+  counter-increment: step;
+}
+
+.markdown-body ol li::before {
+  content: counter(step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-right: 0.75rem;
+  background: var(--accent-primary);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Nested list items styling */
+.markdown-body li li {
+  margin-top: 0.25rem;
+}
+
+.markdown-body ul ul,
+.markdown-body ol ol,
+.markdown-body ul ol,
+.markdown-body ol ul {
+  margin-top: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+/* Button hover lift */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Message animations */
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-enter {
+  animation: message-in 0.3s ease-out forwards;
+}
+
+/* Typing indicator */
+@keyframes typing {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.typing-dot {
+  animation: typing 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover {
+  transform: rotate(15deg);
+}

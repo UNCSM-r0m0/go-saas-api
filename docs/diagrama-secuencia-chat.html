@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>go-saas-api — Diagrama de Secuencia: Chat Streaming</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #34d399; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1200px; display: block; }
+    .explanation {
+      margin-top: 2rem;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+    }
+    .explanation h2 {
+      font-size: 1rem;
+      color: #34d399;
+      margin-bottom: 1rem;
+    }
+    .explanation p {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      margin-bottom: 0.75rem;
+    }
+    .step {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+      align-items: flex-start;
+    }
+    .step-num {
+      background: #34d399;
+      color: #020617;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-text {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+    .step-text strong {
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Diagrama de Secuencia: Chat con Streaming SSE</h1>
+      </div>
+      <p class="subtitle">Flujo completo desde el mensaje del usuario hasta la respuesta streaming</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1300 900">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- LIFELINES (vertical lines) -->
+        <!-- Usuario -->
+        <rect x="50" y="30" width="100" height="40" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="100" y="55" fill="white" font-size="11" font-weight="600" text-anchor="middle">Usuario</text>
+        <line x1="100" y1="70" x2="100" y2="850" stroke="#1e293b" stroke-width="1" stroke-dasharray="5,5"/>
+
+        <!-- Frontend -->
+        <rect x="200" y="30" width="120" height="40" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="260" y="55" fill="white" font-size="11" font-weight="600" text-anchor="middle">Frontend</text>
+        <line x1="260" y1="70" x2="260" y2="850" stroke="#1e293b" stroke-width="1" stroke-dasharray="5,5"/>
+
+        <!-- API Gateway -->
+        <rect x="380" y="30" width="140" height="40" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="450" y="55" fill="white" font-size="11" font-weight="600" text-anchor="middle">API Gateway</text>
+        <line x1="450" y1="70" x2="450" y2="850" stroke="#1e293b" stroke-width="1" stroke-dasharray="5,5"/>
+
+        <!-- Chat Service -->
+        <rect x="580" y="30" width="140" height="40" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="650" y="55" fill="white" font-size="11" font-weight="600" text-anchor="middle">Chat Service</text>
+        <line x1="650" y1="70" x2="650" y2="850" stroke="#1e293b" stroke-width="1" stroke-dasharray="5,5"/>
+
+        <!-- Usage Service -->
+        <rect x="780" y="30" width="140" height="40" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="850" y="55" fill="white" font-size="11" font-weight="600" text-anchor="middle">Usage Service</text>
+        <line x1="850" y1="70" x2="850" y2="850" stroke="#1e293b" stroke-width="1" stroke-dasharray="5,5"/>
+
+        <!-- PostgreSQL -->
+        <rect x="980" y="30" width="120" height="40" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1040" y="55" fill="white" font-size="11" font-weight="600" text-anchor="middle">PostgreSQL</text>
+        <line x1="1040" y1="70" x2="1040" y2="850" stroke="#1e293b" stroke-width="1" stroke-dasharray="5,5"/>
+
+        <!-- Redis -->
+        <rect x="1150" y="30" width="100" height="40" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1200" y="55" fill="white" font-size="11" font-weight="600" text-anchor="middle">Redis</text>
+        <line x1="1200" y1="70" x2="1200" y2="850" stroke="#1e293b" stroke-width="1" stroke-dasharray="5,5"/>
+
+        <!-- MESSAGES -->
+        <!-- 1. Usuario escribe -->
+        <line x1="100" y1="100" x2="260" y2="100" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="140" y="85" width="90" height="20" rx="4" fill="#020617" stroke="#22d3ee" stroke-width="0.5"/>
+        <text x="185" y="99" fill="white" font-size="8" text-anchor="middle">"Hola IA"</text>
+
+        <!-- 2. Frontend envía POST -->
+        <line x1="260" y1="130" x2="450" y2="130" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="310" y="115" width="100" height="20" rx="4" fill="#020617" stroke="#22d3ee" stroke-width="0.5"/>
+        <text x="360" y="129" fill="white" font-size="8" text-anchor="middle">POST /chat/stream</text>
+
+        <!-- 3. Gateway valida JWT -->
+        <rect x="400" y="145" width="110" height="20" rx="4" fill="#020617" stroke="#fb7185" stroke-width="0.5"/>
+        <text x="455" y="159" fill="#fb7185" font-size="8" text-anchor="middle">Validar JWT ✅</text>
+
+        <!-- 4. Gateway rate limit -->
+        <line x1="450" y1="180" x2="1200" y2="180" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="750" y="165" width="130" height="20" rx="4" fill="#020617" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="815" y="179" fill="white" font-size="8" text-anchor="middle">GET rate_limit:{user}</text>
+
+        <!-- 5. Redis responde OK -->
+        <line x1="1200" y1="200" x2="450" y2="200" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="750" y="185" width="80" height="20" rx="4" fill="#020617" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="790" y="199" fill="#34d399" font-size="8" text-anchor="middle">OK (tiene msgs)</text>
+
+        <!-- 6. Gateway proxy a Chat Service -->
+        <line x1="450" y1="230" x2="650" y2="230" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="510" y="215" width="90" height="20" rx="4" fill="#020617" stroke="#34d399" stroke-width="0.5"/>
+        <text x="555" y="229" fill="white" font-size="8" text-anchor="middle">Proxy request</text>
+
+        <!-- 7. Chat Service verifica límite -->
+        <line x1="650" y1="260" x2="850" y2="260" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="700" y="245" width="110" height="20" rx="4" fill="#020617" stroke="#34d399" stroke-width="0.5"/>
+        <text x="755" y="259" fill="white" font-size="8" text-anchor="middle">Verificar límite</text>
+
+        <!-- 8. Usage Service consulta Redis -->
+        <line x1="850" y1="280" x2="1200" y2="280" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="950" y="265" width="130" height="20" rx="4" fill="#020617" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="1015" y="279" fill="white" font-size="8" text-anchor="middle">ZCARD rate_limit:{user}</text>
+
+        <!-- 9. Redis responde -->
+        <line x1="1200" y1="300" x2="850" y2="300" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="950" y="285" width="80" height="20" rx="4" fill="#020617" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="990" y="299" fill="#34d399" font-size="8" text-anchor="middle">count: 2/50</text>
+
+        <!-- 10. Usage Service responde OK -->
+        <line x1="850" y1="320" x2="650" y2="320" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="700" y="305" width="80" height="20" rx="4" fill="#020617" stroke="#34d399" stroke-width="0.5"/>
+        <text x="740" y="319" fill="#34d399" font-size="8" text-anchor="middle">Allowed ✅</text>
+
+        <!-- 11. Chat Service guarda mensaje usuario -->
+        <line x1="650" y1="350" x2="1040" y2="350" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="780" y="335" width="140" height="20" rx="4" fill="#020617" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="850" y="349" fill="white" font-size="8" text-anchor="middle">INSERT INTO messages</text>
+
+        <!-- 12. PostgreSQL confirma -->
+        <line x1="1040" y1="370" x2="650" y2="370" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="780" y="355" width="60" height="20" rx="4" fill="#020617" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="810" y="369" fill="#34d399" font-size="8" text-anchor="middle">OK</text>
+
+        <!-- 13. Chat Service obtiene provider -->
+        <rect x="600" y="390" width="110" height="20" rx="4" fill="#020617" stroke="#fbbf24" stroke-width="0.5"/>
+        <text x="655" y="404" fill="#fbbf24" font-size="8" text-anchor="middle">Obtener provider de BD</text>
+
+        <!-- 14. Chat Service envía a Ollama -->
+        <line x1="650" y1="430" x2="260" y2="430" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="400" y="415" width="120" height="20" rx="4" fill="#020617" stroke="#94a3b8" stroke-width="0.5"/>
+        <text x="460" y="429" fill="white" font-size="8" text-anchor="middle">POST /api/generate</text>
+
+        <!-- 15. STREAMING LOOP -->
+        <rect x="300" y="460" width="700" height="120" rx="8" fill="rgba(6, 78, 59, 0.1)" stroke="#34d399" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="320" y="480" fill="#34d399" font-size="10" font-weight="600">🔁 LOOP: Streaming de chunks</text>
+
+        <!-- Chunk 1 -->
+        <line x1="260" y1="500" x2="650" y2="500" stroke="#94a3b8" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="400" y="485" width="120" height="20" rx="4" fill="#020617" stroke="#94a3b8" stroke-width="0.5"/>
+        <text x="460" y="499" fill="white" font-size="8" text-anchor="middle">chunk: "¡Hola"</text>
+
+        <line x1="650" y1="500" x2="450" y2="500" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <line x1="450" y1="500" x2="260" y2="500" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <line x1="260" y1="500" x2="100" y2="500" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+        <!-- Chunk 2 -->
+        <line x1="260" y1="520" x2="650" y2="520" stroke="#94a3b8" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="400" y="505" width="120" height="20" rx="4" fill="#020617" stroke="#94a3b8" stroke-width="0.5"/>
+        <text x="460" y="519" fill="white" font-size="8" text-anchor="middle">chunk: "! ¿Cómo"</text>
+
+        <line x1="650" y1="520" x2="450" y2="520" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <line x1="450" y1="520" x2="260" y2="520" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <line x1="260" y1="520" x2="100" y2="520" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+        <!-- Chunk N -->
+        <line x1="260" y1="540" x2="650" y2="540" stroke="#94a3b8" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="400" y="525" width="120" height="20" rx="4" fill="#020617" stroke="#94a3b8" stroke-width="0.5"/>
+        <text x="460" y="539" fill="white" font-size="8" text-anchor="middle">chunk: "estás?"</text>
+
+        <line x1="650" y1="540" x2="450" y2="540" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <line x1="450" y1="540" x2="260" y2="540" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <line x1="260" y1="540" x2="100" y2="540" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+        <!-- 16. Ollama [done] -->
+        <line x1="260" y1="570" x2="650" y2="570" stroke="#94a3b8" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="400" y="555" width="120" height="20" rx="4" fill="#020617" stroke="#94a3b8" stroke-width="0.5"/>
+        <text x="460" y="569" fill="#34d399" font-size="8" text-anchor="middle">[done]</text>
+
+        <!-- 17. Chat Service guarda respuesta -->
+        <line x1="650" y1="600" x2="1040" y2="600" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="780" y="585" width="140" height="20" rx="4" fill="#020617" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="850" y="599" fill="white" font-size="8" text-anchor="middle">INSERT respuesta completa</text>
+
+        <!-- 18. Chat Service incrementa uso -->
+        <line x1="650" y1="630" x2="850" y2="630" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="700" y="615" width="110" height="20" rx="4" fill="#020617" stroke="#34d399" stroke-width="0.5"/>
+        <text x="755" y="629" fill="white" font-size="8" text-anchor="middle">Track usage</text>
+
+        <!-- 19. Usage Service incrementa Redis -->
+        <line x1="850" y1="650" x2="1200" y2="650" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="950" y="635" width="130" height="20" rx="4" fill="#020617" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="1015" y="649" fill="white" font-size="8" text-anchor="middle">INCR usage:daily:{user}</text>
+
+        <!-- 20. Cierre SSE -->
+        <line x1="650" y1="680" x2="450" y2="680" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="450" y1="680" x2="260" y2="680" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="300" y="665" width="120" height="20" rx="4" fill="#020617" stroke="#22d3ee" stroke-width="0.5"/>
+        <text x="360" y="679" fill="#fb7185" font-size="8" text-anchor="middle">[stream closed]</text>
+
+        <!-- 21. Frontend muestra mensaje -->
+        <line x1="260" y1="710" x2="100" y2="710" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="140" y="695" width="90" height="20" rx="4" fill="#020617" stroke="#22d3ee" stroke-width="0.5"/>
+        <text x="185" y="709" fill="#34d399" font-size="8" text-anchor="middle">Render completo</text>
+
+        <!-- ANNOTATIONS -->
+        <rect x="50" y="750" width="300" height="80" rx="6" fill="rgba(6, 78, 59, 0.1)" stroke="#34d399" stroke-width="1"/>
+        <text x="60" y="770" fill="#34d399" font-size="9" font-weight="600">💡 Optimizaciones Go:</text>
+        <text x="60" y="790" fill="#94a3b8" font-size="8">• Go routine por conexión WebSocket/SSE</text>
+        <text x="60" y="805" fill="#94a3b8" font-size="8">• Channel para pipeline: Provider → Chunk → SSE</text>
+        <text x="60" y="820" fill="#94a3b8" font-size="8">• Context cancellation para abortar generación</text>
+
+        <rect x="400" y="750" width="350" height="80" rx="6" fill="rgba(251, 146, 60, 0.1)" stroke="#fb923c" stroke-width="1"/>
+        <text x="410" y="770" fill="#fb923c" font-size="9" font-weight="600">⚡ Performance:</text>
+        <text x="410" y="790" fill="#94a3b8" font-size="8">• Latencia entre chunks: < 100ms</text>
+        <text x="410" y="805" fill="#94a3b8" font-size="8">• Connection pooling: 100 conexiones idle</text>
+        <text x="410" y="820" fill="#94a3b8" font-size="8">• Redis rate limit: O(1) con Sorted Sets</text>
+
+      </svg>
+    </div>
+
+    <div class="explanation">
+      <h2>📋 Explicación del Flujo</h2>
+      
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Usuario envía mensaje</strong> — El usuario escribe en el frontend (React/Vercel) y presiona enviar.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>Frontend hace POST</strong> — Envía `POST /api/v1/chat/stream` con el mensaje y modelo seleccionado.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text"><strong>API Gateway valida JWT</strong> — Extrae el token del header `Authorization`, valida firma y expiración.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text"><strong>Rate limiting (Redis)</strong> — Consulta `rate_limit:{user_id}` en Redis. Si excedió el límite → 429.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-text"><strong>Proxy a Chat Service</strong> — El gateway reenvía la request al microservicio de chat (puerto 3002).</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-text"><strong>Verificar límite de uso</strong> — Usage Service consulta cuántos mensajes envió hoy (sliding window).</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">7</div>
+        <div class="step-text"><strong>Guardar mensaje usuario</strong> — Persiste el mensaje en PostgreSQL (tabla `messages`).</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">8</div>
+        <div class="step-text"><strong>Obtener provider de BD</strong> — Lee `ai_providers` + `ai_models` para saber qué endpoint llamar.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">9</div>
+        <div class="step-text"><strong>Enviar a Ollama/OpenAI</strong> — HTTP POST con streaming habilitado. Connection pooling reutiliza TCP.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">10</div>
+        <div class="step-text"><strong>Streaming loop (Go routine)</strong> — Por cada chunk recibido: parsea → envía al channel → SSE al frontend → render.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">11</div>
+        <div class="step-text"><strong>Guardar respuesta completa</strong> — Una vez terminado, persiste la respuesta en PostgreSQL.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">12</div>
+        <div class="step-text"><strong>Incrementar contador</strong> — Usage Service actualiza el contador diario en Redis.</div>
+      </div>
+      
+      <div class="step">
+        <div class="step-num">13</div>
+        <div class="step-text"><strong>Cerrar conexión SSE</strong> — Envía `[done]` al frontend, cierra el stream gracefully.</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

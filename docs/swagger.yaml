@@ -1,0 +1,2377 @@
+definitions:
+  apikey.APIKey:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      last_used_at:
+        type: string
+      name:
+        type: string
+      revoked_at:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+      user_id:
+        type: string
+    type: object
+  auth.ForgotPasswordRequest:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  auth.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  auth.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  auth.RegisterRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - name
+    - password
+    type: object
+  auth.ResetPasswordRequest:
+    properties:
+      new_password:
+        minLength: 8
+        type: string
+      token:
+        type: string
+    required:
+    - new_password
+    - token
+    type: object
+  auth.TokenPair:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        description: seconds
+        type: integer
+      refresh_token:
+        type: string
+    type: object
+  auth.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      is_admin:
+        type: boolean
+      messages_used_this_month:
+        type: integer
+      name:
+        type: string
+      oauth_provider:
+        type: string
+      oauth_subject:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  billing.DailyUsage:
+    properties:
+      cost_usd:
+        type: number
+      date:
+        type: string
+      requests:
+        type: integer
+      tokens_input:
+        type: integer
+      tokens_output:
+        type: integer
+      user_id:
+        type: string
+    type: object
+  billing.Plan:
+    properties:
+      amount_cents:
+        type: integer
+      created_at:
+        type: string
+      currency:
+        type: string
+      description:
+        type: string
+      features:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      interval:
+        type: string
+      is_active:
+        type: boolean
+      max_tokens_per_request:
+        type: integer
+      messages_per_month:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      stripe_price_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  billing.Subscription:
+    properties:
+      cancel_at_period_end:
+        type: boolean
+      canceled_at:
+        type: string
+      created_at:
+        type: string
+      current_period_end:
+        type: string
+      current_period_start:
+        type: string
+      id:
+        type: string
+      plan_id:
+        type: string
+      status:
+        type: string
+      stripe_customer_id:
+        type: string
+      stripe_subscription_id:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  fileupload.Upload:
+    properties:
+      content_type:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      metadata:
+        additionalProperties: {}
+        type: object
+      name:
+        type: string
+      original_name:
+        type: string
+      size_bytes:
+        type: integer
+      user_id:
+        type: string
+    type: object
+  main.apiKeyCreateReq:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  main.apiKeyCreateResp:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      key:
+        type: string
+      name:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+    type: object
+  main.apiKeysResp:
+    properties:
+      keys:
+        items:
+          $ref: '#/definitions/apikey.APIKey'
+        type: array
+    type: object
+  main.artifactReq:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      language:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    required:
+    - content
+    - conversation_id
+    - name
+    - type
+    type: object
+  main.cancelResp:
+    properties:
+      status:
+        type: string
+    type: object
+  main.chatReq:
+    properties:
+      conversation_id:
+        type: string
+      file_ids:
+        items:
+          type: string
+        type: array
+      message:
+        type: string
+    required:
+    - message
+    type: object
+  main.conversationsResp:
+    properties:
+      conversations:
+        items:
+          $ref: '#/definitions/model.Conversation'
+        type: array
+    type: object
+  main.filesResp:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/fileupload.Upload'
+        type: array
+    type: object
+  main.forgotPasswordResp:
+    properties:
+      message:
+        type: string
+    type: object
+  main.healthResp:
+    properties:
+      healthy:
+        type: boolean
+      status:
+        type: string
+    type: object
+  main.limitInfo:
+    properties:
+      features:
+        additionalProperties: {}
+        type: object
+      max_tokens_per_request:
+        type: integer
+      messages_per_month:
+        type: integer
+    type: object
+  main.loginResp:
+    properties:
+      token:
+        $ref: '#/definitions/auth.TokenPair'
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  main.logoutResp:
+    properties:
+      message:
+        type: string
+    type: object
+  main.meResp:
+    properties:
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  main.messagesResp:
+    properties:
+      messages:
+        items:
+          $ref: '#/definitions/model.Message'
+        type: array
+    type: object
+  main.modelItem:
+    properties:
+      id:
+        type: string
+      provider:
+        type: string
+    type: object
+  main.modelsListResp:
+    properties:
+      models:
+        items:
+          $ref: '#/definitions/main.modelItem'
+        type: array
+    type: object
+  main.plansResp:
+    properties:
+      plans:
+        items:
+          $ref: '#/definitions/billing.Plan'
+        type: array
+    type: object
+  main.providerModelsResp:
+    properties:
+      models:
+        items:
+          $ref: '#/definitions/provider.AIModel'
+        type: array
+    type: object
+  main.providersResp:
+    properties:
+      providers:
+        items:
+          $ref: '#/definitions/provider.AIProvider'
+        type: array
+    type: object
+  main.refreshResp:
+    properties:
+      token:
+        $ref: '#/definitions/auth.TokenPair'
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  main.registerResp:
+    properties:
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  main.resetPasswordResp:
+    properties:
+      message:
+        type: string
+    type: object
+  main.subscribeReq:
+    properties:
+      email:
+        type: string
+      plan_slug:
+        type: string
+    required:
+    - email
+    - plan_slug
+    type: object
+  main.subscribeResp:
+    properties:
+      checkout_url:
+        type: string
+    type: object
+  main.subscriptionResp:
+    properties:
+      plan:
+        $ref: '#/definitions/billing.Plan'
+      subscription:
+        $ref: '#/definitions/billing.Subscription'
+    type: object
+  main.trackUsageReq:
+    properties:
+      conversation_id:
+        type: string
+      cost_usd:
+        type: number
+      latency_ms:
+        type: integer
+      model:
+        type: string
+      provider:
+        type: string
+      tokens_input:
+        type: integer
+      tokens_output:
+        type: integer
+      user_id:
+        type: string
+    required:
+    - model
+    - provider
+    - user_id
+    type: object
+  main.trackUsageResp:
+    properties:
+      status:
+        type: string
+    type: object
+  main.usageLimitsResp:
+    properties:
+      limits:
+        additionalProperties:
+          $ref: '#/definitions/main.limitInfo'
+        type: object
+    type: object
+  main.usageStatsResp:
+    properties:
+      stats:
+        items:
+          $ref: '#/definitions/billing.DailyUsage'
+        type: array
+    type: object
+  main.webhookResp:
+    properties:
+      status:
+        type: string
+    type: object
+  model.Artifact:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      is_deleted:
+        type: boolean
+      language:
+        type: string
+      message_id:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  model.Conversation:
+    properties:
+      agent_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      messages:
+        items:
+          $ref: '#/definitions/model.Message'
+        type: array
+      metadata:
+        additionalProperties: {}
+        type: object
+      status:
+        $ref: '#/definitions/model.ConversationStatus'
+      title:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  model.ConversationStatus:
+    enum:
+    - active
+    - archived
+    - deleted
+    type: string
+    x-enum-varnames:
+    - ConversationActive
+    - ConversationArchived
+    - ConversationDeleted
+  model.Message:
+    properties:
+      content:
+        type: string
+      conversation_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      latency_ms:
+        type: integer
+      model:
+        type: string
+      role:
+        $ref: '#/definitions/model.MessageRole'
+      tokens_input:
+        type: integer
+      tokens_output:
+        type: integer
+      tool_calls:
+        items:
+          $ref: '#/definitions/model.ToolCall'
+        type: array
+    type: object
+  model.MessageRole:
+    enum:
+    - user
+    - assistant
+    - system
+    - tool
+    type: string
+    x-enum-varnames:
+    - MessageRoleUser
+    - MessageRoleAssistant
+    - MessageRoleSystem
+    - MessageRoleTool
+  model.ToolCall:
+    properties:
+      arguments:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  provider.AIModel:
+    properties:
+      config:
+        additionalProperties: {}
+        type: object
+      context_window:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      display_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_premium:
+        type: boolean
+      is_public:
+        type: boolean
+      max_tokens:
+        type: integer
+      name:
+        type: string
+      provider_id:
+        type: string
+      supports_images:
+        type: boolean
+      supports_streaming:
+        type: boolean
+      updated_at:
+        type: string
+    type: object
+  provider.AIProvider:
+    properties:
+      base_url:
+        type: string
+      config:
+        additionalProperties: {}
+        type: object
+      created_at:
+        type: string
+      encryption_key_version:
+        type: integer
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_public:
+        type: boolean
+      name:
+        type: string
+      priority:
+        type: integer
+      type:
+        $ref: '#/definitions/provider.ProviderType'
+      updated_at:
+        type: string
+    type: object
+  provider.ProviderType:
+    enum:
+    - ollama
+    - openai
+    - gemini
+    - deepseek
+    - kimi
+    - lmstudio
+    - anthropic
+    - opencode
+    - custom
+    type: string
+    x-enum-varnames:
+    - ProviderOllama
+    - ProviderOpenAI
+    - ProviderGemini
+    - ProviderDeepSeek
+    - ProviderKimi
+    - ProviderLMStudio
+    - ProviderAnthropic
+    - ProviderOpenCode
+    - ProviderCustom
+info:
+  contact: {}
+paths:
+  /api/v1/admin/models/{id}:
+    delete:
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a model
+      tags:
+      - admin
+    get:
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/provider.AIModel'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a model
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Model ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Model update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/provider.AIModel'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a model
+      tags:
+      - admin
+  /api/v1/admin/providers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.providersResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List AI providers
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider config
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/provider.AIProvider'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new AI provider
+      tags:
+      - admin
+  /api/v1/admin/providers/{id}:
+    delete:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete an AI provider
+      tags:
+      - admin
+    get:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/provider.AIProvider'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get an AI provider
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Provider update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/provider.AIProvider'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update an AI provider
+      tags:
+      - admin
+  /api/v1/admin/providers/{id}/models:
+    get:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.providerModelsResp'
+      security:
+      - BearerAuth: []
+      summary: List models for a provider
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Model config
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/provider.AIModel'
+      security:
+      - BearerAuth: []
+      summary: Create a model for a provider
+      tags:
+      - admin
+  /api/v1/admin/providers/{id}/sync-models:
+    post:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Sync models from provider
+      tags:
+      - admin
+  /api/v1/admin/providers/{id}/test:
+    post:
+      parameters:
+      - description: Provider ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test provider connectivity
+      tags:
+      - admin
+  /api/v1/agent/chat:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Chat message
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.chatReq'
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Chat with AI agent (SSE streaming)
+      tags:
+      - agent
+  /api/v1/agent/ws:
+    get:
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      responses:
+        "101":
+          description: WebSocket upgrade
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: WebSocket chat upgrade
+      tags:
+      - agent
+  /api/v1/api-keys:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.apiKeysResp'
+      security:
+      - BearerAuth: []
+      summary: List API keys
+      tags:
+      - api-keys
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: API key name
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.apiKeyCreateReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.apiKeyCreateResp'
+      security:
+      - BearerAuth: []
+      summary: Create a new API key
+      tags:
+      - api-keys
+  /api/v1/api-keys/{id}:
+    delete:
+      parameters:
+      - description: API Key ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Revoke an API key
+      tags:
+      - api-keys
+  /api/v1/artifacts:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Artifact data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.artifactReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.Artifact'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new artifact
+      tags:
+      - agent
+  /api/v1/artifacts/{id}/preview:
+    get:
+      parameters:
+      - description: Artifact ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Artifact content
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Preview artifact content
+      tags:
+      - agent
+  /api/v1/auth/callback:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: OAuth code and state
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.loginResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Unified OAuth callback (r3-chat)
+      tags:
+      - auth
+  /api/v1/auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email address
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.forgotPasswordResp'
+      summary: Request password reset email
+      tags:
+      - auth
+  /api/v1/auth/github:
+    get:
+      produces:
+      - application/json
+      responses:
+        "307":
+          description: Redirects to GitHub
+          schema:
+            type: string
+      summary: Initiate GitHub OAuth login
+      tags:
+      - auth
+  /api/v1/auth/github/callback:
+    get:
+      parameters:
+      - description: Authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.loginResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: GitHub OAuth callback
+      tags:
+      - auth
+  /api/v1/auth/google:
+    get:
+      produces:
+      - application/json
+      responses:
+        "307":
+          description: Redirects to Google
+          schema:
+            type: string
+      summary: Initiate Google OAuth login
+      tags:
+      - auth
+  /api/v1/auth/google/callback:
+    get:
+      parameters:
+      - description: Authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.loginResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Google OAuth callback
+      tags:
+      - auth
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.loginResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login with email and password
+      tags:
+      - auth
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.logoutResp'
+      summary: Logout and invalidate refresh token
+      tags:
+      - auth
+  /api/v1/auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.meResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current authenticated user
+      tags:
+      - auth
+  /api/v1/auth/profile:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.meResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user profile (r3-chat alias)
+      tags:
+      - auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.refreshResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Refresh access token
+      tags:
+      - auth
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Registration info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.registerResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
+  /api/v1/auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reset token and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.resetPasswordResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Reset password with token
+      tags:
+      - auth
+  /api/v1/billing/cancel:
+    post:
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.cancelResp'
+      security:
+      - BearerAuth: []
+      summary: Cancel subscription
+      tags:
+      - billing
+  /api/v1/billing/plans:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.plansResp'
+      security:
+      - BearerAuth: []
+      summary: List billing plans
+      tags:
+      - billing
+  /api/v1/billing/subscribe:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Subscription request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.subscribeReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.subscribeResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create Stripe checkout session
+      tags:
+      - billing
+  /api/v1/billing/subscription:
+    get:
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.subscriptionResp'
+      security:
+      - BearerAuth: []
+      summary: Get current subscription
+      tags:
+      - billing
+  /api/v1/billing/webhook:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Stripe signature
+        in: header
+        name: Stripe-Signature
+        required: true
+        type: string
+      - description: Webhook payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.webhookResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stripe webhook
+      tags:
+      - billing
+  /api/v1/chat:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Chat title and model
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new chat (r3-chat)
+      tags:
+      - agent
+  /api/v1/chat/{id}:
+    get:
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get chat with messages (r3-chat)
+      tags:
+      - agent
+  /api/v1/chat/message:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Chat message
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.chatReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Send chat message (sync, r3-chat)
+      tags:
+      - agent
+  /api/v1/chat/message/stream:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Chat message
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.chatReq'
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: SSE stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Send chat message with streaming (r3-chat SSE)
+      tags:
+      - agent
+  /api/v1/chat/models:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.modelsListResp'
+      summary: List available AI models
+      tags:
+      - agent
+  /api/v1/chat/sessions:
+    get:
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List chat sessions (r3-chat alias)
+      tags:
+      - agent
+  /api/v1/chat/sessions/{id}:
+    delete:
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete chat session (r3-chat alias)
+      tags:
+      - agent
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Chat ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update chat session (r3-chat alias)
+      tags:
+      - agent
+  /api/v1/conversations:
+    get:
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.conversationsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List user conversations
+      tags:
+      - agent
+  /api/v1/conversations/{id}:
+    delete:
+      parameters:
+      - description: Conversation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a conversation
+      tags:
+      - agent
+    get:
+      parameters:
+      - description: Conversation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Conversation'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a conversation
+      tags:
+      - agent
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Conversation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Conversation'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update conversation title or status
+      tags:
+      - agent
+  /api/v1/conversations/{id}/messages:
+    get:
+      parameters:
+      - description: Conversation ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - default: 50
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.messagesResp'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List messages in a conversation
+      tags:
+      - agent
+  /api/v1/files:
+    get:
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.filesResp'
+      security:
+      - BearerAuth: []
+      summary: List uploaded files
+      tags:
+      - files
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/fileupload.Upload'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upload a file
+      tags:
+      - files
+  /api/v1/files/{id}:
+    delete:
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a file
+      tags:
+      - files
+    get:
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/fileupload.Upload'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get file metadata
+      tags:
+      - files
+  /api/v1/files/{id}/download:
+    get:
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: File content
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Download a file
+      tags:
+      - files
+  /api/v1/health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.healthResp'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/main.healthResp'
+      summary: Health check
+      tags:
+      - health
+  /api/v1/models/public:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List public models (r3-chat format)
+      tags:
+      - agent
+  /api/v1/stripe/confirm-session:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Session ID
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Confirm Stripe checkout session (r3-chat)
+      tags:
+      - billing
+  /api/v1/stripe/create-checkout-session:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Price ID
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create Stripe checkout session (r3-chat)
+      tags:
+      - billing
+  /api/v1/stripe/create-portal-session:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create Stripe portal session (r3-chat)
+      tags:
+      - billing
+  /api/v1/stripe/subscription:
+    get:
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get Stripe subscription (r3-chat)
+      tags:
+      - billing
+  /api/v1/subscriptions:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      - description: Plan
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create subscription (r3-chat)
+      tags:
+      - billing
+  /api/v1/subscriptions/cancel:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancel subscription (r3-chat)
+      tags:
+      - billing
+  /api/v1/usage/limits:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.usageLimitsResp'
+      summary: Get usage limits by plan
+      tags:
+      - usage
+  /api/v1/usage/stats:
+    get:
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.usageStatsResp'
+      security:
+      - BearerAuth: []
+      summary: Get usage statistics
+      tags:
+      - usage
+  /api/v1/usage/track:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Usage event
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.trackUsageReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.trackUsageResp'
+      security:
+      - BearerAuth: []
+      summary: Track a usage event
+      tags:
+      - usage
+  /api/v1/users/profile:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Profile updates
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.meResp'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - users
+swagger: "2.0"

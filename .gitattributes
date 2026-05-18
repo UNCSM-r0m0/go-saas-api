@@ -1,0 +1,30 @@
+# Auto-detect text files
+* text=auto
+
+# Go source files must use LF
+*.go text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+*.work text eol=lf
+*.work.sum text eol=lf
+
+# Config & data files
+*.sql text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.proto text eol=lf
+.env* text eol=lf
+
+# Scripts & build files
+*.sh text eol=lf
+Makefile text eol=lf
+makefile text eol=lf
+Dockerfile text eol=lf
+
+# Windows-specific files can keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
