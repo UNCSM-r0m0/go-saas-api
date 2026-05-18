@@ -1,7 +1,9 @@
 package runtime
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
 	"github.com/r0lm0/go-saas-api/internal/agent/tools"
@@ -43,6 +45,7 @@ TOOL DISCIPLINE:
 - Tasks needing current info → web_search
 - Pure explanation or conversation → no tool needed
 - After using a tool, always tell the user what you did and what they can do next.
+- NEVER use web_search for questions about current date, day, or time. Use the TEMPORAL CONTEXT provided in USER CONTEXT.
 `)
 
 	return b.String()
@@ -86,6 +89,30 @@ func BuildMessages(agent *model.Agent, history []model.Message, userMessage stri
 
 	messages = append(messages, llm.Message{Role: "user", Content: userMessage})
 	return messages
+}
+
+// BuildTemporalContext returns a formatted temporal context string for the given timezone.
+// If the timezone is empty or invalid, it falls back to UTC.
+func BuildTemporalContext(timezone string) string {
+	if timezone == "" {
+		timezone = "UTC"
+	}
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	now := time.Now().In(loc)
+	return fmt.Sprintf(
+		"TEMPORAL CONTEXT:\n"+
+			"Current date: %s\n"+
+			"Current day: %s\n"+
+			"Current time: %s\n"+
+			"Timezone: %s\n",
+		now.Format("2006-01-02"),
+		now.Weekday().String(),
+		now.Format("15:04:05"),
+		timezone,
+	)
 }
 
 func BuildToolDefinitions(toolList []tools.Tool) []llm.ToolDefinition {

@@ -379,6 +379,7 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 		ConversationID *uuid.UUID  `json:"conversationId"`
 		FileIDs        []uuid.UUID `json:"fileIds"`
 		Mode           string      `json:"mode"`
+		Timezone       string      `json:"timezone"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
@@ -394,6 +395,14 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 		contextItems, _ = h.userCtxRepo.GetByUser(ctx, userID)
 	}
 	userContext := buildUserContext(prefs, contextItems)
+
+	// Inyectar contexto temporal determinista
+	temporalCtx := runtime.BuildTemporalContext(req.Timezone)
+	if userContext != "" {
+		userContext = temporalCtx + "\n" + userContext
+	} else {
+		userContext = temporalCtx
+	}
 
 	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
 	if err != nil {

@@ -53,6 +53,7 @@ type ChatBackendRequest = {
     anonymousId?: string;
     fileIds?: string[];
     mode?: string;
+    timezone?: string;
 };
 
 type SseEventPayload = {
@@ -263,6 +264,7 @@ class ApiService {
             context: chatRequest.context,
             fileIds: chatRequest.fileIds,
             mode: chatRequest.mode,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         };
 
         // conversationId si es un UUID válido (el backend determinará si el usuario está autenticado)
@@ -292,6 +294,7 @@ class ApiService {
             context: chatRequest.context,
             fileIds: chatRequest.fileIds,
             mode: chatRequest.mode,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         };
 
         if (chatRequest.chatId) {
