@@ -65,6 +65,11 @@ if (Test-Path $envFile) {
     Write-Host "WARN: .env no encontrado en $envFile" -ForegroundColor Red
 }
 
+# Override message limits for local development
+[Environment]::SetEnvironmentVariable("REGISTERED_USER_MESSAGE_LIMIT", "1000", "Process")
+[Environment]::SetEnvironmentVariable("PREMIUM_USER_MESSAGE_LIMIT", "5000", "Process")
+Write-Host "Límites locales: REGISTERED=1000, PREMIUM=5000" -ForegroundColor Cyan
+
 # ===================================================================
 # CREAR CARPETAS
 # ===================================================================

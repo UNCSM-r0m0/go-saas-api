@@ -42,6 +42,13 @@ const shouldProcessWsEvent = (currentChat: Chat | null, payloadChatId?: string):
 };
 
 const userFacingBusinessMessage = (error: StreamSocketError): string => {
+    // Handle HTTP 429 rate limit errors propagated via message string
+    if (error.message?.startsWith('RATE_LIMIT:')) {
+        const parts = error.message.split(':');
+        const limit = parts[1] || '?';
+        const retryAfter = parts[3] || '?';
+        return `Límite de mensajes alcanzado (${limit} mensajes/mes). Intenta de nuevo en ${retryAfter}s.`;
+    }
     switch (error.code) {
         case 'LIMIT_EXCEEDED':
             return error.message || 'Has alcanzado tu límite de mensajes por día.';
@@ -614,7 +621,15 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
             let errorMessage = 'Error al enviar mensaje';
             let isLimitReached = false;
 
-            if (apiError.response?.data) {
+            // Handle HTTP 429 rate limit from api.ts
+            const rawMessage = apiError.message || (error instanceof Error ? error.message : '');
+            if (typeof rawMessage === 'string' && rawMessage.startsWith('RATE_LIMIT:')) {
+                const parts = rawMessage.split(':');
+                const limit = parts[1] || '?';
+                const retryAfter = parts[3] || '?';
+                errorMessage = `Límite de mensajes alcanzado (${limit} mensajes/mes). Intenta de nuevo en ${retryAfter}s.`;
+                isLimitReached = true;
+            } else if (apiError.response?.data) {
                 const { message, errorCode } = apiError.response.data;
 
                 // Manejar errores específicos del backend

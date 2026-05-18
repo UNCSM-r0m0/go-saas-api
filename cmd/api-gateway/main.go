@@ -237,10 +237,8 @@ func main() {
 			protected.Any("/users/preferences", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 			protected.Any("/users/preferences/*path", proxyTo(cfg.AuthServiceURL, "/api/v1"))
 
-			// Usage routes (JWT or API key + rate limit)
-			protected.GET("/usage/stats",
-				middleware.RateLimit(rateLimiter, cfg, log, tierResolver),
-				proxyTo(cfg.UsageServiceURL, "/api/v1"))
+			// Usage routes (JWT or API key)
+			protected.GET("/usage/stats", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 			protected.GET("/usage/limits", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 			protected.POST("/usage/track", proxyTo(cfg.UsageServiceURL, "/api/v1"))
 		}

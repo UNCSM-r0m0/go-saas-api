@@ -17,10 +17,12 @@ interface UsageStats {
 export const useUsageStats = () => {
     const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const loadUsageStats = async () => {
         try {
             setIsLoading(true);
+            setError(null);
             const response = await fetch(`${API_BASE_URL}/usage/stats`, {
                 credentials: 'include', // Incluir cookies HTTP-only
             });
@@ -41,13 +43,33 @@ export const useUsageStats = () => {
                         canUploadImages: Boolean(rawStats.limits?.canUploadImages ?? false),
                     },
                 });
+            } else if (response.status === 429) {
+                let errorData: { error?: string; limit?: number; reset_at?: number; retry_after?: string } = {};
+                try {
+                    errorData = await response.json();
+                } catch { /* ignore parse error */ }
+                setUsageStats({
+                    todayMessages: 0,
+                    todayTokens: 0,
+                    totalMessages: 0,
+                    totalTokens: 0,
+                    tier: 'registered',
+                    limits: {
+                        messagesPerDay: Number(errorData.limit ?? 10),
+                        maxTokensPerMessage: 4096,
+                        canUploadImages: false,
+                    },
+                });
+                setError(`Límite de mensajes alcanzado (${errorData.limit ?? '?'} mensajes/mes). Intenta de nuevo en ${errorData.retry_after ?? '?'}s.`);
             } else {
                 console.warn('Error cargando estadísticas de uso:', response.status);
                 setUsageStats(null);
+                setError('Error cargando estadísticas de uso');
             }
-        } catch (error) {
-            console.warn('Error cargando estadísticas de uso:', error);
+        } catch (err) {
+            console.warn('Error cargando estadísticas de uso:', err);
             setUsageStats(null);
+            setError('Error cargando estadísticas de uso');
         } finally {
             setIsLoading(false);
         }
@@ -60,6 +82,7 @@ export const useUsageStats = () => {
     return {
         usageStats,
         isLoading,
+        error,
         loadUsageStats
     };
 };

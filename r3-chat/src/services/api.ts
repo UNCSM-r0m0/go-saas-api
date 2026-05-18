@@ -283,8 +283,16 @@ class ApiService {
         }
 
         // Usar endpoint público - el backend maneja la autenticación automáticamente
-        const response = await this.api.post('/chat/message', backendRequest);
-        return response.data;
+        try {
+            const response = await this.api.post('/chat/message', backendRequest);
+            return response.data;
+        } catch (error: any) {
+            if (error.response?.status === 429) {
+                const data = error.response?.data || {};
+                throw new Error(`RATE_LIMIT:${data.limit ?? 0}:${data.reset_at ?? 0}:${data.retry_after ?? ''}`);
+            }
+            throw error;
+        }
     }
 
     async streamMessage(chatRequest: ChatRequest, handlers: StreamHandlers): Promise<void> {
@@ -319,6 +327,14 @@ class ApiService {
             credentials: 'include',
             body: JSON.stringify(backendRequest),
         });
+
+        if (response.status === 429) {
+            let errorData: { error?: string; limit?: number; reset_at?: number; retry_after?: string } = {};
+            try {
+                errorData = await response.json();
+            } catch { /* ignore parse error */ }
+            throw new Error(`RATE_LIMIT:${errorData.limit ?? 0}:${errorData.reset_at ?? 0}:${errorData.retry_after ?? ''}`);
+        }
 
         if (!response.ok || !response.body) {
             throw new Error(`SSE stream failed with status ${response.status}`);
