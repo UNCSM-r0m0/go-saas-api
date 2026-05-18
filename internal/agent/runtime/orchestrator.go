@@ -82,7 +82,7 @@ func (o *Orchestrator) ExtractMemory(ctx context.Context, userID uuid.UUID, conv
 	go o.extractor.ExtractAndSave(ctx, userID, history)
 }
 
-func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string, mode string) (uuid.UUID, <-chan llm.Chunk, error) {
+func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.UUID, content string, fileIDs []uuid.UUID, selectedModel string, userContext string, mode string, timezone string) (uuid.UUID, <-chan llm.Chunk, error) {
 	var conversationID uuid.UUID
 	if convID != nil {
 		conv, err := o.sessions.GetConversation(ctx, *convID)
@@ -138,6 +138,11 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 
 	if convID == nil {
 		go o.generateAndSaveTitle(ctx, userID, conversationID, content)
+	}
+
+	// Short-circuit direct temporal queries without calling the LLM
+	if intent := DetectTemporalQuery(content); intent != TemporalNone {
+		return o.respondTemporal(ctx, conversationID, intent, timezone)
 	}
 
 	history, err := o.sessions.GetHistory(ctx, conversationID, 50)
@@ -242,6 +247,26 @@ func (o *Orchestrator) Chat(ctx context.Context, userID uuid.UUID, convID *uuid.
 		o.agentLoop(ctx, outCh, agent, messages, toolDefs, toolInstances, conversationID, userID, userContent, activeFlow, convMetadata)
 	}()
 
+	return conversationID, outCh, nil
+}
+
+func (o *Orchestrator) respondTemporal(ctx context.Context, conversationID uuid.UUID, intent TemporalIntent, timezone string) (uuid.UUID, <-chan llm.Chunk, error) {
+	response := FormatTemporalResponse(intent, timezone)
+	assistantMsg := &model.Message{
+		ID:             uuid.New(),
+		ConversationID: conversationID,
+		Role:           model.MessageRoleAssistant,
+		Content:        response,
+		CreatedAt:      time.Now(),
+	}
+	if err := o.sessions.AddMessage(ctx, assistantMsg); err != nil {
+		o.log.Error("temporal short-circuit: failed to save assistant message", logger.Error(err))
+	}
+
+	outCh := make(chan llm.Chunk, 2)
+	outCh <- llm.Chunk{Content: response}
+	outCh <- llm.Chunk{Done: true}
+	close(outCh)
 	return conversationID, outCh, nil
 }
 

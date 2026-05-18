@@ -404,7 +404,7 @@ func (h *Handler) handleChatMessage(c *gin.Context) {
 		userContext = temporalCtx
 	}
 
-	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
+	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode, req.Timezone)
 	if err != nil {
 		h.log.Error("chat failed", logger.Error(err))
 		response.Error(c, http.StatusInternalServerError, "chat failed")

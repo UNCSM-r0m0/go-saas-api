@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/r0lm0/go-saas-api/internal/agent/model"
+	"github.com/r0lm0/go-saas-api/internal/agent/runtime"
 	"github.com/r0lm0/go-saas-api/internal/platform/logger"
 	"github.com/r0lm0/go-saas-api/pkg/llm"
 )
@@ -49,7 +50,7 @@ func (h *Handler) handleChatMessageStream(c *gin.Context) {
 		userContext = temporalCtx
 	}
 
-	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode)
+	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Content, req.FileIDs, req.Model, userContext, req.Mode, req.Timezone)
 	if err != nil {
 		h.log.Error("chat stream failed", logger.Error(err))
 		writeSSEError(c, http.StatusOK, "STREAM_ERROR", err.Error())
@@ -78,6 +79,7 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 		Model          string      `json:"model"`
 		FileIDs        []uuid.UUID `json:"file_ids"`
 		Mode           string      `json:"mode"`
+		Timezone       string      `json:"timezone"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeSSEError(c, http.StatusBadRequest, "STREAM_ERROR", err.Error())
@@ -94,7 +96,15 @@ func (h *Handler) handleAgentChat(c *gin.Context) {
 	}
 	userContext := buildUserContext(prefs, contextItems)
 
-	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model, userContext, req.Mode)
+	// Inyectar contexto temporal determinista
+	temporalCtx := runtime.BuildTemporalContext(req.Timezone)
+	if userContext != "" {
+		userContext = temporalCtx + "\n" + userContext
+	} else {
+		userContext = temporalCtx
+	}
+
+	convID, streamCh, err := h.orch.Chat(ctx, userID, req.ConversationID, req.Message, req.FileIDs, req.Model, userContext, req.Mode, req.Timezone)
 	if err != nil {
 		h.log.Error("chat failed", logger.Error(err))
 		writeSSEError(c, http.StatusInternalServerError, "STREAM_ERROR", "chat failed")

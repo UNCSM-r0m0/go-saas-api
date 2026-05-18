@@ -134,7 +134,7 @@ func TestOrchestrator_Chat(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 
-	_, ch, err := orch.Chat(ctx, userID, nil, "hi there", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, nil, "hi there", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestOrchestrator_NativeToolCall(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	_, ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestOrchestrator_ChatWithTool_MultipleChunks(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	_, ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, uuid.New(), nil, "ping", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestChat_UsesProviderUsage(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 
-	_, ch, err := orch.Chat(ctx, userID, nil, "hi", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, nil, "hi", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestChat_FallsBackToEstimationWhenProviderUsageMissing(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 
-	_, ch, err := orch.Chat(ctx, userID, nil, "hi", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, nil, "hi", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -430,7 +430,7 @@ func TestChat_MultiToolLoop_AccumulatesUsage(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 
-	_, ch, err := orch.Chat(ctx, userID, nil, "ping", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, nil, "ping", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -475,7 +475,7 @@ func TestChat_ConversationOwnership_WrongUser(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	_, _, err := orch.Chat(ctx, userB, &convID, "hi", nil, "", "", "")
+	_, _, err := orch.Chat(ctx, userB, &convID, "hi", nil, "", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for conversation ownership violation")
 	}
@@ -507,7 +507,7 @@ func TestChat_ConversationOwnership_CorrectUser(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	gotConvID, ch, err := orch.Chat(ctx, userA, &convID, "hi", nil, "", "", "")
+	gotConvID, ch, err := orch.Chat(ctx, userA, &convID, "hi", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestChat_FlowContinuity_FromMetadata(t *testing.T) {
 	ctx := context.Background()
 
 	// Message that would NOT trigger api_integration detection on its own
-	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -622,7 +622,7 @@ func TestChat_FlowState_SplitAcrossChunks(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -690,7 +690,7 @@ func TestChat_EnforceSingleQuestion_Applied(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -758,7 +758,7 @@ func TestChat_FileWrite_SetsGeneratedStatus(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	_, ch, err := orch.Chat(ctx, userID, &convID, "generate scope", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, &convID, "generate scope", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -821,7 +821,7 @@ func TestChat_EnforceSingleQuestion_StreamAndStore(t *testing.T) {
 	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
 	ctx := context.Background()
 
-	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "")
+	_, ch, err := orch.Chat(ctx, userID, &convID, "ok", nil, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -847,5 +847,128 @@ func TestChat_EnforceSingleQuestion_StreamAndStore(t *testing.T) {
 	}
 	if strings.Count(assistantMsg.Content, "?") > 1 {
 		t.Errorf("stored content has %d questions, expected at most 1: %q", strings.Count(assistantMsg.Content, "?"), assistantMsg.Content)
+	}
+}
+
+
+// ---- Temporal Short-Circuit Tests ----
+
+func TestOrchestrator_Chat_TemporalShortCircuit(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "should not be used"},
+			{Done: true},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+	userID := uuid.New()
+
+	convID, ch, err := orch.Chat(ctx, userID, nil, "qué día es hoy", nil, "", "", "", "America/Guatemala")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if convID == uuid.Nil {
+		t.Fatal("expected valid conversation ID")
+	}
+
+	var streamed string
+	for chunk := range ch {
+		streamed += chunk.Content
+	}
+
+	if !strings.Contains(streamed, "Hoy es") {
+		t.Errorf("expected temporal response to contain 'Hoy es', got: %q", streamed)
+	}
+
+	// LLM must NOT have been called
+	if llmMock.calls != 0 {
+		t.Errorf("expected LLM mock to not be called, got %d calls", llmMock.calls)
+	}
+
+	// Assistant message must have been persisted
+	var foundAssistant bool
+	for _, m := range msgRepo.msgs {
+		if m.Role == model.MessageRoleAssistant && strings.Contains(m.Content, "Hoy es") {
+			foundAssistant = true
+			break
+		}
+	}
+	if !foundAssistant {
+		t.Error("expected assistant temporal message to be persisted")
+	}
+}
+
+func TestOrchestrator_Chat_TemporalInvalidTimezone(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	llmMock := &mockLLM{chunks: []llm.Chunk{{Content: "unused"}, {Done: true}}}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+	userID := uuid.New()
+
+	_, ch, err := orch.Chat(ctx, userID, nil, "qué fecha es hoy", nil, "", "", "", "invalid-zone")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var streamed string
+	for chunk := range ch {
+		streamed += chunk.Content
+	}
+
+	if !strings.Contains(streamed, "Hoy es") {
+		t.Errorf("expected fallback response, got: %q", streamed)
+	}
+	if llmMock.calls != 0 {
+		t.Errorf("expected LLM mock to not be called, got %d calls", llmMock.calls)
+	}
+}
+
+func TestOrchestrator_Chat_NonTemporalStillUsesLLM(t *testing.T) {
+	convRepo := &memConversationRepo{convs: make(map[uuid.UUID]*model.Conversation)}
+	msgRepo := &memMessageRepo{}
+	sessions := NewSessionManager(convRepo, msgRepo)
+	registry := tools.NewRegistry()
+	agentRepo := &memAgentRepo{}
+
+	llmMock := &mockLLM{
+		chunks: []llm.Chunk{
+			{Content: "Hello!"},
+			{Done: true},
+		},
+	}
+
+	orch := NewOrchestrator(llmMock, registry, sessions, agentRepo, nil, nil, nil, nil, nil, nil, nil, logger.Logger{Logger: zap.NewNop()})
+	ctx := context.Background()
+	userID := uuid.New()
+
+	_, ch, err := orch.Chat(ctx, userID, nil, "hola, cómo estás", nil, "", "", "", "America/Guatemala")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var streamed string
+	for chunk := range ch {
+		streamed += chunk.Content
+	}
+
+	if streamed != "Hello!" {
+		t.Errorf("expected LLM response, got: %q", streamed)
+	}
+	if llmMock.calls == 0 {
+		t.Error("expected LLM mock to be called for non-temporal query")
 	}
 }
