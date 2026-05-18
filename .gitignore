@@ -53,5 +53,11 @@ temp/
 
 go.work.sum
 
-r3-chat/*
-r3-chat
+# r3-chat frontend dependencies and build artifacts
+r3-chat/node_modules
+r3-chat/dist
+r3-chat/dist-ssr
+r3-chat/.vercel
+r3-chat/.env
+r3-chat/.env.local
+r3-chat/.env.*.local
