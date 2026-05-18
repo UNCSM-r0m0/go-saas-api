@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -36,7 +38,54 @@ func NewOpenAICompatibleClient(baseURL, apiKey string) *OpenAICompatibleClient {
 }
 
 // Stream sends a request and returns a channel of chunks.
+// If the provider returns 400 and the error suggests stream_options is unsupported,
+// it retries once without stream_options.
 func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-chan Chunk, error) {
+	ch, err := c.streamOnce(ctx, req, true)
+	if err != nil && isRetryable400(err) {
+		// Retry once without stream_options
+		ch, err = c.streamOnce(ctx, req, false)
+		if err != nil && isToolCallingUnsupported(err) {
+			return nil, errors.New("provider does not support tool calling")
+		}
+	}
+	return ch, err
+}
+
+// isRetryable400 checks if an error looks like a provider-side 400 that we can retry without stream_options.
+func isRetryable400(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "400") &&
+		(strings.Contains(msg, "stream_options") ||
+			strings.Contains(msg, "include_usage") ||
+			strings.Contains(msg, "unsupported parameter"))
+}
+
+// isToolCallingUnsupported checks if the provider explicitly rejects tool calls.
+func isToolCallingUnsupported(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "400") &&
+		(strings.Contains(msg, "tools") ||
+			strings.Contains(msg, "tool_calls") ||
+			strings.Contains(msg, "function") ||
+			strings.Contains(msg, "not supported") ||
+			strings.Contains(msg, "unsupported"))
+}
+
+// readErrorBody reads up to 2KB from a response body for diagnostic messages.
+func readErrorBody(resp *http.Response) string {
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+	return string(bodyBytes)
+}
+
+// streamOnce performs a single streaming request. includeStreamOptions controls whether stream_options is sent.
+func (c *OpenAICompatibleClient) streamOnce(ctx context.Context, req Request, includeStreamOptions bool) (<-chan Chunk, error) {
 	messages := messagesToOpenAI(req.Messages)
 	payload := map[string]any{
 		"model":       req.Model,
@@ -44,7 +93,9 @@ func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-cha
 		"stream":      true,
 		"temperature": req.Temperature,
 		"max_tokens":  req.MaxTokens,
-		"stream_options": map[string]any{"include_usage": true},
+	}
+	if includeStreamOptions {
+		payload["stream_options"] = map[string]any{"include_usage": true}
 	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = req.Tools
@@ -66,8 +117,9 @@ func (c *OpenAICompatibleClient) Stream(ctx context.Context, req Request) (<-cha
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		bodyStr := readErrorBody(resp)
 		resp.Body.Close()
-		return nil, fmt.Errorf("provider returned %d", resp.StatusCode)
+		return nil, fmt.Errorf("provider returned %d: %s", resp.StatusCode, bodyStr)
 	}
 
 	ch := make(chan Chunk)
@@ -214,7 +266,8 @@ func (c *OpenAICompatibleClient) Complete(ctx context.Context, req Request) (str
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("provider returned %d", resp.StatusCode)
+		bodyStr := readErrorBody(resp)
+		return "", fmt.Errorf("provider returned %d: %s", resp.StatusCode, bodyStr)
 	}
 
 	var parsed struct {
@@ -288,7 +341,7 @@ func messagesToOpenAI(msgs []Message) []any {
 				})
 			} else {
 				result = append(result, map[string]any{
-					"role":    "assistant",
+					"role":    m.Role,
 					"content": m.Content,
 				})
 			}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -263,4 +264,155 @@ func TestOpenAICompatibleClient_Stream_ContextCancel(t *testing.T) {
 		}
 	}
 	// Should exit cleanly after cancel
+}
+
+// ---- Provider compatibility tests ----
+
+func TestOpenAICompatibleClient_Stream_400BodyIncluded(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error": "invalid model"}`))
+	}))
+	defer ts.Close()
+
+	client := NewOpenAICompatibleClient(ts.URL, "key")
+	_, err := client.Stream(context.Background(), Request{Model: "m", Messages: []Message{{Role: "user", Content: "hi"}}})
+	if err == nil {
+		t.Fatal("expected error for non-200 status")
+	}
+	if !strings.Contains(err.Error(), "invalid model") {
+		t.Fatalf("expected error to contain body 'invalid model', got: %v", err)
+	}
+}
+
+func TestOpenAICompatibleClient_Stream_RetriesWithoutStreamOptions(t *testing.T) {
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		if callCount == 1 {
+			// First call: reject stream_options
+			if _, ok := body["stream_options"]; ok {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error": "unsupported parameter: stream_options"}`))
+				return
+			}
+			t.Fatal("first call should have stream_options")
+		}
+
+		// Second call: must NOT have stream_options
+		if _, ok := body["stream_options"]; ok {
+			t.Fatal("retry should not include stream_options")
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+		w.Write([]byte(`data: {"choices":[{"delta":{"content":"Hello"}}]}` + "\n\n"))
+		if flusher != nil {
+			flusher.Flush()
+		}
+		w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer ts.Close()
+
+	client := NewOpenAICompatibleClient(ts.URL, "key")
+	ch, err := client.Stream(context.Background(), Request{Model: "m", Messages: []Message{{Role: "user", Content: "hi"}}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result string
+	for chunk := range ch {
+		if chunk.Done {
+			break
+		}
+		result += chunk.Content
+	}
+	if result != "Hello" {
+		t.Fatalf("expected 'Hello', got %q", result)
+	}
+	if callCount != 2 {
+		t.Fatalf("expected 2 calls, got %d", callCount)
+	}
+}
+
+func TestOpenAICompatibleClient_Stream_ToolCallingNotSupported(t *testing.T) {
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		if callCount == 1 {
+			if _, ok := body["stream_options"]; ok {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error": "unsupported parameter: stream_options"}`))
+				return
+			}
+		}
+
+		// Second call (or first without stream_options): reject tools
+		if _, ok := body["tools"]; ok {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error": "tools not supported"}`))
+			return
+		}
+		t.Fatal("expected tools in retry request")
+	}))
+	defer ts.Close()
+
+	client := NewOpenAICompatibleClient(ts.URL, "key")
+	_, err := client.Stream(context.Background(), Request{
+		Model:    "m",
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Tools:    []ToolDefinition{{Type: "function", Function: FunctionSchema{Name: "echo", Description: "echo", Parameters: map[string]any{"type": "object"}}}},
+	})
+	if err == nil {
+		t.Fatal("expected error for unsupported tool calling")
+	}
+	if !strings.Contains(err.Error(), "provider does not support tool calling") {
+		t.Fatalf("expected 'provider does not support tool calling', got: %v", err)
+	}
+	if callCount != 2 {
+		t.Fatalf("expected 2 calls, got %d", callCount)
+	}
+}
+
+func TestOpenAICompatibleClient_Stream_NoInfiniteRetry(t *testing.T) {
+	callCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error": "unsupported parameter: stream_options"}`))
+	}))
+	defer ts.Close()
+
+	client := NewOpenAICompatibleClient(ts.URL, "key")
+	_, err := client.Stream(context.Background(), Request{Model: "m", Messages: []Message{{Role: "user", Content: "hi"}}})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if callCount != 2 {
+		t.Fatalf("expected exactly 2 calls (original + 1 retry), got %d", callCount)
+	}
+}
+
+func TestOpenAICompatibleClient_Complete_400BodyIncluded(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error": "model not found"}`))
+	}))
+	defer ts.Close()
+
+	client := NewOpenAICompatibleClient(ts.URL, "key")
+	_, err := client.Complete(context.Background(), Request{Model: "m", Messages: []Message{{Role: "user", Content: "hi"}}})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "model not found") {
+		t.Fatalf("expected error to contain body, got: %v", err)
+	}
 }

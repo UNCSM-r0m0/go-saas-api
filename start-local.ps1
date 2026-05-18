@@ -138,11 +138,10 @@ function Start-GoService($name, $port) {
         return
     }
 
-    $svcEnv = $envVars.Clone()
-    $svcEnv["PORT"] = "$port"
+    [Environment]::SetEnvironmentVariable("PORT", "$port", "Process")
 
     Write-Host "  START $name (port $port)" -ForegroundColor Yellow
-    Start-Process -FilePath $exe -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $errLog -Environment $svcEnv
+    Start-Process -FilePath $exe -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $errLog
 }
 
 Start-GoService "auth-service"    3001
